@@ -1,0 +1,59 @@
+# Build directories (you can adjust if your build folder has a different name)
+build/
+bin/
+lib/
+
+# Dependencies
+_deps/
+
+# Cache
+.cache/
+
+# CMake generated files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# Compiled object files, libraries, executables, and debug files
+*.o
+# *.obj
+*.lo
+*.a
+*.lib
+*.so
+*.dll
+*.dylib
+*.exe
+*.out
+*.app
+*.pdb
+*.ilk
+*.exp
+
+# Visual studio
+.vs/
+
+# VS Code settings and workspace files
+.vscode/
+
+# CLion project files
+.idea/
+
+# Other IDEs or editor-specific files
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*~
+*.swp
+
+
+# Shaders
+*.spv

@@ -1,0 +1,63 @@
+---
+Language:        Cpp
+BasedOnStyle:    LLVM
+
+
+IndentWidth:     4
+TabWidth:        4
+UseTab:          ForIndentation
+
+
+AccessModifierOffset: -4
+ColumnLimit:           0
+BreakBeforeBraces:     Attach
+
+
+AllowShortLoopsOnASingleLine:         false
+AllowShortFunctionsOnASingleLine:     None
+AllowShortIfStatementsOnASingleLine:  Never
+AllowShortBlocksOnASingleLine:        Never
+
+
+BinPackParameters: false
+BinPackArguments:  false
+
+
+ReflowComments:    false
+KeepEmptyLinesAtTheStartOfBlocks: true
+
+
+DerivePointerAlignment: false
+PointerAlignment:       Left
+
+
+SpaceBeforeParens:             ControlStatements
+SpacesInContainerLiterals:     true
+SpacesInParentheses:           false
+SpacesInCStyleCastParentheses: false
+
+
+SortIncludes:     true
+IndentCaseBlocks: false
+IndentCaseLabels: true
+
+
+# Enable alignment of consecutive declarations and assignments:
+AlignConsecutiveDeclarations: AcrossEmptyLinesAndComments
+# AlignConsecutiveDeclarations: 
+#   Enabled: true
+#   AcrossComments: true
+#   AcrossEmptyLines: true
+#   AlignFunctionDeclarations: true
+#   AlignFunctionPointers: true
+
+AlignConsecutiveAssignments: AcrossEmptyLinesAndComments
+# AlignConsecutiveAssignments:  
+#   Enabled: true
+#   AcrossComments: true
+#   AcrossEmptyLines: true
+#   AlignCompound: true
+#   PadOperators: true
+
+AlignConsecutiveBitFields: AcrossEmptyLinesAndComments
+...
