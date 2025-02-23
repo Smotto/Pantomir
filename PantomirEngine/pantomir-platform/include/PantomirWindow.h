@@ -2,7 +2,6 @@
 #define PANTOMIRWINDOW_H_
 
 #include <string>
-#include <vulkan/vulkan.h>
 
 struct GLFWwindow;
 
@@ -15,14 +14,11 @@ public:
 		return m_window;
 	}
 
-	bool     m_framebufferResized = false;
+	bool m_framebufferResized = false;
 
-	bool     ShouldClose() const;
-	void     PollEvents() const;
-	void     GetFramebufferSize(int& width, int& height);
-	VkResult CreateWindowSurface(VkInstance                   instance,
-	                             const VkAllocationCallbacks* allocator,
-	                             VkSurfaceKHR*                surface);
+	bool ShouldClose() const;
+	void PollEvents() const;
+	void GetFramebufferSize(int& width, int& height);
 
 private:
 	GLFWwindow* m_window;

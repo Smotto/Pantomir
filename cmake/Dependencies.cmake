@@ -1,6 +1,6 @@
 # cmake/Dependencies.cmake
 # Minimum required version for using FetchContent
-cmake_minimum_required(VERSION 3.14)
+cmake_minimum_required(VERSION 3.31)
 
 include(FetchContent)
 

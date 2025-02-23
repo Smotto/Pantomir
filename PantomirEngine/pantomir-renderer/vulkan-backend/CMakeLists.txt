@@ -1,7 +1,6 @@
-﻿cmake_minimum_required(VERSION 3.14)
+﻿cmake_minimum_required(VERSION 3.31)
 project(PantomirRendererVulkan LANGUAGES CXX)
-
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Collect Vulkan renderer sources and headers
@@ -28,6 +27,10 @@ target_link_libraries(PantomirRendererVulkan PRIVATE Vulkan::Vulkan)
 
 # Link external dependencies for the renderer
 target_link_libraries(PantomirRendererVulkan PRIVATE glfw glm tinyobjloader stb)
+
+# TODO: Maybe not the best place for this
+# Dependency on PantomirPlatform for window
+target_link_libraries(PantomirRendererVulkan PUBLIC PantomirPlatform)
 
 # Compiler definitions specific to Vulkan rendering
 target_compile_definitions(PantomirRendererVulkan PRIVATE

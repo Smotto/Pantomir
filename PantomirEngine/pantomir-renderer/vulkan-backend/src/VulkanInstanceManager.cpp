@@ -1,41 +1,27 @@
-﻿#include "VulkanInstance.h"
+﻿#include "VulkanInstanceManager.h"
+
+#include "PantomirWindow.h"
+
 #include <GLFW/glfw3.h>
 #include <cstring>
 #include <iostream>
 #include <stdexcept>
 
-VulkanInstance::VulkanInstance(const std::vector<const char*>& validationLayers, const bool& enableValidation)
-    : m_validationLayers(validationLayers), m_enableValidation(enableValidation) {
-	CreateInstance();
-}
-
-VulkanInstance::~VulkanInstance() {
-}
-
-void VulkanInstance::Cleanup() {
-	if (m_enableValidation) {
-		auto func = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(m_instance, "vkDestroyDebugUtilsMessengerEXT"));
-		if (func) {
-			func(m_instance, m_debugMessenger, nullptr);
-		}
-	}
-	vkDestroyInstance(m_instance, nullptr);
-}
-
-void VulkanInstance::CreateInstance() {
+VulkanInstanceManager::VulkanInstanceManager(const std::shared_ptr<PantomirWindow>& pantomirWindow, const std::vector<const char*>& validationLayers, const bool& enableValidation)
+    : m_pantomirWindow(pantomirWindow), m_validationLayers(validationLayers), m_enableValidation(enableValidation) {
 	if (m_enableValidation) {
 		SetupDebugMessenger();
 	}
-	
+
 	if (m_enableValidation && !CheckValidationLayerSupport()) {
 		throw std::runtime_error(std::string(__func__) + "Validation layers requested, but not available!");
 	}
 
 	VkApplicationInfo appInfo{};
 	appInfo.sType              = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-	appInfo.pApplicationName   = "Vulkan Application";
+	appInfo.pApplicationName   = "Pantomir Vulkan";
 	appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-	appInfo.pEngineName        = "Custom Engine";
+	appInfo.pEngineName        = "Pantomir";
 	appInfo.engineVersion      = VK_MAKE_VERSION(1, 0, 0);
 	appInfo.apiVersion         = VK_API_VERSION_1_0;
 
@@ -61,9 +47,28 @@ void VulkanInstance::CreateInstance() {
 	if (vkCreateInstance(&createInfo, nullptr, &m_instance) != VK_SUCCESS) {
 		throw std::runtime_error(std::string(__func__) + "Failed to create Vulkan instance!");
 	}
+
+	CreateSurface();
 }
 
-void VulkanInstance::SetupDebugMessenger() {
+VulkanInstanceManager::~VulkanInstanceManager() {
+	vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
+	if (m_enableValidation) {
+		auto func = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(m_instance, "vkDestroyDebugUtilsMessengerEXT"));
+		if (func) {
+			func(m_instance, m_debugMessenger, nullptr);
+		}
+	}
+	vkDestroyInstance(m_instance, nullptr);
+}
+
+void VulkanInstanceManager::CreateSurface() {
+	if (glfwCreateWindowSurface(m_instance, m_pantomirWindow->GetNativeWindow(), nullptr, &m_surface) != VK_SUCCESS) {
+		throw std::runtime_error(": Failed to create window surface!");
+	}
+}
+
+void VulkanInstanceManager::SetupDebugMessenger() {
 	VkDebugUtilsMessengerCreateInfoEXT createInfo{};
 	PopulateDebugMessengerCreateInfo(createInfo);
 	auto func = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(m_instance, "vkCreateDebugUtilsMessengerEXT"));
@@ -74,7 +79,7 @@ void VulkanInstance::SetupDebugMessenger() {
 	}
 }
 
-bool VulkanInstance::CheckValidationLayerSupport() {
+bool VulkanInstanceManager::CheckValidationLayerSupport() {
 	uint32_t layerCount;
 	vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
 	std::vector<VkLayerProperties> availableLayers(layerCount);
@@ -94,7 +99,7 @@ bool VulkanInstance::CheckValidationLayerSupport() {
 	return true;
 }
 
-std::vector<const char*> VulkanInstance::GetRequiredExtensions() {
+std::vector<const char*> VulkanInstanceManager::GetRequiredExtensions() {
 	uint32_t                 glfwExtensionCount = 0;
 	const char**             glfwExtensions     = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 	std::vector<const char*> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
@@ -104,7 +109,7 @@ std::vector<const char*> VulkanInstance::GetRequiredExtensions() {
 	return extensions;
 }
 
-void VulkanInstance::PopulateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo) {
+void VulkanInstanceManager::PopulateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo) {
 	createInfo                 = {};
 	createInfo.sType           = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
 	createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;

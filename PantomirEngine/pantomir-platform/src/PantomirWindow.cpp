@@ -42,12 +42,6 @@ void PantomirWindow::GetFramebufferSize(int& width, int& height) {
 	glfwGetFramebufferSize(m_window, &width, &height);
 }
 
-VkResult PantomirWindow::CreateWindowSurface(VkInstance                   instance,
-                                             const VkAllocationCallbacks* allocator,
-                                             VkSurfaceKHR*                surface) {
-	return glfwCreateWindowSurface(instance, m_window, allocator, surface);
-}
-
 void PantomirWindow::FramebufferResizeCallback(GLFWwindow* window, int width, int height) {
 	// Since it's static, we need a way to get the app. We can get it through the window, since we SetWindowUserPointer.
 	auto app                  = reinterpret_cast<PantomirWindow*>(glfwGetWindowUserPointer(window));
