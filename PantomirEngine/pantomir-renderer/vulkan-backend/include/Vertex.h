@@ -12,7 +12,7 @@
 //---------------------------------------------------------------------
 // Vertex structure with inline Vulkan descriptions and equality operator
 //---------------------------------------------------------------------
-struct Vertex {
+struct Vertex final {
 	glm::vec3                              pos;
 	glm::vec3                              color;
 	glm::vec2                              texCoord;

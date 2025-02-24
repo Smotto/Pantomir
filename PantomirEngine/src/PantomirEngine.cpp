@@ -1,25 +1,29 @@
 #include "PantomirEngine.h"
 
+#include "VulkanResourceManager.h"
 #include "VulkanDeviceManager.h"
 #include "VulkanInstanceManager.h"
 
 #include <exception>
 #include <iostream>
 
-const std::vector<const char*>         m_vulkanValidationLayers     = {"VK_LAYER_KHRONOS_validation"};
-std::vector<const char*>               m_vulkanDeviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME};
+const std::vector<const char*> m_vulkanValidationLayers = {"VK_LAYER_KHRONOS_validation"};
+std::vector<const char*>       m_vulkanDeviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME};
 
 PantomirEngine::PantomirEngine()
     : m_pantomirWindow(std::make_shared<PantomirWindow>(800, 600, "Pantomir Window")),
       m_vulkanInstanceManager(std::make_shared<VulkanInstanceManager>(m_pantomirWindow, m_vulkanValidationLayers, m_enableValidationLayers)),
       m_vulkanDeviceManager(std::make_shared<VulkanDeviceManager>(m_vulkanInstanceManager, m_vulkanDeviceExtensions)),
-      m_vulkanRenderer(std::make_unique<VulkanRenderer>(m_pantomirWindow->GetNativeWindow(), m_vulkanDeviceManager)) {
+      m_vulkanBufferManager(std::make_shared<VulkanBufferManager>(m_vulkanDeviceManager)),
+      m_resourceManager(std::make_shared<VulkanResourceManager>(m_vulkanDeviceManager, m_vulkanBufferManager)),
+      m_vulkanRenderer(std::make_unique<VulkanRenderer>(m_pantomirWindow->GetNativeWindow(), m_vulkanDeviceManager, m_resourceManager)) {
 }
 
 PantomirEngine::~PantomirEngine() {
 }
 
 int PantomirEngine::Start() {
+	// TODO: Implement job based system instead of doing a main loop.
 	try {
 		MainLoop();
 	} catch (const std::exception& exception) {

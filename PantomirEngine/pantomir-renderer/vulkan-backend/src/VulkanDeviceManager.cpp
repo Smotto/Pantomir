@@ -7,9 +7,9 @@
 #include <stdexcept>
 
 VulkanDeviceManager::VulkanDeviceManager(
-    const std::shared_ptr<VulkanInstanceManager>& instance,
+    const std::shared_ptr<VulkanInstanceManager>& instanceManager,
     const std::vector<const char*>&               deviceExtensions)
-    : m_instance(instance), m_deviceExtensions(deviceExtensions) {
+    : m_vulkanInstanceManager(instanceManager), m_deviceExtensions(deviceExtensions) {
 	PickPhysicalDevice();
 	CreateLogicalDevice();
 }
@@ -22,16 +22,21 @@ VulkanDeviceManager::~VulkanDeviceManager() {
 }
 
 void VulkanDeviceManager::PickPhysicalDevice() {
+	std::shared_ptr<VulkanInstanceManager> manager = m_vulkanInstanceManager.lock();
+	if (!manager) {
+		throw std::runtime_error(std::string(__func__) + "Vulkan instance manager not available!");
+	}
+	
 	uint32_t deviceCount = 0;
-	vkEnumeratePhysicalDevices(m_instance->GetNativeInstance(), &deviceCount, nullptr);
+	vkEnumeratePhysicalDevices(manager->GetNativeInstance(), &deviceCount, nullptr);
 	if (deviceCount == 0) {
 		throw std::runtime_error("failed to find GPUs with Vulkan support!");
 	}
 	m_physicalDevices.resize(deviceCount);
-	vkEnumeratePhysicalDevices(m_instance->GetNativeInstance(), &deviceCount, m_physicalDevices.data());
+	vkEnumeratePhysicalDevices(manager->GetNativeInstance(), &deviceCount, m_physicalDevices.data());
 
 	// First try to pick the first suitable one
-	for (const auto &device : m_physicalDevices) {
+	for (const auto& device : m_physicalDevices) {
 		if (IsDeviceSuitable(device)) {
 			m_physicalDevice = device;
 			m_msaaSamples    = GetMaxUsableSampleCount();
@@ -41,7 +46,7 @@ void VulkanDeviceManager::PickPhysicalDevice() {
 
 	// Then choose the best candidate by scoring them
 	std::multimap<int, VkPhysicalDevice> candidates;
-	for (const auto &device : m_physicalDevices) {
+	for (const auto& device : m_physicalDevices) {
 		int score = RateDeviceSuitability(device);
 		candidates.insert(std::make_pair(score, device));
 	}
@@ -175,6 +180,11 @@ VkSampleCountFlagBits VulkanDeviceManager::GetMaxUsableSampleCount() {
 }
 
 QueueFamilyIndices VulkanDeviceManager::FindQueueFamilies(const VkPhysicalDevice device) const {
+	std::shared_ptr<VulkanInstanceManager> manager = m_vulkanInstanceManager.lock();
+	if (!manager) {
+		throw std::runtime_error(std::string(__func__) + "Vulkan instance manager not available!");
+	}
+	
 	QueueFamilyIndices indices;
 
 	uint32_t           queueFamilyCount = 0;
@@ -190,7 +200,7 @@ QueueFamilyIndices VulkanDeviceManager::FindQueueFamilies(const VkPhysicalDevice
 		}
 
 		VkBool32 presentSupport = false;
-		vkGetPhysicalDeviceSurfaceSupportKHR(device, i, m_instance->GetNativeSurface(), &presentSupport);
+		vkGetPhysicalDeviceSurfaceSupportKHR(device, i, manager->GetNativeSurface(), &presentSupport);
 		if (presentSupport) {
 			indices.presentFamily = i;
 		}
@@ -206,22 +216,27 @@ QueueFamilyIndices VulkanDeviceManager::FindQueueFamilies(const VkPhysicalDevice
 }
 
 SwapChainSupportDetails VulkanDeviceManager::QuerySwapChainSupport(const VkPhysicalDevice device) const {
+	std::shared_ptr<VulkanInstanceManager> manager = m_vulkanInstanceManager.lock();
+	if (!manager) {
+		throw std::runtime_error(std::string(__func__) + "Vulkan instance manager not available!");
+	}
+	
 	SwapChainSupportDetails details;
-	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, m_instance->GetNativeSurface(), &details.capabilities);
+	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, manager->GetNativeSurface(), &details.capabilities);
 
 	uint32_t formatCount;
-	vkGetPhysicalDeviceSurfaceFormatsKHR(device, m_instance->GetNativeSurface(), &formatCount, nullptr);
+	vkGetPhysicalDeviceSurfaceFormatsKHR(device, manager->GetNativeSurface(), &formatCount, nullptr);
 	if (formatCount != 0) {
 		details.formats.resize(formatCount);
-		vkGetPhysicalDeviceSurfaceFormatsKHR(device, m_instance->GetNativeSurface(), &formatCount, details.formats.data());
+		vkGetPhysicalDeviceSurfaceFormatsKHR(device, manager->GetNativeSurface(), &formatCount, details.formats.data());
 	}
 
 	uint32_t presentModeCount;
-	vkGetPhysicalDeviceSurfacePresentModesKHR(device, m_instance->GetNativeSurface(), &presentModeCount, nullptr);
+	vkGetPhysicalDeviceSurfacePresentModesKHR(device, manager->GetNativeSurface(), &presentModeCount, nullptr);
 	if (presentModeCount != 0) {
 		details.presentModes.resize(presentModeCount);
-		vkGetPhysicalDeviceSurfacePresentModesKHR(device, m_instance->GetNativeSurface(), &presentModeCount, details.presentModes.data());
+		vkGetPhysicalDeviceSurfacePresentModesKHR(device, manager->GetNativeSurface(), &presentModeCount, details.presentModes.data());
 	}
-	
+
 	return details;
 }

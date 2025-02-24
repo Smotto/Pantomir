@@ -54,8 +54,7 @@ VulkanInstanceManager::VulkanInstanceManager(const std::shared_ptr<PantomirWindo
 VulkanInstanceManager::~VulkanInstanceManager() {
 	vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
 	if (m_enableValidation) {
-		auto func = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(m_instance, "vkDestroyDebugUtilsMessengerEXT"));
-		if (func) {
+		if (auto func = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(m_instance, "vkDestroyDebugUtilsMessengerEXT"))) {
 			func(m_instance, m_debugMessenger, nullptr);
 		}
 	}
@@ -63,7 +62,12 @@ VulkanInstanceManager::~VulkanInstanceManager() {
 }
 
 void VulkanInstanceManager::CreateSurface() {
-	if (glfwCreateWindowSurface(m_instance, m_pantomirWindow->GetNativeWindow(), nullptr, &m_surface) != VK_SUCCESS) {
+	std::shared_ptr<PantomirWindow> window = m_pantomirWindow.lock();
+	if (!window) {
+		throw std::runtime_error(std::string(__func__) + "PantomirWindow is not available!");
+	}
+	
+	if (glfwCreateWindowSurface(m_instance, window->GetNativeWindow(), nullptr, &m_surface) != VK_SUCCESS) {
 		throw std::runtime_error(": Failed to create window surface!");
 	}
 }
@@ -71,8 +75,7 @@ void VulkanInstanceManager::CreateSurface() {
 void VulkanInstanceManager::SetupDebugMessenger() {
 	VkDebugUtilsMessengerCreateInfoEXT createInfo{};
 	PopulateDebugMessengerCreateInfo(createInfo);
-	auto func = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(m_instance, "vkCreateDebugUtilsMessengerEXT"));
-	if (func != nullptr) {
+	if (auto func = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(m_instance, "vkCreateDebugUtilsMessengerEXT"))) {
 		if (func(m_instance, &createInfo, nullptr, &m_debugMessenger) != VK_SUCCESS) {
 			throw std::runtime_error(std::string(__func__) + "Failed to set up debug messenger!");
 		}

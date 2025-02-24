@@ -16,18 +16,18 @@ struct DeviceRequirements {
 	VkPhysicalDeviceProperties desiredProperties;
 };
 
-class VulkanDeviceManager {
+class VulkanDeviceManager final {
 public:
-	VulkanDeviceManager(const std::shared_ptr<VulkanInstanceManager>& instance, const std::vector<const char*>& deviceExtensions);
+	VulkanDeviceManager(const std::shared_ptr<VulkanInstanceManager>& instanceManager, const std::vector<const char*>& deviceExtensions);
 	~VulkanDeviceManager();
 
-	const std::shared_ptr<VulkanInstanceManager>& GetInstance() const {
-		return m_instance;
+	std::shared_ptr<VulkanInstanceManager> GetInstanceManager() const {
+		return m_vulkanInstanceManager.lock();
 	}
-	VkPhysicalDevice GetPhysicalDevice() {
+	VkPhysicalDevice GetPhysicalDevice() const {
 		return m_physicalDevice;
 	}
-	VkDevice GetLogicalDevice() {
+	VkDevice GetLogicalDevice() const {
 		return m_logicalDevice;
 	}
 
@@ -48,27 +48,27 @@ public:
 	SwapChainSupportDetails QuerySwapChainSupport(const VkPhysicalDevice device) const;
 
 private:
-	void                                   PickPhysicalDevice();
-	void                                   CreateLogicalDevice();
+	void                                 PickPhysicalDevice();
+	void                                 CreateLogicalDevice();
 
-	VkSampleCountFlagBits                  GetMaxUsableSampleCount();
-	VkPhysicalDevice                       ChooseBestPhysicalDevice();
-	uint32_t                               RateDeviceSuitability(const VkPhysicalDevice device) const;
-	bool                                   IsDeviceSuitable(const VkPhysicalDevice device) const;
-	bool                                   CheckDeviceExtensionSupport(const VkPhysicalDevice device) const;
+	VkSampleCountFlagBits                GetMaxUsableSampleCount();
+	VkPhysicalDevice                     ChooseBestPhysicalDevice();
+	uint32_t                             RateDeviceSuitability(const VkPhysicalDevice device) const;
+	bool                                 IsDeviceSuitable(const VkPhysicalDevice device) const;
+	bool                                 CheckDeviceExtensionSupport(const VkPhysicalDevice device) const;
 
-	std::shared_ptr<VulkanInstanceManager> m_instance         = nullptr;
-	std::vector<const char*>               m_deviceExtensions = {};
+	std::weak_ptr<VulkanInstanceManager> m_vulkanInstanceManager;
+	std::vector<const char*>             m_deviceExtensions = {};
 
-	std::vector<VkPhysicalDevice>          m_physicalDevices;
-	VkPhysicalDevice                       m_physicalDevice;
-	VkDevice                               m_logicalDevice;
+	std::vector<VkPhysicalDevice>        m_physicalDevices;
+	VkPhysicalDevice                     m_physicalDevice;
+	VkDevice                             m_logicalDevice;
 
-	QueueFamilyIndices                     m_queueFamilyIndices;
-	VkQueue                                m_graphicsQueue;
-	VkQueue                                m_presentQueue;
+	QueueFamilyIndices                   m_queueFamilyIndices;
+	VkQueue                              m_graphicsQueue;
+	VkQueue                              m_presentQueue;
 
-	VkSampleCountFlagBits                  m_msaaSamples = VK_SAMPLE_COUNT_1_BIT;
+	VkSampleCountFlagBits                m_msaaSamples = VK_SAMPLE_COUNT_1_BIT;
 };
 
 #endif /*! VULKANDEVICEMANAGER_H_ */

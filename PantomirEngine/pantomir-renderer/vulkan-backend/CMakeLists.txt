@@ -35,13 +35,9 @@ target_link_libraries(PantomirRendererVulkan PUBLIC PantomirPlatform)
 # Compiler definitions specific to Vulkan rendering
 target_compile_definitions(PantomirRendererVulkan PRIVATE
     NOMINMAX
-    VK_USE_PLATFORM_WIN32_KHR
     GLFW_INCLUDE_VULKAN
     GLFW_EXPOSE_NATIVE_WIN32
 
     GLM_FORCE_RADIANS
     GLM_FORCE_DEPTH_ZERO_TO_ONE
-
-    STB_IMAGE_IMPLEMENTATION
-    TINYOBJLOADER_IMPLEMENTATION
 )

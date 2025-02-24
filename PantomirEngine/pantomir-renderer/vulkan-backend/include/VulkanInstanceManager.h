@@ -6,6 +6,7 @@
 #include <vulkan/vulkan.h>
 
 class PantomirWindow;
+
 class VulkanInstanceManager final {
 public:
 	VulkanInstanceManager(
@@ -28,20 +29,20 @@ public:
 	}
 
 private:
-	void                            CreateSurface();
-	void                            SetupDebugMessenger();
+	void                          CreateSurface();
+	void                          SetupDebugMessenger();
 
-	bool                            CheckValidationLayerSupport();
-	std::vector<const char*>        GetRequiredExtensions();
-	void                            PopulateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
+	bool                          CheckValidationLayerSupport();
+	std::vector<const char*>      GetRequiredExtensions();
+	void                          PopulateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
 
-	bool                            m_enableValidation;
-	VkDebugUtilsMessengerEXT        m_debugMessenger = VK_NULL_HANDLE;
-	VkInstance                      m_instance       = VK_NULL_HANDLE;
+	bool                          m_enableValidation;
+	VkDebugUtilsMessengerEXT      m_debugMessenger = VK_NULL_HANDLE;
+	VkInstance                    m_instance       = VK_NULL_HANDLE;
 
-	VkSurfaceKHR                    m_surface        = VK_NULL_HANDLE;
-	std::vector<const char*>        m_extensions;
-	std::shared_ptr<PantomirWindow> m_pantomirWindow;
-	std::vector<const char*>        m_validationLayers;
+	VkSurfaceKHR                  m_surface        = VK_NULL_HANDLE;
+	std::vector<const char*>      m_extensions;
+	std::weak_ptr<PantomirWindow> m_pantomirWindow;
+	std::vector<const char*>      m_validationLayers;
 };
 #endif /*! VULKANINSTANCEMANAGER_H_ */

@@ -2,7 +2,7 @@
 #define QUEUEFAMILYINDICES_H_
 
 #include <optional>
-struct QueueFamilyIndices {
+struct QueueFamilyIndices final {
 	constexpr bool IsComplete() {
 		return graphicsFamily.has_value() && presentFamily.has_value();
 	}

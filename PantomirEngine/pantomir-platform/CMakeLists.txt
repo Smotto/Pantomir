@@ -16,16 +16,11 @@ file(GLOB_RECURSE PLATFORM_HEADERS
 )
 target_sources(${PROJECT_NAME} PRIVATE ${PLATFORM_HEADERS})
 
-### 2) Vulkan ###
-find_package(Vulkan REQUIRED)
-target_include_directories(${PROJECT_NAME} PUBLIC ${Vulkan_INCLUDE_DIRS})
-target_link_libraries(${PROJECT_NAME} PRIVATE Vulkan::Vulkan)
-
-### 3) Other Dependencies (GLFW, GLM, TinyObjLoader, stb) ###
+### 2) GLFW ###
 target_link_libraries(${PROJECT_NAME} PRIVATE glfw)
 target_include_directories(${PROJECT_NAME} PUBLIC ${glfw_SOURCE_DIR}/include)
 
-### 4) Platform's Own Include Directory ###
+### 3) Platform's Own Include Directory ###
 target_include_directories(${PROJECT_NAME} PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/include"
 )
