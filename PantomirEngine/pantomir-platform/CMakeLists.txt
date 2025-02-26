@@ -18,6 +18,8 @@ target_sources(${PROJECT_NAME} PRIVATE ${PLATFORM_HEADERS})
 
 ### 2) GLFW ###
 target_link_libraries(${PROJECT_NAME} PRIVATE glfw)
+target_link_libraries(${PROJECT_NAME} PRIVATE glm)
+
 target_include_directories(${PROJECT_NAME} PUBLIC ${glfw_SOURCE_DIR}/include)
 
 ### 3) Platform's Own Include Directory ###

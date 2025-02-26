@@ -6,6 +6,7 @@
 
 #include <memory>
 
+class InputManager;
 class VulkanInstanceManager;
 class VulkanDeviceManager;
 class VulkanDevice;
@@ -24,12 +25,13 @@ private:
 #endif
 
 	std::shared_ptr<PantomirWindow>        m_pantomirWindow;
+	std::shared_ptr<InputManager>          m_inputManager;
 	std::shared_ptr<VulkanInstanceManager> m_vulkanInstanceManager;
 	std::shared_ptr<VulkanDeviceManager>   m_vulkanDeviceManager;
 	std::shared_ptr<VulkanBufferManager>   m_vulkanBufferManager;
 	std::shared_ptr<VulkanResourceManager> m_resourceManager;
 	std::unique_ptr<VulkanRenderer>        m_vulkanRenderer;
 
-	void                                   MainLoop();
+	void MainLoop();
 };
 #endif /*! PANTOMIRENGINE_H_ */

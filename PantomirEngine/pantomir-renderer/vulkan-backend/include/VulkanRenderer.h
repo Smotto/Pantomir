@@ -1,7 +1,9 @@
 #ifndef VULKANRENDERER_H_
 #define VULKANRENDERER_H_
 
+#include "Camera.h"
 #include "GLFW/glfw3.h"
+#include "InputEvents.h"
 #include "Vertex.h"
 #include "VulkanBufferManager.h"
 
@@ -10,6 +12,7 @@
 #include <vector>
 #include <vulkan/vulkan.h>
 
+class InputManager;
 class VulkanResourceManager;
 class VulkanDeviceManager;
 struct GLFWwindow;
@@ -20,17 +23,24 @@ struct SwapChainSupportDetails {
 	std::vector<VkPresentModeKHR>   presentModes;
 };
 
-class VulkanRenderer {
+class VulkanRenderer final {
 public:
-	VulkanRenderer(GLFWwindow* window, const std::shared_ptr<VulkanDeviceManager>& deviceManager, const std::shared_ptr<VulkanResourceManager>& resourceManager);
+	VulkanRenderer(GLFWwindow*                                   window,
+	               const std::shared_ptr<InputManager>&          inputManager,
+	               const std::shared_ptr<VulkanDeviceManager>&   deviceManager,
+	               const std::shared_ptr<VulkanResourceManager>& resourceManager);
 	~VulkanRenderer();
 
 	void DrawFrame();
 	void DeviceWaitIdle();
+	void UpdateUniformBuffers(uint32_t currentImage);
 
 private:
 	// Window
 	GLFWwindow*                            m_window;
+
+	// Input manager
+	std::shared_ptr<InputManager>          m_inputManager;
 
 	// Device manager
 	std::shared_ptr<VulkanDeviceManager>   m_deviceManager;
@@ -38,6 +48,8 @@ private:
 	// Resource manager
 	std::shared_ptr<VulkanResourceManager> m_resourceManager;
 	VulkanBufferManager::RenderModel*      m_model;
+
+	std::shared_ptr<Camera>                m_camera;
 
 	// Swap chain and related
 	VkSwapchainKHR                         m_swapChain;
@@ -116,8 +128,6 @@ private:
 	VkImageView                            CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels);
 	void                                   CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
 	VkShaderModule                         CreateShaderModule(const std::vector<char>& code);
-
-	void                                   UpdateUniformBuffers(uint32_t currentImage);
 
 	void                                   CleanupSwapChain();
 

@@ -22,18 +22,13 @@ VulkanDeviceManager::~VulkanDeviceManager() {
 }
 
 void VulkanDeviceManager::PickPhysicalDevice() {
-	std::shared_ptr<VulkanInstanceManager> manager = m_vulkanInstanceManager.lock();
-	if (!manager) {
-		throw std::runtime_error(std::string(__func__) + "Vulkan instance manager not available!");
-	}
-	
 	uint32_t deviceCount = 0;
-	vkEnumeratePhysicalDevices(manager->GetNativeInstance(), &deviceCount, nullptr);
+	vkEnumeratePhysicalDevices(m_vulkanInstanceManager->GetNativeInstance(), &deviceCount, nullptr);
 	if (deviceCount == 0) {
 		throw std::runtime_error("failed to find GPUs with Vulkan support!");
 	}
 	m_physicalDevices.resize(deviceCount);
-	vkEnumeratePhysicalDevices(manager->GetNativeInstance(), &deviceCount, m_physicalDevices.data());
+	vkEnumeratePhysicalDevices(m_vulkanInstanceManager->GetNativeInstance(), &deviceCount, m_physicalDevices.data());
 
 	// First try to pick the first suitable one
 	for (const auto& device : m_physicalDevices) {
@@ -180,11 +175,6 @@ VkSampleCountFlagBits VulkanDeviceManager::GetMaxUsableSampleCount() {
 }
 
 QueueFamilyIndices VulkanDeviceManager::FindQueueFamilies(const VkPhysicalDevice device) const {
-	std::shared_ptr<VulkanInstanceManager> manager = m_vulkanInstanceManager.lock();
-	if (!manager) {
-		throw std::runtime_error(std::string(__func__) + "Vulkan instance manager not available!");
-	}
-	
 	QueueFamilyIndices indices;
 
 	uint32_t           queueFamilyCount = 0;
@@ -200,7 +190,7 @@ QueueFamilyIndices VulkanDeviceManager::FindQueueFamilies(const VkPhysicalDevice
 		}
 
 		VkBool32 presentSupport = false;
-		vkGetPhysicalDeviceSurfaceSupportKHR(device, i, manager->GetNativeSurface(), &presentSupport);
+		vkGetPhysicalDeviceSurfaceSupportKHR(device, i, m_vulkanInstanceManager->GetNativeSurface(), &presentSupport);
 		if (presentSupport) {
 			indices.presentFamily = i;
 		}
@@ -216,26 +206,21 @@ QueueFamilyIndices VulkanDeviceManager::FindQueueFamilies(const VkPhysicalDevice
 }
 
 SwapChainSupportDetails VulkanDeviceManager::QuerySwapChainSupport(const VkPhysicalDevice device) const {
-	std::shared_ptr<VulkanInstanceManager> manager = m_vulkanInstanceManager.lock();
-	if (!manager) {
-		throw std::runtime_error(std::string(__func__) + "Vulkan instance manager not available!");
-	}
-	
 	SwapChainSupportDetails details;
-	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, manager->GetNativeSurface(), &details.capabilities);
+	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, m_vulkanInstanceManager->GetNativeSurface(), &details.capabilities);
 
 	uint32_t formatCount;
-	vkGetPhysicalDeviceSurfaceFormatsKHR(device, manager->GetNativeSurface(), &formatCount, nullptr);
+	vkGetPhysicalDeviceSurfaceFormatsKHR(device, m_vulkanInstanceManager->GetNativeSurface(), &formatCount, nullptr);
 	if (formatCount != 0) {
 		details.formats.resize(formatCount);
-		vkGetPhysicalDeviceSurfaceFormatsKHR(device, manager->GetNativeSurface(), &formatCount, details.formats.data());
+		vkGetPhysicalDeviceSurfaceFormatsKHR(device, m_vulkanInstanceManager->GetNativeSurface(), &formatCount, details.formats.data());
 	}
 
 	uint32_t presentModeCount;
-	vkGetPhysicalDeviceSurfacePresentModesKHR(device, manager->GetNativeSurface(), &presentModeCount, nullptr);
+	vkGetPhysicalDeviceSurfacePresentModesKHR(device, m_vulkanInstanceManager->GetNativeSurface(), &presentModeCount, nullptr);
 	if (presentModeCount != 0) {
 		details.presentModes.resize(presentModeCount);
-		vkGetPhysicalDeviceSurfacePresentModesKHR(device, manager->GetNativeSurface(), &presentModeCount, details.presentModes.data());
+		vkGetPhysicalDeviceSurfacePresentModesKHR(device, m_vulkanInstanceManager->GetNativeSurface(), &presentModeCount, details.presentModes.data());
 	}
 
 	return details;

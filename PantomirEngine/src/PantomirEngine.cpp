@@ -1,8 +1,9 @@
 #include "PantomirEngine.h"
 
-#include "VulkanResourceManager.h"
+#include "InputManager.h"
 #include "VulkanDeviceManager.h"
 #include "VulkanInstanceManager.h"
+#include "VulkanResourceManager.h"
 
 #include <exception>
 #include <iostream>
@@ -12,11 +13,12 @@ std::vector<const char*>       m_vulkanDeviceExtensions = {VK_KHR_SWAPCHAIN_EXTE
 
 PantomirEngine::PantomirEngine()
     : m_pantomirWindow(std::make_shared<PantomirWindow>(800, 600, "Pantomir Window")),
+      m_inputManager(std::make_shared<InputManager>(m_pantomirWindow)),
       m_vulkanInstanceManager(std::make_shared<VulkanInstanceManager>(m_pantomirWindow, m_vulkanValidationLayers, m_enableValidationLayers)),
       m_vulkanDeviceManager(std::make_shared<VulkanDeviceManager>(m_vulkanInstanceManager, m_vulkanDeviceExtensions)),
       m_vulkanBufferManager(std::make_shared<VulkanBufferManager>(m_vulkanDeviceManager)),
       m_resourceManager(std::make_shared<VulkanResourceManager>(m_vulkanDeviceManager, m_vulkanBufferManager)),
-      m_vulkanRenderer(std::make_unique<VulkanRenderer>(m_pantomirWindow->GetNativeWindow(), m_vulkanDeviceManager, m_resourceManager)) {
+      m_vulkanRenderer(std::make_unique<VulkanRenderer>(m_pantomirWindow->GetNativeWindow(), m_inputManager, m_vulkanDeviceManager, m_resourceManager)) {
 }
 
 PantomirEngine::~PantomirEngine() {
