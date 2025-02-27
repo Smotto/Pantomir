@@ -1,43 +1,73 @@
 ﻿#include "ModelLoader.h"
 #include "Vertex.h"
 
+#include <iostream>
 #include <stdexcept>
 #include <tiny_obj_loader.h>
-#include <unordered_map>
 
-ModelLoader::RawModel ModelLoader::LoadModel(const std::string& path) {
-	// TODO: Can have a vulkan load implementation with the staging buffer to optimize. Less portable though, but a good trade-off. 
-	RawModel                         model;
+ModelLoader::RawModel ModelLoader::LoadModel(const std::string& relativePath) {
+    RawModel model;
 
-	tinyobj::attrib_t                attrib;
-	std::vector<tinyobj::shape_t>    shapes;
-	std::vector<tinyobj::material_t> materials;
-	std::string                      warn, err;
+    tinyobj::ObjReaderConfig reader_config;
+    reader_config.mtl_search_path = "./Assets"; // Point to the Assets folder in the root
 
-	if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, path.c_str())) {
-		throw std::runtime_error(warn + err);
-	}
+    tinyobj::ObjReader reader;
+    std::string fullPath = relativePath; // Use the relative path as-is
+    std::cout << "Attempting to load: " << fullPath << "\n";
+    if (!reader.ParseFromFile(fullPath, reader_config)) {
+        std::cerr << "TinyObjReader Error: " << reader.Error() << "\n";
+        throw std::runtime_error("Failed to load OBJ file: " + fullPath);
+    }
 
-	std::unordered_map<Vertex, uint32_t> uniqueVertices;
-	for (const auto& shape : shapes) {
-		for (const auto& index : shape.mesh.indices) {
-			Vertex vertex{};
-			vertex.pos = {
-			    attrib.vertices[3 * index.vertex_index + 0],
-			    attrib.vertices[3 * index.vertex_index + 1],
-			    attrib.vertices[3 * index.vertex_index + 2]};
-			vertex.texCoord = {
-			    attrib.texcoords[2 * index.texcoord_index + 0],
-			    1.0f - attrib.texcoords[2 * index.texcoord_index + 1]};
-			vertex.color = {1.0f, 1.0f, 1.0f};
+    if (!reader.Warning().empty()) {
+        std::cout << "TinyObjReader Warning: " << reader.Warning();
+    }
 
-			if (uniqueVertices.count(vertex) == 0) {
-				uniqueVertices[vertex] = static_cast<uint32_t>(model.vertices.size());
-				model.vertices.push_back(vertex);
-			}
-			model.indices.push_back(uniqueVertices[vertex]);
-		}
-	}
+    const auto& attrib = reader.GetAttrib();
+    const auto& shapes = reader.GetShapes();
 
-	return model;
+    std::unordered_map<Vertex, uint32_t> uniqueVertices;
+    for (size_t s = 0; s < shapes.size(); s++) {
+        size_t index_offset = 0;
+        for (size_t f = 0; f < shapes[s].mesh.num_face_vertices.size(); f++) {
+            size_t fv = static_cast<size_t>(shapes[s].mesh.num_face_vertices[f]);
+            for (size_t v = 0; v < fv; v++) {
+                tinyobj::index_t idx = shapes[s].mesh.indices[index_offset + v];
+                Vertex vertex{};
+                vertex.pos = {
+                    attrib.vertices[3 * static_cast<size_t>(idx.vertex_index) + 0],
+                    attrib.vertices[3 * static_cast<size_t>(idx.vertex_index) + 1],
+                    attrib.vertices[3 * static_cast<size_t>(idx.vertex_index) + 2]
+                };
+                if (idx.texcoord_index >= 0 && !attrib.texcoords.empty()) {
+                    vertex.texCoord = {
+                        attrib.texcoords[2 * static_cast<size_t>(idx.texcoord_index) + 0],
+                        1.0f - attrib.texcoords[2 * static_cast<size_t>(idx.texcoord_index) + 1]
+                    };
+                    vertex.color = {1.0f, 1.0f, 1.0f};
+                } else {
+                    vertex.texCoord = {0.0f, 0.0f};
+                }
+                if (idx.normal_index >= 0 && !attrib.normals.empty()) {
+                    vertex.normal = {
+                        attrib.normals[3 * static_cast<size_t>(idx.normal_index) + 0],
+                        attrib.normals[3 * static_cast<size_t>(idx.normal_index) + 1],
+                        attrib.normals[3 * static_cast<size_t>(idx.normal_index) + 2]
+                    };
+                }
+                if (uniqueVertices.count(vertex) == 0) {
+                    uniqueVertices[vertex] = static_cast<uint32_t>(model.vertices.size());
+                    model.vertices.push_back(vertex);
+                }
+                model.indices.push_back(uniqueVertices[vertex]);
+            }
+            index_offset += fv;
+        }
+    }
+
+    std::cout << "Loaded " << shapes.size() << " shapes, "
+              << model.vertices.size() << " unique vertices, "
+              << model.indices.size() << " indices\n";
+
+    return model;
 }

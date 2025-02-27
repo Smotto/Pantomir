@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.31)
-project(Pantomir)
+project(Pantomir LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -13,31 +13,11 @@ add_subdirectory(PantomirEngine)
 add_subdirectory(PantomirEditor)
 
 # A custom target for extra sources (just for convenience)
-add_custom_target(ExtraSources SOURCES ${CMAKE_SOURCE_DIR}/README.md)
-
-# === Copy Textures and Models ===
-# Ensure the output directories exist
-file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/Assets/Textures)
-file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/Assets/Models)
-
-# Attach copy commands to ExtraSources
-add_custom_command(TARGET ExtraSources POST_BUILD
-  COMMAND ${CMAKE_COMMAND} -E copy_directory
-          ${CMAKE_CURRENT_SOURCE_DIR}/Assets/Textures
-          ${CMAKE_CURRENT_BINARY_DIR}/Assets/Textures
-  COMMENT "Copying textures directory..."
-)
-
-add_custom_command(TARGET ExtraSources POST_BUILD
-  COMMAND ${CMAKE_COMMAND} -E copy_directory
-          ${CMAKE_CURRENT_SOURCE_DIR}/Assets/Models
-          ${CMAKE_CURRENT_BINARY_DIR}/Assets/Models
-  COMMENT "Copying models directory..."
-)
+add_custom_target(ExtraSources SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/README.md)
 
 # === Compile Shaders with glslc ===
 set(SHADERS_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/Assets/Shaders)
-set(SHADERS_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/Assets/Shaders)
+set(SHADERS_BINARY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/Assets/Shaders) # Output to source directory
 file(MAKE_DIRECTORY ${SHADERS_BINARY_DIR})
 
 find_program(GLSLC glslc HINTS $ENV{VULKAN_SDK}/Bin)
@@ -57,7 +37,7 @@ set(SHADER_BINARY_FILES "")
 foreach(shader ${SHADER_FILES})
   set(output_shader "${SHADERS_BINARY_DIR}/${shader}.spv")
   add_custom_command(
-    OUTPUT ${output_shader}
+    OUTPUT ${output_shader}s
     COMMAND ${GLSLC} ${SHADERS_SOURCE_DIR}/${shader} -o ${output_shader}
     DEPENDS ${SHADERS_SOURCE_DIR}/${shader}
     COMMENT "Compiling ${shader} to SPIR-V"
@@ -67,6 +47,4 @@ endforeach()
 
 add_custom_target(all_shaders ALL DEPENDS ${SHADER_BINARY_FILES})
 add_dependencies(ExtraSources all_shaders)
-
-# Ensure ExtraSources is built when building the main project
-add_dependencies(PantomirEditor ExtraSources)
+add_dependencies(PantomirEditor all_shaders) # Ensure shaders are built before the editor
