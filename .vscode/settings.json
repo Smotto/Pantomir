@@ -1,0 +1,30 @@
+{
+    "cmake.generator": "Ninja Multi-Config",
+    "cmake.preferredGenerators": [
+        "Ninja Multi-Config"
+    ],
+    "cmake.buildDirectory": "${workspaceFolder}/cmake-build",
+    "cmake.configureOnOpen": true,
+    "cmake.configureSettings": {
+        "CMAKE_CXX_COMPILER": "cl.exe",
+        "CMAKE_C_COMPILER": "cl.exe",
+        "CMAKE_CONFIGURATION_TYPES": "Debug;Release;RelWithDebInfo"
+    },
+    "cmake.debugConfig": {
+        "cwd": "Y:/Development/Pantomir"
+    },
+    "files.watcherExclude": {
+        "**/cmake-build/**": true
+    },
+    "search.exclude": {
+        "**/cmake-build": true
+    },
+    "files.associations": {
+        "memory": "cpp",
+        "stdexcept": "cpp",
+        "vector": "cpp",
+        "filesystem": "cpp",
+        "chrono": "cpp",
+        "xstring": "cpp"
+    }
+}

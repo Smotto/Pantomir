@@ -11,6 +11,7 @@ _deps/
 
 # CMake generated files
 CMakeFiles/
+cmake-build*/
 CMakeCache.txt
 cmake_install.cmake
 Makefile
@@ -33,9 +34,6 @@ Makefile
 
 # Visual studio
 .vs/
-
-# VS Code settings and workspace files
-.vscode/
 
 # CLion project files
 .idea/

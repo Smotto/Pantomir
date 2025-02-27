@@ -1,0 +1,38 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+      "major": 3,
+      "minor": 31,
+      "patch": 0
+  },
+  "configurePresets": [
+      {
+          "name": "default",
+          "displayName": "Default Ninja Multi-Config",
+          "generator": "Ninja Multi-Config",
+          "binaryDir": "${sourceDir}/cmake-build",
+          "cacheVariables": {
+              "CMAKE_CXX_COMPILER": "cl.exe",
+              "CMAKE_C_COMPILER": "cl.exe",
+              "CMAKE_CONFIGURATION_TYPES": "Debug;Release;RelWithDebInfo"
+          }
+      }
+  ],
+  "buildPresets": [
+      {
+          "name": "debug",
+          "configurePreset": "default",
+          "configuration": "Debug"
+      },
+      {
+          "name": "release",
+          "configurePreset": "default",
+          "configuration": "Release"
+      },
+      {
+          "name": "reldeb",
+          "configurePreset": "default",
+          "configuration": "RelWithDebInfo"
+      }
+  ]
+}

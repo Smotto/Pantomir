@@ -1,0 +1,32 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+      {
+          "label": "cmake: build debug",
+          "type": "cmake",
+          "command": "build",
+          "preset": "debug",
+          "problemMatcher": ["$msvc"],
+          "group": {
+              "kind": "build",
+              "isDefault": true
+          }
+      },
+      {
+          "label": "cmake: build release",
+          "type": "cmake",
+          "command": "build",
+          "preset": "release",
+          "problemMatcher": ["$msvc"],
+          "group": "build"
+      },
+      {
+          "label": "cmake: build reldeb",
+          "type": "cmake",
+          "command": "build",
+          "preset": "reldeb",
+          "problemMatcher": ["$msvc"],
+          "group": "build"
+      }
+  ]
+}
