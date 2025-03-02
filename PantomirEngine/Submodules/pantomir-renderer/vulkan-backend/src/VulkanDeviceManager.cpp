@@ -7,7 +7,7 @@
 #include <stdexcept>
 
 VulkanDeviceManager::VulkanDeviceManager(
-    const std::shared_ptr<VulkanInstanceManager>& instanceManager,
+    const VulkanInstanceManager* instanceManager,
     const std::vector<const char*>&               deviceExtensions)
     : m_vulkanInstanceManager(instanceManager), m_deviceExtensions(deviceExtensions) {
 	PickPhysicalDevice();

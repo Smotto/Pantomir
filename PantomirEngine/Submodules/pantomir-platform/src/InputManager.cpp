@@ -1,9 +1,11 @@
 ﻿// InputManager.cpp
 #include "InputManager.h"
 
+#include "GLFW/glfw3.h"
 #include "PantomirWindow.h"
 
-InputManager::InputManager(const std::shared_ptr<PantomirWindow>& window) : m_window(window) {
+InputManager::InputManager(const PantomirWindow* window)
+    : m_window(window) {
 	// Store this instance in the window's user pointer for callback access
 	glfwSetWindowUserPointer(m_window->GetNativeWindow(), this);
 

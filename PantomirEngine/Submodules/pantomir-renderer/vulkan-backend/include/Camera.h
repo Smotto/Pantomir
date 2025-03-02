@@ -7,9 +7,8 @@
 
 class Camera {
 public:
-	Camera(const std::shared_ptr<InputManager>& inputManager);
+	explicit Camera(InputManager* inputManager);
 	~Camera();
-	void      PollKeyboardInputs();
 
 	glm::vec3 m_cameraPos            = glm::vec3(2.0f, 2.0f, 2.0f);
 	float     m_yaw                  = -135.0f;

@@ -1,7 +1,7 @@
 ﻿#ifndef MODELLOADER_H_
 #define MODELLOADER_H_
 
-#include <string>
+#include <filesystem>
 #include <vector>
 
 struct Vertex;
@@ -13,7 +13,7 @@ public:
 	};
 
 	ModelLoader() = default;
-	RawModel LoadModel(const std::string& path);
+	static RawModel LoadModel(const std::filesystem::path& path);
 };
 
 #endif /*! MODELLOADER_H_ */

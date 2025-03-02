@@ -1,19 +1,23 @@
 #ifndef PANTOMIRENGINE_H_
 #define PANTOMIRENGINE_H_
 
-#include "PantomirWindow.h"
-#include "VulkanRenderer.h"
-
 #include <memory>
 
 class InputManager;
 class VulkanInstanceManager;
 class VulkanDeviceManager;
 class VulkanDevice;
+class VulkanRenderer;
+class VulkanResourceManager;
+class VulkanBufferManager;
+class PantomirWindow;
 
 class PantomirEngine {
 public:
 	PantomirEngine();
+	void InitializeWindow();
+	void InitializeManagers();
+	void InitializeRenderer();
 	~PantomirEngine();
 	int Start();
 
@@ -24,14 +28,14 @@ private:
 	const bool m_enableValidationLayers = true;
 #endif
 
-	std::shared_ptr<PantomirWindow>        m_pantomirWindow;
-	std::shared_ptr<InputManager>          m_inputManager;
-	std::shared_ptr<VulkanInstanceManager> m_vulkanInstanceManager;
-	std::shared_ptr<VulkanDeviceManager>   m_vulkanDeviceManager;
-	std::shared_ptr<VulkanBufferManager>   m_vulkanBufferManager;
-	std::shared_ptr<VulkanResourceManager> m_resourceManager;
+	std::unique_ptr<PantomirWindow>        m_pantomirWindow;
+	std::unique_ptr<InputManager>          m_inputManager;
+	std::unique_ptr<VulkanInstanceManager> m_vulkanInstanceManager;
+	std::unique_ptr<VulkanDeviceManager>   m_vulkanDeviceManager;
+	std::unique_ptr<VulkanBufferManager>   m_vulkanBufferManager;
+	std::unique_ptr<VulkanResourceManager> m_resourceManager;
 	std::unique_ptr<VulkanRenderer>        m_vulkanRenderer;
 
-	void MainLoop();
+	void                                   MainLoop();
 };
 #endif /*! PANTOMIRENGINE_H_ */

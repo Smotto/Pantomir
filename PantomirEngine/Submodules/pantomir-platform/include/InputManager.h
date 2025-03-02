@@ -2,17 +2,17 @@
 #define INPUTMANAGER_H_
 
 #include "InputEvents.h"
-#include <GLFW/glfw3.h>
 #include <functional>
 #include <memory>
 #include <unordered_map>
 #include <vector>
 
 class PantomirWindow;
+struct GLFWwindow;
 
 class InputManager final {
 public:
-	explicit InputManager(const std::shared_ptr<PantomirWindow>& window);
+	explicit InputManager(const PantomirWindow* window);
 	~InputManager();
 
 	// Register callbacks for events
@@ -32,7 +32,7 @@ public:
 	void      Update();
 
 private:
-	std::shared_ptr<PantomirWindow>                           m_window;
+	const PantomirWindow*                                     m_window;
 	std::vector<std::function<void(const KeyEvent&)>>         m_keyCallbacks;
 	std::vector<std::function<void(const MouseButtonEvent&)>> m_mouseButtonCallbacks;
 	std::vector<std::function<void(const MouseMoveEvent&)>>   m_mouseMoveCallbacks;
@@ -56,5 +56,4 @@ private:
 	void                                                      DispatchMouseMoveEvent(const MouseMoveEvent& event);
 	void                                                      DispatchScrollEvent(const ScrollEvent& event);
 };
-
 #endif /*! INPUTMANAGER_H_ */

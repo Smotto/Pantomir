@@ -1,8 +1,10 @@
 #include "PantomirEngine.h"
 
 #include "InputManager.h"
+#include "PantomirWindow.h"
 #include "VulkanDeviceManager.h"
 #include "VulkanInstanceManager.h"
+#include "VulkanRenderer.h"
 #include "VulkanResourceManager.h"
 
 #include <exception>
@@ -11,18 +13,34 @@
 const std::vector<const char*> m_vulkanValidationLayers = {"VK_LAYER_KHRONOS_validation"};
 std::vector<const char*>       m_vulkanDeviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME};
 
-PantomirEngine::PantomirEngine()
-    : m_pantomirWindow(std::make_shared<PantomirWindow>(800, 600, "Pantomir Window")),
-      m_inputManager(std::make_shared<InputManager>(m_pantomirWindow)),
-      m_vulkanInstanceManager(std::make_shared<VulkanInstanceManager>(m_pantomirWindow, m_vulkanValidationLayers, m_enableValidationLayers)),
-      m_vulkanDeviceManager(std::make_shared<VulkanDeviceManager>(m_vulkanInstanceManager, m_vulkanDeviceExtensions)),
-      m_vulkanBufferManager(std::make_shared<VulkanBufferManager>(m_vulkanDeviceManager)),
-      m_resourceManager(std::make_shared<VulkanResourceManager>(m_vulkanDeviceManager, m_vulkanBufferManager)),
-      m_vulkanRenderer(std::make_unique<VulkanRenderer>(m_pantomirWindow->GetNativeWindow(), m_inputManager, m_vulkanDeviceManager, m_resourceManager)) {
+PantomirEngine::PantomirEngine() {
+	InitializeWindow();
+	InitializeManagers();
+	InitializeRenderer();
 }
 
-PantomirEngine::~PantomirEngine() {
+void PantomirEngine::InitializeWindow() {
+	m_pantomirWindow = std::make_unique<PantomirWindow>(800, 600, "Pantomir Window");
 }
+
+void PantomirEngine::InitializeManagers() {
+	m_inputManager = std::make_unique<InputManager>(m_pantomirWindow.get());
+	m_vulkanInstanceManager = std::make_unique<VulkanInstanceManager>(m_pantomirWindow.get(), m_vulkanValidationLayers, m_enableValidationLayers);
+	m_vulkanDeviceManager = std::make_unique<VulkanDeviceManager>(m_vulkanInstanceManager.get(), m_vulkanDeviceExtensions);
+	m_vulkanBufferManager = std::make_unique<VulkanBufferManager>(m_vulkanDeviceManager.get());
+	m_resourceManager = std::make_unique<VulkanResourceManager>(m_vulkanDeviceManager.get(), m_vulkanBufferManager.get());
+}
+
+void PantomirEngine::InitializeRenderer() {
+	m_vulkanRenderer = std::make_unique<VulkanRenderer>(
+		m_pantomirWindow->GetNativeWindow(),
+		m_inputManager.get(),
+		m_vulkanDeviceManager.get(),
+		m_resourceManager.get()
+	);
+}
+
+PantomirEngine::~PantomirEngine() = default;
 
 int PantomirEngine::Start() {
 	// TODO: Implement job based system instead of doing a main loop.

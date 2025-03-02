@@ -7,7 +7,7 @@
 #include <iostream>
 #include <stdexcept>
 
-VulkanInstanceManager::VulkanInstanceManager(const std::shared_ptr<PantomirWindow>& pantomirWindow, const std::vector<const char*>& validationLayers, const bool& enableValidation)
+VulkanInstanceManager::VulkanInstanceManager(const PantomirWindow* pantomirWindow, const std::vector<const char*>& validationLayers, const bool& enableValidation)
     : m_pantomirWindow(pantomirWindow), m_validationLayers(validationLayers), m_enableValidation(enableValidation) {
 	if (m_enableValidation) {
 		SetupDebugMessenger();
@@ -62,12 +62,7 @@ VulkanInstanceManager::~VulkanInstanceManager() {
 }
 
 void VulkanInstanceManager::CreateSurface() {
-	std::shared_ptr<PantomirWindow> window = m_pantomirWindow.lock();
-	if (!window) {
-		throw std::runtime_error(std::string(__func__) + "PantomirWindow is not available!");
-	}
-	
-	if (glfwCreateWindowSurface(m_instance, window->GetNativeWindow(), nullptr, &m_surface) != VK_SUCCESS) {
+	if (glfwCreateWindowSurface(m_instance, m_pantomirWindow->GetNativeWindow(), nullptr, &m_surface) != VK_SUCCESS) {
 		throw std::runtime_error(": Failed to create window surface!");
 	}
 }

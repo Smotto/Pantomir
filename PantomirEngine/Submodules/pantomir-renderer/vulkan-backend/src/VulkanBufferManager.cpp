@@ -5,7 +5,7 @@
 
 #include <stdexcept>
 
-VulkanBufferManager::VulkanBufferManager(std::shared_ptr<VulkanDeviceManager> deviceManager)
+VulkanBufferManager::VulkanBufferManager(const VulkanDeviceManager* deviceManager)
     : m_deviceManager(deviceManager) {
 	CreateCommandPool();
 }
@@ -67,7 +67,7 @@ VkCommandPool VulkanBufferManager::GetCommandPool() const {
 	return m_commandPool;
 }
 
-uint32_t VulkanBufferManager::FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
+uint32_t VulkanBufferManager::FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) const {
 	VkPhysicalDeviceMemoryProperties memProperties;
 	vkGetPhysicalDeviceMemoryProperties(m_deviceManager->GetPhysicalDevice(), &memProperties);
 
@@ -120,7 +120,7 @@ void VulkanBufferManager::CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkD
 	EndSingleTimeCommands(commandBuffer);
 }
 
-VkCommandBuffer VulkanBufferManager::BeginSingleTimeCommands() {
+VkCommandBuffer VulkanBufferManager::BeginSingleTimeCommands() const {
 	VkCommandBufferAllocateInfo allocInfo{};
 	allocInfo.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 	allocInfo.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
@@ -138,7 +138,7 @@ VkCommandBuffer VulkanBufferManager::BeginSingleTimeCommands() {
 
 	return commandBuffer;
 }
-void VulkanBufferManager::EndSingleTimeCommands(VkCommandBuffer commandBuffer) {
+void VulkanBufferManager::EndSingleTimeCommands(VkCommandBuffer commandBuffer) const {
 	vkEndCommandBuffer(commandBuffer);
 
 	VkSubmitInfo submitInfo{};

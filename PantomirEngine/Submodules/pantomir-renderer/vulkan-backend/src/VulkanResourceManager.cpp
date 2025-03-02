@@ -1,10 +1,10 @@
 ﻿#include "VulkanResourceManager.h"
-
 #include "VulkanBufferManager.h"
 #include "VulkanDeviceManager.h"
 
-VulkanResourceManager::VulkanResourceManager(std::shared_ptr<VulkanDeviceManager> deviceManager,
-                                 std::shared_ptr<VulkanBufferManager> bufferManager)
+#include <filesystem>
+
+VulkanResourceManager::VulkanResourceManager(const VulkanDeviceManager* deviceManager, VulkanBufferManager* bufferManager)
     : m_deviceManager(deviceManager), m_bufferManager(bufferManager) {
 }
 
@@ -20,18 +20,19 @@ VulkanResourceManager::~VulkanResourceManager() {
 	m_models.clear();
 }
 
-std::shared_ptr<VulkanBufferManager> VulkanResourceManager::GetBufferManager() {
+VulkanBufferManager* VulkanResourceManager::GetBufferManager() const {
 	return m_bufferManager;
 }
 
-VulkanBufferManager::RenderModel* VulkanResourceManager::LoadModel(const std::string& path) {
-	auto it = m_models.find(path);
+VulkanBufferManager::RenderModel* VulkanResourceManager::LoadModel(const std::filesystem::path& path) {
+	std::string relativePath = path.string();
+	auto        it           = m_models.find(relativePath);
 	if (it != m_models.end()) {
 		return &it->second;
 	}
 
 	ModelLoader::RawModel            rawModel    = m_modelLoader.LoadModel(path);
 	VulkanBufferManager::RenderModel renderModel = m_bufferManager->CreateRenderModel(rawModel);
-	m_models[path]                               = renderModel;
-	return &m_models[path];
+	m_models[relativePath]                       = renderModel;
+	return &m_models[relativePath];
 }
