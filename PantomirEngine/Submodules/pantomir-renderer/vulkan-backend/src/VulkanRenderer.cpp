@@ -29,8 +29,8 @@
 
 static VkSampleCountFlagBits msaaSamples          = VK_SAMPLE_COUNT_4_BIT;
 static std::filesystem::path currentPath          = std::filesystem::current_path();
-static std::filesystem::path MODEL_PATH           = currentPath / "Assets" / "Models" / "viking_room.obj";
-static std::filesystem::path TEXTURE_PATH         = currentPath / "Assets" / "Textures" / "viking_room.png";
+static std::filesystem::path MODEL_PATH           = currentPath / "Assets" / "Models" / "skull.obj";
+static std::filesystem::path TEXTURE_PATH         = currentPath / "Assets" / "Textures" / "texture.png";
 static std::filesystem::path vertShaderPath       = currentPath / "Assets" / "Shaders" / "shader.vert.spv";
 static std::filesystem::path fragShaderPath       = currentPath / "Assets" / "Shaders" / "shader.frag.spv";
 
@@ -270,9 +270,7 @@ void VulkanRenderer::CreateSwapChain() {
 	VkPresentModeKHR         presentMode       = ChooseSwapPresentMode(swapChainSupport.presentModes);
 	VkExtent2D               extent            = ChooseSwapExtent(swapChainSupport.capabilities);
 
-	uint32_t                 desiredImageCount = std::clamp(swapChainSupport.capabilities.minImageCount,
-                                            swapChainSupport.capabilities.minImageCount,
-                                            swapChainSupport.capabilities.maxImageCount > 0 ? swapChainSupport.capabilities.maxImageCount : UINT32_MAX);
+	uint32_t                 desiredImageCount = std::clamp(swapChainSupport.capabilities.minImageCount, swapChainSupport.capabilities.minImageCount, swapChainSupport.capabilities.maxImageCount > 0 ? swapChainSupport.capabilities.maxImageCount : UINT32_MAX);
 
 	VkSwapchainCreateInfoKHR createInfo{};
 	createInfo.sType                                 = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
@@ -998,6 +996,7 @@ void VulkanRenderer::UpdateUniformBuffers(uint32_t currentImage) {
 	float               time        = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 	UniformBufferObject ubo{};
 	ubo.model = glm::rotate(glm::mat4(1.0f), 0.0f, glm::vec3(0.0f, 0.0f, 1.0f));
+	ubo.model = glm::scale(glm::mat4(1.0f), glm::vec3(0.01f));
 	ubo.view  = glm::lookAt(m_camera->m_cameraPos, m_camera->m_target, glm::vec3(0.0f, 0.0f, 1.0f));
 	ubo.proj  = glm::perspective(glm::radians(45.0f), m_swapChainExtent.width / (float)m_swapChainExtent.height, 0.1f, 10.0f);
 	ubo.proj[1][1] *= -1;

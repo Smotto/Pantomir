@@ -27,6 +27,12 @@ target_include_directories(PantomirRendererVulkan PUBLIC
 find_package(Vulkan REQUIRED)
 target_link_libraries(PantomirRendererVulkan PRIVATE Vulkan::Vulkan)
 
+# Engine's own submodule dependencies
+target_link_libraries(PantomirRendererVulkan PRIVATE
+        PantomirPlatform # Platform abstraction
+        PantomirUtils
+)
+
 # Dependencies
 target_link_libraries(PantomirRendererVulkan PRIVATE
         glfw            # Windowing and input
@@ -34,7 +40,6 @@ target_link_libraries(PantomirRendererVulkan PRIVATE
         assimp          # Model loading (replacing tinyobjloader)
         tinyobjloader
         stb             # Image loading
-        PantomirPlatform # Platform abstraction
 )
 
 # Compiler definitions
@@ -45,11 +50,6 @@ target_compile_definitions(PantomirRendererVulkan PRIVATE
         GLM_FORCE_RADIANS        # Use radians for GLM
         GLM_FORCE_DEPTH_ZERO_TO_ONE # Vulkan depth range
 )
-
-# Optional: Set output directory properties (if not set globally)
-# set_target_properties(PantomirRendererVulkan PROPERTIES
-#     ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
-# )
 
 # Documentation
 # This library provides Vulkan-based rendering functionality for the PantomirEngine,

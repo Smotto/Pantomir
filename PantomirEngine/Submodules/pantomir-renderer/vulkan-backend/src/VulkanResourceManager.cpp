@@ -1,4 +1,5 @@
 ﻿#include "VulkanResourceManager.h"
+
 #include "VulkanBufferManager.h"
 #include "VulkanDeviceManager.h"
 
@@ -26,13 +27,30 @@ VulkanBufferManager* VulkanResourceManager::GetBufferManager() const {
 
 VulkanBufferManager::RenderModel* VulkanResourceManager::LoadModel(const std::filesystem::path& path) {
 	std::string relativePath = path.string();
-	auto        it           = m_models.find(relativePath);
+	auto it = m_models.find(relativePath);
 	if (it != m_models.end()) {
 		return &it->second;
 	}
 
-	ModelLoader::RawModel            rawModel    = m_modelLoader.LoadModel(path);
-	VulkanBufferManager::RenderModel renderModel = m_bufferManager->CreateRenderModel(rawModel);
-	m_models[relativePath]                       = renderModel;
-	return &m_models[relativePath];
+	try {
+		ModelLoader::RawModel rawModel = m_modelLoader.LoadModel(path);
+		VulkanBufferManager::RenderModel renderModel = m_bufferManager->CreateRenderModel(rawModel);
+		return &m_models.emplace(relativePath, renderModel).first->second; // emplace avoids unnecessary copies
+	} catch (const std::exception& e) {
+		return nullptr;
+	}
+}
+
+void VulkanResourceManager::UnloadModel(const std::filesystem::path& path) {
+	std::string relativePath = path.string();
+	auto it = m_models.find(relativePath);
+	if (it != m_models.end()) {
+		VkDevice device = m_deviceManager->GetLogicalDevice();
+		VulkanBufferManager::RenderModel& model = it->second;
+		vkDestroyBuffer(device, model.indexBuffer, nullptr);
+		vkFreeMemory(device, model.indexBufferMemory, nullptr);
+		vkDestroyBuffer(device, model.vertexBuffer, nullptr);
+		vkFreeMemory(device, model.vertexBufferMemory, nullptr);
+		m_models.erase(it);
+	}
 }

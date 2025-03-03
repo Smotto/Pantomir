@@ -52,6 +52,8 @@ Thumbs.db
 *~
 *.swp
 
-
 # Shaders
 *.spv
+
+# Logs
+pantomir_log.txt

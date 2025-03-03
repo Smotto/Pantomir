@@ -2,7 +2,6 @@
 #define VULKANRESOURCEMANAGER_H_
 
 #include "VulkanBufferManager.h"
-#include <memory>
 #include <unordered_map>
 
 namespace std::filesystem {
@@ -17,8 +16,9 @@ public:
 	                      VulkanBufferManager*       bufferManager);
 	~VulkanResourceManager();
 
-	VulkanBufferManager*              GetBufferManager() const;
-	VulkanBufferManager::RenderModel* LoadModel(const std::filesystem::path& path);
+	[[nodiscard]] VulkanBufferManager* GetBufferManager() const;
+	VulkanBufferManager::RenderModel*  LoadModel(const std::filesystem::path& path);
+	void                               UnloadModel(const std::filesystem::path& path);
 
 private:
 	const VulkanDeviceManager*                                        m_deviceManager;

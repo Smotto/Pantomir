@@ -5,7 +5,6 @@
 #include "VulkanInstanceManager.h"
 #include "VulkanRenderer.h"
 
-#include <memory>
 #include <vector>
 #include <vulkan/vulkan.h>
 
@@ -22,26 +21,26 @@ public:
 	~VulkanDeviceManager();
 	VulkanDeviceManager(const VulkanInstanceManager* instanceManager, const std::vector<const char*>& deviceExtensions);
 
-	const VulkanInstanceManager* GetInstanceManager() const {
+	[[nodiscard]] const VulkanInstanceManager* GetInstanceManager() const {
 		return m_vulkanInstanceManager;
 	}
-	VkPhysicalDevice GetPhysicalDevice() const {
+	[[nodiscard]] VkPhysicalDevice GetPhysicalDevice() const {
 		return m_physicalDevice;
 	}
-	VkDevice GetLogicalDevice() const {
+	[[nodiscard]] VkDevice GetLogicalDevice() const {
 		return m_logicalDevice;
 	}
 
-	QueueFamilyIndices GetQueueFamilyIndices() const {
+	[[nodiscard]] QueueFamilyIndices GetQueueFamilyIndices() const {
 		return m_queueFamilyIndices;
 	}
-	VkQueue GetGraphicsQueue() const {
+	[[nodiscard]] VkQueue GetGraphicsQueue() const {
 		return m_graphicsQueue;
 	}
-	VkQueue GetPresentQueue() const {
+	[[nodiscard]] VkQueue GetPresentQueue() const {
 		return m_presentQueue;
 	}
-	VkSampleCountFlagBits GetMsaaSamples() const {
+	[[nodiscard]] VkSampleCountFlagBits GetMsaaSamples() const {
 		return m_msaaSamples;
 	}
 

@@ -4,7 +4,7 @@
 #include <stdexcept>
 
 PantomirWindow::PantomirWindow(int width, int height, const std::string& title)
-    : m_width(width), m_height(height), m_title(title) {
+    : m_title(title), m_width(width), m_height(height) {
 	if (!glfwInit()) {
 		throw std::runtime_error(std::string(__func__) + "Failed to initialize GLFW!");
 	}

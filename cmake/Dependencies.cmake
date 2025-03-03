@@ -89,3 +89,20 @@ if(TARGET glfw)
     set_property(TARGET glfw PROPERTY FOLDER "ExternalDependencies/GLFW")
 endif()
 set_target_properties(update_mappings PROPERTIES FOLDER "ExternalDependencies/GLFW")
+
+# === xxHash ===
+# Fast hash function library
+FetchContent_Declare(
+        xxHash
+        GIT_REPOSITORY https://github.com/Cyan4973/xxHash.git
+        GIT_TAG v0.8.3
+        SOURCE_DIR ${CMAKE_BINARY_DIR}/_deps/xxhash-src
+        SUBBUILD_DIR ${CMAKE_BINARY_DIR}/_deps/xxhash-subbuild
+        BINARY_DIR ${CMAKE_BINARY_DIR}/_deps/xxhash-build
+)
+FetchContent_MakeAvailable(xxHash)
+if(NOT TARGET xxHash)
+    add_library(xxHash INTERFACE)
+    target_include_directories(xxHash INTERFACE ${xxHash_SOURCE_DIR})
+endif()
+set_property(TARGET xxHash PROPERTY FOLDER "ExternalDependencies/xxHash")

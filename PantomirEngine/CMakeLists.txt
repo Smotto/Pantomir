@@ -7,9 +7,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Collect engine sources and headers
 file(GLOB_RECURSE ENGINE_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
-if(NOT ENGINE_SOURCES)
+if (NOT ENGINE_SOURCES)
     message(FATAL_ERROR "No engine source files found in ${CMAKE_CURRENT_SOURCE_DIR}/src")
-endif()
+endif ()
 
 # Define the static library
 add_library(PantomirEngine STATIC ${ENGINE_SOURCES})
@@ -28,17 +28,19 @@ target_link_libraries(PantomirEngine PRIVATE Vulkan::Vulkan)
 
 # Platform-specific definitions
 target_compile_definitions(PantomirEngine PRIVATE
-    VK_USE_PLATFORM_WIN32_KHR
+        VK_USE_PLATFORM_WIN32_KHR
 )
 
 # Link submodules (assumed to be in Submodules/ directory)
 add_subdirectory(Submodules/pantomir-platform)
 add_subdirectory(Submodules/pantomir-renderer/vulkan-backend)
+add_subdirectory(Submodules/pantomir-utils)
 
 # Link submodules as private dependencies (internal to the engine)
 target_link_libraries(PantomirEngine PRIVATE
-    PantomirPlatform
-    PantomirRendererVulkan
+        PantomirPlatform
+        PantomirRendererVulkan
+        PantomirUtils
 )
 
 # Optional: Set output directory properties (if not set globally in root)

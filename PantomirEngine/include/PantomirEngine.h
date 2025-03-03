@@ -15,9 +15,6 @@ class PantomirWindow;
 class PantomirEngine {
 public:
 	PantomirEngine();
-	void InitializeWindow();
-	void InitializeManagers();
-	void InitializeRenderer();
 	~PantomirEngine();
 	int Start();
 
