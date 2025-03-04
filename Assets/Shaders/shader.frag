@@ -27,6 +27,7 @@ layout(binding = 0) uniform UniformBufferObject {
     vec3 lightColor;
     vec3 viewPos;
     bool useBakedLighting;
+    mat4 modelMatrices[1];
 } ubo;
 
 layout(binding = 1) uniform sampler2D texSampler;

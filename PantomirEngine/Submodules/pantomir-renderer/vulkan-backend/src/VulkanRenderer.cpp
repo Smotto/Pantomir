@@ -6,14 +6,17 @@
 #include "VulkanInstanceManager.h"
 #include "VulkanResourceManager.h"
 
+#include "InputEvents.h"
+
 #include <GLFW/glfw3.h>
 
 #include <glm/gtc/matrix_transform.hpp> // Linear Algebra
 
 #define STB_IMAGE_IMPLEMENTATION
-#include <stb_image.h>
-#define TINYOBJLOADER_IMPLEMENTATION
 #include "InputManager.h"
+#include "LoggerMacros.h"
+
+#include <stb_image.h>
 
 #include <algorithm>
 #include <array>
@@ -29,12 +32,13 @@
 
 static VkSampleCountFlagBits msaaSamples          = VK_SAMPLE_COUNT_4_BIT;
 static std::filesystem::path currentPath          = std::filesystem::current_path();
+static constexpr int         MODEL_COUNT          = 1;
 static std::filesystem::path MODEL_PATH           = currentPath / "Assets" / "Models" / "skull.obj";
 static std::filesystem::path TEXTURE_PATH         = currentPath / "Assets" / "Textures" / "texture.png";
 static std::filesystem::path vertShaderPath       = currentPath / "Assets" / "Shaders" / "shader.vert.spv";
 static std::filesystem::path fragShaderPath       = currentPath / "Assets" / "Shaders" / "shader.frag.spv";
 
-const int                    MAX_FRAMES_IN_FLIGHT = 2;
+constexpr int                MAX_FRAMES_IN_FLIGHT = 2;
 
 struct UniformBufferObject {
 	alignas(16) glm::mat4 model;
@@ -44,6 +48,7 @@ struct UniformBufferObject {
 	alignas(16) glm::vec3 lightColor; // Light color (e.g., RGB intensity)
 	alignas(16) glm::vec3 viewPos;    // Camera position for specular calculation
 	bool useBakedLighting;
+	alignas(16) glm::mat4 modelMatrices[MODEL_COUNT]; // Define MODEL_COUNT as a constant, e.g., 10
 };
 
 VulkanRenderer::VulkanRenderer(GLFWwindow* window, InputManager* inputManager, const VulkanDeviceManager* deviceManager, VulkanResourceManager* resourceManager)
@@ -59,7 +64,14 @@ VulkanRenderer::VulkanRenderer(GLFWwindow* window, InputManager* inputManager, c
 	CreateTextureImage();
 	CreateTextureImageView();
 	CreateTextureSampler();
-	m_model = m_resourceManager->LoadModel(MODEL_PATH.string());
+	inputManager->RegisterKeyCallback([this](const KeyEvent& event) -> void {
+		if (event.key == GLFW_KEY_L && event.action == GLFW_PRESS) {
+			m_resourceManager->LoadModel(MODEL_PATH.string()); // Load on 'L' key press
+		}
+		if (event.key == GLFW_KEY_U && event.action == GLFW_PRESS) {
+			m_resourceManager->UnloadModel(MODEL_PATH.string()); // Unload on 'U' key press
+		}
+	});
 	CreateUniformBuffers();
 	CreateDescriptorPool();
 	CreateDescriptorSets();
@@ -621,12 +633,17 @@ void VulkanRenderer::CreateGraphicsPipeline() {
 	colorBlending.blendConstants[2] = 0.0f;
 	colorBlending.blendConstants[3] = 0.0f;
 
+	VkPushConstantRange pushConstantRange{};
+	pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+	pushConstantRange.offset     = 0;
+	pushConstantRange.size       = sizeof(uint32_t); // For model index
+
 	VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
 	pipelineLayoutInfo.sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	pipelineLayoutInfo.pushConstantRangeCount = 1;
+	pipelineLayoutInfo.pPushConstantRanges    = &pushConstantRange;
 	pipelineLayoutInfo.setLayoutCount         = 1;
 	pipelineLayoutInfo.pSetLayouts            = &m_descriptorSetLayout;
-	pipelineLayoutInfo.pushConstantRangeCount = 0;
-	pipelineLayoutInfo.pPushConstantRanges    = nullptr;
 
 	VkDevice device                           = m_deviceManager->GetLogicalDevice();
 	if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &m_pipelineLayout) != VK_SUCCESS) {
@@ -990,22 +1007,19 @@ void VulkanRenderer::CreateUniformBuffers() {
 }
 
 void VulkanRenderer::UpdateUniformBuffers(uint32_t currentImage) {
-	static auto         startTime   = std::chrono::high_resolution_clock::now();
-	auto                currentTime = std::chrono::high_resolution_clock::now();
-
-	float               time        = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 	UniformBufferObject ubo{};
-	ubo.model = glm::rotate(glm::mat4(1.0f), 0.0f, glm::vec3(0.0f, 0.0f, 1.0f));
-	ubo.model = glm::scale(glm::mat4(1.0f), glm::vec3(0.01f));
-	ubo.view  = glm::lookAt(m_camera->m_cameraPos, m_camera->m_target, glm::vec3(0.0f, 0.0f, 1.0f));
-	ubo.proj  = glm::perspective(glm::radians(45.0f), m_swapChainExtent.width / (float)m_swapChainExtent.height, 0.1f, 10.0f);
+	ubo.view = glm::lookAt(m_camera->m_cameraPos, m_camera->m_target, glm::vec3(0.0f, 0.0f, 1.0f));
+	ubo.proj = glm::perspective(glm::radians(45.0f), m_swapChainExtent.width / (float)m_swapChainExtent.height, 0.1f, 10.0f);
 	ubo.proj[1][1] *= -1;
-
-	// Lighting
 	ubo.lightPos         = glm::vec3(2.0f, 2.0f, 2.0f);
 	ubo.lightColor       = glm::vec3(1.0f, 1.0f, 1.0f);
 	ubo.viewPos          = m_camera->m_cameraPos;
 	ubo.useBakedLighting = true;
+
+	for (size_t i = 0; i < m_resourceManager->GetModels().size() && i < MODEL_COUNT; ++i) {
+		ubo.modelMatrices[i] = glm::rotate(glm::mat4(1.0f), 0.0f, glm::vec3(0.0f, 0.0f, 1.0f));
+		ubo.modelMatrices[i] = glm::scale(ubo.modelMatrices[i], glm::vec3(0.01f));
+	}
 
 	memcpy(m_uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
 }
@@ -1050,11 +1064,6 @@ void VulkanRenderer::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
 	vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicsPipeline);
 
-	VkBuffer     vertexBuffers[] = {m_model->vertexBuffer};
-	VkDeviceSize offsets[]       = {0};
-	vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-	vkCmdBindIndexBuffer(commandBuffer, m_model->indexBuffer, 0, VK_INDEX_TYPE_UINT32);
-
 	VkViewport viewport{};
 	viewport.x        = 0.0f;
 	viewport.y        = 0.0f;
@@ -1068,9 +1077,22 @@ void VulkanRenderer::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
 	scissor.offset = {0, 0};
 	scissor.extent = m_swapChainExtent;
 	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
-
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipelineLayout, 0, 1, &m_descriptorSets[m_currentFrame], 0, nullptr);
-	vkCmdDrawIndexed(commandBuffer, m_model->indexCount, 1, 0, 0, 0);
+
+	auto&    modelsMap  = m_resourceManager->GetModels();
+	uint32_t modelIndex = 0;
+	for (const auto& [hash, model] : modelsMap) {
+		vkCmdPushConstants(commandBuffer, m_pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(uint32_t), &modelIndex);
+
+		VkBuffer     vertexBuffer[] = {model.vertexBuffer};
+		VkDeviceSize offsets[]      = {0};
+		vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffer, offsets);
+		vkCmdBindIndexBuffer(commandBuffer, model.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+		vkCmdDrawIndexed(commandBuffer, model.indexCount, 1, 0, 0, 0);
+
+		modelIndex++;
+	}
+
 	vkCmdEndRenderPass(commandBuffer);
 
 	if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {

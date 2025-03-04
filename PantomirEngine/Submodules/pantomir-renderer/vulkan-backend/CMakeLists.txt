@@ -36,10 +36,10 @@ target_link_libraries(PantomirRendererVulkan PRIVATE
 # Dependencies
 target_link_libraries(PantomirRendererVulkan PRIVATE
         glfw            # Windowing and input
-        glm             # Math library
-        assimp          # Model loading (replacing tinyobjloader)
-        tinyobjloader
-        stb             # Image loading
+        glm::glm             # Math library
+        assimp::assimp          # Model loading (replacing tinyobjloader)
+        Stb::Stb             # Image loading
+        xxHash::xxhash          # Hashing models
 )
 
 # Compiler definitions

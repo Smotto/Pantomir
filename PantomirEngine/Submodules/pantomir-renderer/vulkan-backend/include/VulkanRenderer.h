@@ -2,8 +2,6 @@
 #define VULKANRENDERER_H_
 
 #include "Camera.h"
-#include "InputEvents.h"
-#include "Vertex.h"
 #include "VulkanBufferManager.h"
 
 #include <memory>
@@ -36,8 +34,6 @@ private:
 	InputManager*                       m_inputManager;
 	const VulkanDeviceManager*          m_deviceManager;
 	VulkanResourceManager*              m_resourceManager;
-
-	VulkanBufferManager::RenderModel*   m_model;
 
 	// TODO: Abstract this out later.
 	std::shared_ptr<Camera>             m_camera;

@@ -1,4 +1,6 @@
 ﻿#include "ModelLoader.h"
+
+#include "LoggerMacros.h"
 #include "Vertex.h"
 
 #include <iostream>
@@ -10,8 +12,6 @@
 
 ModelLoader::RawModel ModelLoader::LoadModel(const std::filesystem::path& relativePath) {
     RawModel model;
-
-    std::cout << "Attempting to load: " << relativePath.string() << "\n";
 
     Assimp::Importer importer;
 
@@ -83,9 +83,7 @@ ModelLoader::RawModel ModelLoader::LoadModel(const std::filesystem::path& relati
         }
     }
 
-    std::cout << "Loaded " << scene->mNumMeshes << " meshes, "
-              << model.vertices.size() << " unique vertices, "
-              << model.indices.size() << " indices\n";
+	LOG_INFO("ModelLoader", "Loaded {} meshes, {} unique vertices, {} indices", std::to_string(scene->mNumMeshes).c_str(), model.vertices.size(), model.indices.size());
 
     // Importer will automatically clean up the scene when it goes out of scope
     return model;

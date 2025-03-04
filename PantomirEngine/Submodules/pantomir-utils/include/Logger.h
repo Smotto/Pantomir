@@ -9,6 +9,7 @@
 namespace Pantomir {
 enum class LogLevel { Debug, Info, Warning, Error, Fatal };
 
+// TODO: Verbosity and Toggle-able channels
 class Logger {
 public:
 	static Logger& GetInstance();

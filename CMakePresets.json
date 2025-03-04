@@ -1,40 +1,40 @@
 {
-    "version": 3,
-    "cmakeMinimumRequired": {
-      "major": 3,
-      "minor": 31,
-      "patch": 0
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 31,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "default",
+      "displayName": "Default Ninja Multi-Config",
+      "generator": "Ninja Multi-Config",
+      "binaryDir": "${sourceDir}/cmake-build",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "cl.exe",
+        "CMAKE_CXX_STANDARD": "23",
+        "CMAKE_CXX_STANDARD_REQUIRED": "ON",
+        "CMAKE_CONFIGURATION_TYPES": "Debug;Release;RelWithDebInfo",
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}\\scripts\\buildsystems\\vcpkg.cmake"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "debug",
+      "configurePreset": "default",
+      "configuration": "Debug"
     },
-    "configurePresets": [
-      {
-        "name": "default",
-        "displayName": "Default Ninja Multi-Config",
-        "generator": "Ninja Multi-Config",
-        "binaryDir": "${sourceDir}/cmake-build",
-        "cacheVariables": {
-          "CMAKE_CXX_COMPILER": "cl.exe",
-          "CMAKE_C_COMPILER": "cl.exe",
-          "CMAKE_CXX_STANDARD": "23",
-          "CMAKE_CXX_STANDARD_REQUIRED": "ON",
-          "CMAKE_CONFIGURATION_TYPES": "Debug;Release;RelWithDebInfo"
-        }
-      }
-    ],
-    "buildPresets": [
-      {
-        "name": "debug",
-        "configurePreset": "default",
-        "configuration": "Debug"
-      },
-      {
-        "name": "release",
-        "configurePreset": "default",
-        "configuration": "Release"
-      },
-      {
-        "name": "reldeb",
-        "configurePreset": "default",
-        "configuration": "RelWithDebInfo"
-      }
-    ]
-  }
+    {
+      "name": "release",
+      "configurePreset": "default",
+      "configuration": "Release"
+    },
+    {
+      "name": "reldeb",
+      "configurePreset": "default",
+      "configuration": "RelWithDebInfo"
+    }
+  ]
+}

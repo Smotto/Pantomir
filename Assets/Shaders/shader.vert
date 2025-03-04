@@ -21,6 +21,10 @@
 
 #version 450
 
+layout(push_constant) uniform PushConstants {
+    uint modelIndex;
+} pushConstants;
+
 layout(binding = 0) uniform UniformBufferObject {
     mat4 model;
     mat4 view;
@@ -28,6 +32,7 @@ layout(binding = 0) uniform UniformBufferObject {
     vec3 lightPos;
     vec3 lightColor;
     vec3 viewPos;
+    mat4 modelMatrices[1];
 } ubo;
 
 layout(location = 0) in vec3 inPosition;  // Matches pos at location 0
@@ -41,9 +46,10 @@ layout(location = 2) out vec2 fragTexCoord;
 layout(location = 3) out vec3 fragColor;
 
 void main() {
-    gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPosition, 1.0);
-    fragPos = vec3(ubo.model * vec4(inPosition, 1.0));
-    fragNormal = mat3(transpose(inverse(ubo.model))) * inNormal;
+    mat4 model = ubo.modelMatrices[pushConstants.modelIndex]; // Select model matrix dynamically
+    gl_Position = ubo.proj * ubo.view * model * vec4(inPosition, 1.0);
+    fragPos = vec3(model * vec4(inPosition, 1.0));
+    fragNormal = mat3(transpose(inverse(model))) * inNormal;
     fragTexCoord = inTexCoord;
     fragColor = inColor;
 }

@@ -2,11 +2,9 @@
 #define VULKANRESOURCEMANAGER_H_
 
 #include "VulkanBufferManager.h"
-#include <unordered_map>
+#include <map>
 
-namespace std::filesystem {
-class path;
-}
+class std::filesystem::path;
 
 class VulkanDeviceManager;
 
@@ -16,14 +14,16 @@ public:
 	                      VulkanBufferManager*       bufferManager);
 	~VulkanResourceManager();
 
-	[[nodiscard]] VulkanBufferManager* GetBufferManager() const;
-	VulkanBufferManager::RenderModel*  LoadModel(const std::filesystem::path& path);
-	void                               UnloadModel(const std::filesystem::path& path);
+	[[nodiscard]] VulkanBufferManager*                                       GetBufferManager() const;
+	[[nodiscard]] std::map<std::uint64_t, VulkanBufferManager::RenderModel>& GetModels();
+	uint64_t                                                                 ComputePathHash(const std::filesystem::path& path);
+	void                                                                     LoadModel(const std::filesystem::path& path);
+	void                                                                     UnloadModel(const std::filesystem::path& path);
 
 private:
-	const VulkanDeviceManager*                                        m_deviceManager;
-	VulkanBufferManager*                                              m_bufferManager;
-	ModelLoader                                                       m_modelLoader;
-	std::unordered_map<std::string, VulkanBufferManager::RenderModel> m_models;
+	const VulkanDeviceManager*                           m_deviceManager;
+	VulkanBufferManager*                                 m_bufferManager;
+	ModelLoader                                          m_modelLoader;
+	std::map<uint64_t, VulkanBufferManager::RenderModel> m_models;
 };
 #endif /*! VULKANRESOURCEMANAGER_H_ */

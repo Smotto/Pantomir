@@ -3,7 +3,7 @@
     "cmake.preferredGenerators": [
         "Ninja Multi-Config"
     ],
-    "cmake.buildDirectory": "${workspaceFolder}/cmake-build",
+    "cmake.buildDirectory": "${workspaceFolder}/cmake-build-vscode",
     "cmake.configureOnOpen": true,
     "cmake.configureSettings": {
         "CMAKE_CXX_COMPILER": "cl.exe",

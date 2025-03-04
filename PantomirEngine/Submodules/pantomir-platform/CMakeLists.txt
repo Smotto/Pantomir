@@ -26,14 +26,5 @@ target_include_directories(PantomirPlatform PUBLIC
 # Dependencies
 target_link_libraries(PantomirPlatform PRIVATE
     glfw  # Windowing and input
-    glm   # Math library
+    glm::glm   # Math library
 )
-
-# Optional: Set output directory properties (if not set globally)
-# set_target_properties(PantomirPlatform PROPERTIES
-#     ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
-# )
-
-# Documentation
-# This library provides platform abstraction (e.g., windowing, input) for the PantomirEngine,
-# leveraging GLFW for cross-platform support and GLM for math utilities.

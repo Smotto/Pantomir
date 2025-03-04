@@ -33,10 +33,12 @@ void Logger::WriteLog(LogLevel level, const std::string& category, const std::st
 
 	std::string logMessage = "[" + timestamp + "] [" + levelNames[static_cast<int>(level)] + "] [" + category + "] " + message;
 
-	std::cout << logMessage << std::endl;
+	std::cout << logMessage << "\n";
 	if (m_logFile.is_open()) {
-		m_logFile << logMessage << std::endl;
+		m_logFile << logMessage << "\n";
 	}
+	m_logFile.flush();
+	std::cout.flush();
 }
 
 } // namespace Pantomir
