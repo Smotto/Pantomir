@@ -10,15 +10,15 @@ public:
 	PantomirWindow(int width, int height, const std::string& title);
 	~PantomirWindow();
 
-	GLFWwindow* GetNativeWindow() const {
+	[[nodiscard]] GLFWwindow* GetNativeWindow() const {
 		return m_window;
 	}
 
-	bool m_framebufferResized = false;
+	bool               m_framebufferResized = false;
 
-	bool ShouldClose() const;
-	void PollEvents() const;
-	void GetFramebufferSize(int& width, int& height);
+	[[nodiscard]] bool ShouldClose() const;
+	void               PollEvents() const;
+	void               GetFramebufferSize(int& width, int& height) const;
 
 private:
 	GLFWwindow* m_window;

@@ -1,14 +1,12 @@
 ﻿#include "VulkanInstanceManager.h"
 
-#include "PantomirWindow.h"
-
 #include <GLFW/glfw3.h>
 #include <cstring>
 #include <iostream>
 #include <stdexcept>
 
-VulkanInstanceManager::VulkanInstanceManager(const PantomirWindow* pantomirWindow, const std::vector<const char*>& validationLayers, const bool& enableValidation)
-    : m_pantomirWindow(pantomirWindow), m_validationLayers(validationLayers), m_enableValidation(enableValidation) {
+VulkanInstanceManager::VulkanInstanceManager(GLFWwindow* window, const std::vector<const char*>& validationLayers, const bool& enableValidation)
+    : m_window(window), m_validationLayers(validationLayers), m_enableValidation(enableValidation) {
 	if (m_enableValidation) {
 		SetupDebugMessenger();
 	}
@@ -62,7 +60,7 @@ VulkanInstanceManager::~VulkanInstanceManager() {
 }
 
 void VulkanInstanceManager::CreateSurface() {
-	if (glfwCreateWindowSurface(m_instance, m_pantomirWindow->GetNativeWindow(), nullptr, &m_surface) != VK_SUCCESS) {
+	if (glfwCreateWindowSurface(m_instance, m_window, nullptr, &m_surface) != VK_SUCCESS) {
 		throw std::runtime_error(": Failed to create window surface!");
 	}
 }

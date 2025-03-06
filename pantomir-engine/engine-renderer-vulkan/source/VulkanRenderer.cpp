@@ -48,7 +48,7 @@ struct UniformBufferObject {
 	alignas(16) glm::vec3 lightColor; // Light color (e.g., RGB intensity)
 	alignas(16) glm::vec3 viewPos;    // Camera position for specular calculation
 	bool useBakedLighting;
-	alignas(16) glm::mat4 modelMatrices[MODEL_COUNT]; // Define MODEL_COUNT as a constant, e.g., 10
+	alignas(16) glm::mat4 modelMatrices[MODEL_COUNT];
 };
 
 VulkanRenderer::VulkanRenderer(GLFWwindow* window, InputManager* inputManager, const VulkanDeviceManager* deviceManager, VulkanResourceManager* resourceManager)

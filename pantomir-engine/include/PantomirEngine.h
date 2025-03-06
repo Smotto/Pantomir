@@ -12,7 +12,7 @@ class VulkanResourceManager;
 class VulkanBufferManager;
 class PantomirWindow;
 
-class PantomirEngine {
+class PantomirEngine final {
 public:
 	PantomirEngine();
 	~PantomirEngine();

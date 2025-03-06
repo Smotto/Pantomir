@@ -1,30 +1,29 @@
 ﻿#ifndef VULKANINSTANCEMANAGER_H_
 #define VULKANINSTANCEMANAGER_H_
 
-#include <memory>
 #include <vector>
 #include <vulkan/vulkan.h>
 
-class PantomirWindow;
+struct GLFWwindow;
 
 class VulkanInstanceManager final {
 public:
 	VulkanInstanceManager(
-	    const PantomirWindow*           pantomirWindow,
+	    GLFWwindow*                     window,
 	    const std::vector<const char*>& validationLayers,
 	    const bool&                     enableValidation);
 	~VulkanInstanceManager();
 
-	VkInstance GetNativeInstance() const {
+	[[nodiscard]] VkInstance GetNativeInstance() const {
 		return m_instance;
 	}
-	VkSurfaceKHR GetNativeSurface() const {
+	[[nodiscard]] VkSurfaceKHR GetNativeSurface() const {
 		return m_surface;
 	}
-	const std::vector<const char*>& GetExtensions() const {
+	[[nodiscard]] const std::vector<const char*>& GetExtensions() const {
 		return m_extensions;
 	}
-	VkDebugUtilsMessengerEXT GetDebugMessenger() const {
+	[[nodiscard]] VkDebugUtilsMessengerEXT GetDebugMessenger() const {
 		return m_debugMessenger;
 	}
 
@@ -36,7 +35,7 @@ private:
 	std::vector<const char*> GetRequiredExtensions();
 	void                     PopulateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
 
-	const PantomirWindow*    m_pantomirWindow;
+	GLFWwindow*              m_window;
 	VkInstance               m_instance = VK_NULL_HANDLE;
 	VkSurfaceKHR             m_surface  = VK_NULL_HANDLE;
 	std::vector<const char*> m_extensions;

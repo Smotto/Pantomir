@@ -3,7 +3,6 @@
 
 #include "glm/glm.hpp"
 
-// InputEvents.h
 struct KeyEvent {
 	int key;    // GLFW key code
 	int action; // GLFW_PRESS, GLFW_RELEASE, etc.

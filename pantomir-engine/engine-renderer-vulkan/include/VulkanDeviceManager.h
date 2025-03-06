@@ -18,8 +18,8 @@ struct DeviceRequirements {
 
 class VulkanDeviceManager final {
 public:
-	~VulkanDeviceManager();
 	VulkanDeviceManager(const VulkanInstanceManager* instanceManager, const std::vector<const char*>& deviceExtensions);
+	~VulkanDeviceManager();
 
 	[[nodiscard]] const VulkanInstanceManager* GetInstanceManager() const {
 		return m_vulkanInstanceManager;

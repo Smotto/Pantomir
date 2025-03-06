@@ -2,7 +2,7 @@
   "version": "0.2.0",
   "configurations": [
       {
-          "name": "PantomirEditor (Debug)",
+          "name": "debug",
           "type": "cppvsdbg",
           "request": "launch",
           "program": "${command:cmake.launchTargetPath}",
@@ -14,7 +14,7 @@
           "preLaunchTask": "cmake: build debug"
       },
       {
-          "name": "PantomirEditor (Release)",
+          "name": "release",
           "type": "cppvsdbg",
           "request": "launch",
           "program": "${command:cmake.launchTargetPath}",
@@ -26,7 +26,7 @@
           "preLaunchTask": "cmake: build release"
       },
       {
-          "name": "PantomirEditor (RelWithDebInfo)",
+          "name": "rel_with_deb_info",
           "type": "cppvsdbg",
           "request": "launch",
           "program": "${command:cmake.launchTargetPath}",

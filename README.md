@@ -17,6 +17,7 @@
 
 1. CMakePresets does a lot of the work for you. You can open this project up in CLion or VSCode with the Cmake
    extension.
+2. Make sure to set the **working directory** to the root of the project, so it can touch the Assets folder.
 
 ### Notes and Concerns
 
