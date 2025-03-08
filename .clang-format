@@ -60,4 +60,6 @@ AlignConsecutiveAssignments: AcrossEmptyLinesAndComments
 #   PadOperators: true
 
 AlignConsecutiveBitFields: AcrossEmptyLinesAndComments
+
+NamespaceIndentation: All
 ...

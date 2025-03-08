@@ -1,5 +1,4 @@
-﻿// InputManager.cpp
-#include "InputManager.h"
+﻿#include "InputManager.h"
 
 #include "GLFW/glfw3.h"
 #include "PantomirWindow.h"
@@ -22,24 +21,22 @@ InputManager::InputManager(const PantomirWindow* window)
 }
 
 // Destructor: Clean up (GLFW handles callback reset on window destruction)
-InputManager::~InputManager() {
-    // No explicit cleanup needed for callbacks since GLFW resets them when the window is destroyed
-}
+InputManager::~InputManager() = default;
 
 // Register callback functions
-void InputManager::RegisterKeyCallback(std::function<void(const KeyEvent&)> callback) {
+void InputManager::RegisterKeyCallback(const std::function<void(const KeyEvent&)>& callback) {
     m_keyCallbacks.push_back(callback);
 }
 
-void InputManager::RegisterMouseButtonCallback(std::function<void(const MouseButtonEvent&)> callback) {
+void InputManager::RegisterMouseButtonCallback(const std::function<void(const MouseButtonEvent&)>& callback) {
     m_mouseButtonCallbacks.push_back(callback);
 }
 
-void InputManager::RegisterMouseMoveCallback(std::function<void(const MouseMoveEvent&)> callback) {
+void InputManager::RegisterMouseMoveCallback(const std::function<void(const MouseMoveEvent&)>& callback) {
     m_mouseMoveCallbacks.push_back(callback);
 }
 
-void InputManager::RegisterScrollCallback(std::function<void(const ScrollEvent&)> callback) {
+void InputManager::RegisterScrollCallback(const std::function<void(const ScrollEvent&)>& callback) {
     m_scrollCallbacks.push_back(callback);
 }
 

@@ -7,14 +7,14 @@ struct GLFWwindow;
 
 class PantomirWindow {
 public:
+	bool m_framebufferResized = false;
+
 	PantomirWindow(int width, int height, const std::string& title);
 	~PantomirWindow();
 
 	[[nodiscard]] GLFWwindow* GetNativeWindow() const {
 		return m_window;
 	}
-
-	bool               m_framebufferResized = false;
 
 	[[nodiscard]] bool ShouldClose() const;
 	void               PollEvents() const;

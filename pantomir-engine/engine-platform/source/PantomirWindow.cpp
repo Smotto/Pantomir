@@ -1,20 +1,23 @@
 ﻿#include "PantomirWindow.h"
+#include "LoggerMacros.h"
+
 #include <GLFW/glfw3.h>
 #include <stdexcept>
 
 PantomirWindow::PantomirWindow(int width, int height, const std::string& title)
     : m_title(title), m_width(width), m_height(height) {
-	// Initialize GLFW
 	if (!glfwInit()) {
 		throw std::runtime_error("Failed to initialize GLFW");
 	}
 
-	// Configure window hints
+	// Telling GLFW to not use opengl, because we are making our own.
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
-	// Get primary monitor and its video mode
+	// Gets the monitor with: "Make this my main display" enabled in display settings on Windows.
 	GLFWmonitor*       monitor = glfwGetPrimaryMonitor();
 	const GLFWvidmode* mode    = glfwGetVideoMode(monitor);
+
+	LOG(Engine_Platform, Debug, "Video Mode: BGR depth: {}b {}g {}r | Resolution:{}x{} {}hz", mode->blueBits, mode->greenBits, mode->redBits, mode->width, mode->height, mode->refreshRate);
 
 	// Use default dimensions if none provided, or clamp to monitor size
 	if (width <= 0 || height <= 0) {

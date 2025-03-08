@@ -1014,7 +1014,7 @@ void VulkanRenderer::UpdateUniformBuffers(uint32_t currentImage) {
 	ubo.lightPos         = glm::vec3(2.0f, 2.0f, 2.0f);
 	ubo.lightColor       = glm::vec3(1.0f, 1.0f, 1.0f);
 	ubo.viewPos          = m_camera->m_cameraPos;
-	ubo.useBakedLighting = true;
+	ubo.useBakedLighting = false;
 
 	for (size_t i = 0; i < m_resourceManager->GetModels().size() && i < MODEL_COUNT; ++i) {
 		ubo.modelMatrices[i] = glm::rotate(glm::mat4(1.0f), 0.0f, glm::vec3(0.0f, 0.0f, 1.0f));

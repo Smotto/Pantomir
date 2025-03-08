@@ -83,7 +83,7 @@ ModelLoader::RawModel ModelLoader::LoadModel(const std::filesystem::path& relati
         }
     }
 
-	LOG_INFO("ModelLoader", "Loaded {} meshes, {} unique vertices, {} indices", std::to_string(scene->mNumMeshes).c_str(), model.vertices.size(), model.indices.size());
+	LOG(Engine, Info, "Loaded {} meshes, {} unique vertices, {} indices", std::to_string(scene->mNumMeshes).c_str(), model.vertices.size(), model.indices.size());
 
     // Importer will automatically clean up the scene when it goes out of scope
     return model;

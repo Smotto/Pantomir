@@ -31,6 +31,11 @@ target_link_libraries(engine-platform PRIVATE
         Vulkan::Vulkan
 )
 
+# Dependencies from Engine
+target_link_libraries(engine-platform PRIVATE
+        engine-utils
+)
+
 target_compile_definitions(engine-platform PRIVATE
         GLFW_INCLUDE_VULKAN     # Include Vulkan headers with GLFW
         GLFW_EXPOSE_NATIVE_WIN32 # Enable native Win32 access

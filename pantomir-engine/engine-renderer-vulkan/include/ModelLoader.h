@@ -5,6 +5,7 @@
 #include <vector>
 
 struct Vertex;
+
 class ModelLoader final {
 public:
 	struct RawModel final {
@@ -15,5 +16,6 @@ public:
 	ModelLoader() = default;
 	static RawModel LoadModel(const std::filesystem::path& path);
 };
+
 
 #endif /*! MODELLOADER_H_ */

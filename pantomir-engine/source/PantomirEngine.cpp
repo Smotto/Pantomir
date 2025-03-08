@@ -25,7 +25,7 @@ PantomirEngine::PantomirEngine() {
 
 PantomirEngine::~PantomirEngine() = default;
 
-int PantomirEngine::Start() {
+int PantomirEngine::Start() const {
 	// TODO: Implement job based system instead of doing a main loop.
 	try {
 		MainLoop();
@@ -37,7 +37,7 @@ int PantomirEngine::Start() {
 	return EXIT_SUCCESS;
 }
 
-void PantomirEngine::MainLoop() {
+void PantomirEngine::MainLoop() const {
 	while (!m_pantomirWindow->ShouldClose()) {
 		m_pantomirWindow->PollEvents();
 		m_vulkanRenderer->DrawFrame();
@@ -48,5 +48,5 @@ void PantomirEngine::MainLoop() {
 
 int main(int argc, char* argv[]) {
 	PantomirEngine engine;
-	engine.Start();
+	return engine.Start();
 }

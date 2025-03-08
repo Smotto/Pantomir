@@ -38,7 +38,7 @@ uint64_t VulkanResourceManager::ComputePathHash(const std::filesystem::path& pat
 }
 
 void VulkanResourceManager::LoadModel(const std::filesystem::path& path) {
-    LOG_DEBUG("ResourceManager", "Loading model: {}", path.string());
+    LOG(Engine_Renderer, Debug, "Loading model: {}", path.string());
     uint64_t hash = ComputePathHash(path);
 	if (auto it = m_models.find(hash); it != m_models.end()) {
         return;
@@ -49,13 +49,13 @@ void VulkanResourceManager::LoadModel(const std::filesystem::path& path) {
         VulkanBufferManager::RenderModel renderModel = m_bufferManager->CreateRenderModel(rawModel);
         auto inserted = m_models.emplace(hash, renderModel);
     } catch (const std::exception& e) {
-		LOG_ERROR("VulkanResourceManager", e.what());
+		LOG(Engine_Renderer, Error, "Loading model error: {}", e.what());
     	return;
     }
 }
 
 void VulkanResourceManager::UnloadModel(const std::filesystem::path& path) {
-    LOG_DEBUG("ResourceManager", "Unloading model: {}", path.string());
+    LOG(Engine_Renderer, Debug, "Unloading model: {}", path.string());
     uint64_t hash = ComputePathHash(path);
     auto it = m_models.find(hash);
     if (it != m_models.end()) {

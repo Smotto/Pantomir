@@ -3,7 +3,6 @@
 
 #include "InputEvents.h"
 #include <functional>
-#include <memory>
 #include <unordered_map>
 #include <vector>
 
@@ -16,10 +15,10 @@ public:
 	~InputManager();
 
 	// Register callbacks for events
-	void      RegisterKeyCallback(std::function<void(const KeyEvent&)> callback);
-	void      RegisterMouseButtonCallback(std::function<void(const MouseButtonEvent&)> callback);
-	void      RegisterMouseMoveCallback(std::function<void(const MouseMoveEvent&)> callback);
-	void      RegisterScrollCallback(std::function<void(const ScrollEvent&)> callback);
+	void      RegisterKeyCallback(const std::function<void(const KeyEvent&)>& callback);
+	void      RegisterMouseButtonCallback(const std::function<void(const MouseButtonEvent&)>& callback);
+	void      RegisterMouseMoveCallback(const std::function<void(const MouseMoveEvent&)>& callback);
+	void      RegisterScrollCallback(const std::function<void(const ScrollEvent&)>& callback);
 
 	// Query current state
 	bool      IsKeyPressed(int key) const;

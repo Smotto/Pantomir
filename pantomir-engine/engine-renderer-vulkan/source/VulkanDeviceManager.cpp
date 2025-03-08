@@ -23,12 +23,13 @@ VulkanDeviceManager::~VulkanDeviceManager() {
 
 void VulkanDeviceManager::PickPhysicalDevice() {
 	uint32_t deviceCount = 0;
-	vkEnumeratePhysicalDevices(m_vulkanInstanceManager->GetNativeInstance(), &deviceCount, nullptr);
+	VkInstance vkInstance = m_vulkanInstanceManager->GetNativeInstance();
+	vkEnumeratePhysicalDevices(vkInstance, &deviceCount, nullptr);
 	if (deviceCount == 0) {
 		throw std::runtime_error("failed to find GPUs with Vulkan support!");
 	}
 	m_physicalDevices.resize(deviceCount);
-	vkEnumeratePhysicalDevices(m_vulkanInstanceManager->GetNativeInstance(), &deviceCount, m_physicalDevices.data());
+	vkEnumeratePhysicalDevices(vkInstance, &deviceCount, m_physicalDevices.data());
 
 	// First try to pick the first suitable one
 	for (const auto& device : m_physicalDevices) {
@@ -152,7 +153,7 @@ bool VulkanDeviceManager::CheckDeviceExtensionSupport(const VkPhysicalDevice dev
 	return requiredExtensions.empty();
 }
 
-VkSampleCountFlagBits VulkanDeviceManager::GetMaxUsableSampleCount() {
+VkSampleCountFlagBits VulkanDeviceManager::GetMaxUsableSampleCount() const {
 	VkPhysicalDeviceProperties physicalDeviceProperties;
 	vkGetPhysicalDeviceProperties(m_physicalDevice, &physicalDeviceProperties);
 
@@ -184,13 +185,14 @@ QueueFamilyIndices VulkanDeviceManager::FindQueueFamilies(const VkPhysicalDevice
 	vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
 
 	int i = 0;
+	VkSurfaceKHR surface = m_vulkanInstanceManager->GetNativeSurface();
 	for (const auto& queueFamily : queueFamilies) {
 		if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
 			indices.graphicsFamily = i;
 		}
 
 		VkBool32 presentSupport = false;
-		vkGetPhysicalDeviceSurfaceSupportKHR(device, i, m_vulkanInstanceManager->GetNativeSurface(), &presentSupport);
+		vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
 		if (presentSupport) {
 			indices.presentFamily = i;
 		}
@@ -207,20 +209,21 @@ QueueFamilyIndices VulkanDeviceManager::FindQueueFamilies(const VkPhysicalDevice
 
 SwapChainSupportDetails VulkanDeviceManager::QuerySwapChainSupport(const VkPhysicalDevice device) const {
 	SwapChainSupportDetails details;
-	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, m_vulkanInstanceManager->GetNativeSurface(), &details.capabilities);
+	VkSurfaceKHR surface = m_vulkanInstanceManager->GetNativeSurface();
+	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
 
 	uint32_t formatCount;
-	vkGetPhysicalDeviceSurfaceFormatsKHR(device, m_vulkanInstanceManager->GetNativeSurface(), &formatCount, nullptr);
+	vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, nullptr);
 	if (formatCount != 0) {
 		details.formats.resize(formatCount);
-		vkGetPhysicalDeviceSurfaceFormatsKHR(device, m_vulkanInstanceManager->GetNativeSurface(), &formatCount, details.formats.data());
+		vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, details.formats.data());
 	}
 
 	uint32_t presentModeCount;
-	vkGetPhysicalDeviceSurfacePresentModesKHR(device, m_vulkanInstanceManager->GetNativeSurface(), &presentModeCount, nullptr);
+	vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, nullptr);
 	if (presentModeCount != 0) {
 		details.presentModes.resize(presentModeCount);
-		vkGetPhysicalDeviceSurfacePresentModesKHR(device, m_vulkanInstanceManager->GetNativeSurface(), &presentModeCount, details.presentModes.data());
+		vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, details.presentModes.data());
 	}
 
 	return details;

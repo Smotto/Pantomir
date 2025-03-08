@@ -16,7 +16,7 @@ class PantomirEngine final {
 public:
 	PantomirEngine();
 	~PantomirEngine();
-	int Start();
+	int Start() const;
 
 private:
 #ifdef NDEBUG
@@ -33,6 +33,6 @@ private:
 	std::unique_ptr<VulkanResourceManager> m_resourceManager;
 	std::unique_ptr<VulkanRenderer>        m_vulkanRenderer;
 
-	void                                   MainLoop();
+	void                                   MainLoop() const;
 };
 #endif /*! PANTOMIRENGINE_H_ */

@@ -3,7 +3,6 @@
 
 #include "ModelLoader.h"
 
-#include <memory>
 #include <vulkan/vulkan.h>
 
 class VulkanDeviceManager;
@@ -22,19 +21,19 @@ public:
 	explicit VulkanBufferManager(const VulkanDeviceManager* deviceManager);
 	~VulkanBufferManager();
 
-	RenderModel   CreateRenderModel(const ModelLoader::RawModel& rawModel);
+	RenderModel CreateRenderModel(const ModelLoader::RawModel& rawModel);
 
-	VkCommandPool GetCommandPool() const;
+	[[nodiscard]] VkCommandPool GetCommandPool() const;
 
 private:
 	const VulkanDeviceManager* m_deviceManager;
 	VkCommandPool              m_commandPool = VK_NULL_HANDLE;
 
-	uint32_t                   FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) const;
-	void                       CreateCommandPool();
-	void                       CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
-	void                       CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
-	VkCommandBuffer            BeginSingleTimeCommands() const;
-	void                       EndSingleTimeCommands(VkCommandBuffer commandBuffer) const;
+	[[nodiscard]] uint32_t        FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) const;
+	void                          CreateCommandPool();
+	void                          CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
+	void                          CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
+	[[nodiscard]] VkCommandBuffer BeginSingleTimeCommands() const;
+	void                          EndSingleTimeCommands(VkCommandBuffer commandBuffer) const;
 };
 #endif /*! VULKANBUFFERMANAGER_H_ */
