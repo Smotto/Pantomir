@@ -21,13 +21,13 @@ public:
 	explicit VulkanBufferManager(const VulkanDeviceManager* deviceManager);
 	~VulkanBufferManager();
 
-	RenderModel CreateRenderModel(const ModelLoader::RawModel& rawModel);
+	RenderModel                 CreateRenderModel(const ModelLoader::RawModel& rawModel);
 
 	[[nodiscard]] VkCommandPool GetCommandPool() const;
 
 private:
-	const VulkanDeviceManager* m_deviceManager;
-	VkCommandPool              m_commandPool = VK_NULL_HANDLE;
+	const VulkanDeviceManager*    m_deviceManager;
+	VkCommandPool                 m_commandPool = VK_NULL_HANDLE;
 
 	[[nodiscard]] uint32_t        FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) const;
 	void                          CreateCommandPool();

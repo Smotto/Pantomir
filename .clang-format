@@ -23,7 +23,7 @@ BinPackParameters: false
 BinPackArguments:  false
 
 
-ReflowComments:    false
+#ReflowComments:    IndentOnly
 KeepEmptyLinesAtTheStartOfBlocks: true
 
 
@@ -37,14 +37,14 @@ SpacesInParentheses:           false
 SpacesInCStyleCastParentheses: false
 
 
-SortIncludes:     true
+SortIncludes:     CaseSensitive
 IndentCaseBlocks: false
 IndentCaseLabels: true
 
 
 # Enable alignment of consecutive declarations and assignments:
 AlignConsecutiveDeclarations: AcrossEmptyLinesAndComments
-# AlignConsecutiveDeclarations: 
+#AlignConsecutiveDeclarations:
 #   Enabled: true
 #   AcrossComments: true
 #   AcrossEmptyLines: true
@@ -52,7 +52,7 @@ AlignConsecutiveDeclarations: AcrossEmptyLinesAndComments
 #   AlignFunctionPointers: true
 
 AlignConsecutiveAssignments: AcrossEmptyLinesAndComments
-# AlignConsecutiveAssignments:  
+#AlignConsecutiveAssignments:
 #   Enabled: true
 #   AcrossComments: true
 #   AcrossEmptyLines: true

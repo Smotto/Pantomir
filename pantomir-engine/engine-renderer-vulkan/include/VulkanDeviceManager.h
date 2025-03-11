@@ -49,31 +49,31 @@ public:
 		return m_msaaSamples;
 	}
 
-	QueueFamilyIndices      FindQueueFamilies(const VkPhysicalDevice device) const;
-	SwapChainSupportDetails QuerySwapChainSupport(const VkPhysicalDevice device) const;
+	SwapChainSupportDetails QuerySwapChainSupport(const VkPhysicalDevice physicalDevice) const;
 
 private:
-	void PickPhysicalDevice();
-	void CreateLogicalDevice();
+	void                                PickBestPhysicalDevice();
+	void                                CreateLogicalDevice();
+	void                                CreateQueues();
 
+	QueueFamilyIndices                  FindQueueFamilies(const VkPhysicalDevice physicalDevice) const;
 	[[nodiscard]] VkSampleCountFlagBits GetMaxUsableSampleCount() const;
-	VkPhysicalDevice                    ChooseBestPhysicalDevice();
-	uint32_t                            RateDeviceSuitability(const VkPhysicalDevice device) const;
-	bool                                IsDeviceSuitable(const VkPhysicalDevice device) const;
-	bool                                CheckDeviceExtensionSupport(const VkPhysicalDevice device) const;
+	uint32_t                            RateDeviceSuitability(const VkPhysicalDevice physicalDevice) const;
+	bool                                IsDeviceSuitable(const VkPhysicalDevice physicalDevice) const;
+	bool                                CheckDeviceExtensionSupport(const VkPhysicalDevice physicalDevice) const;
 
-	const VulkanInstanceManager* m_vulkanInstanceManager;
-	std::vector<const char*>     m_deviceExtensions = {};
+	const VulkanInstanceManager*        m_vulkanInstanceManager;
+	std::vector<const char*>            m_deviceExtensions = {};
 
-	std::vector<VkPhysicalDevice> m_physicalDevices;
-	VkPhysicalDevice              m_physicalDevice{};
-	VkDevice                      m_logicalDevice{};
+	std::vector<VkPhysicalDevice>       m_physicalDevices;
+	VkPhysicalDevice                    m_physicalDevice{};
+	VkDevice                            m_logicalDevice{};
 
-	QueueFamilyIndices m_queueFamilyIndices;
-	VkQueue            m_graphicsQueue{};
-	VkQueue            m_presentQueue{};
+	QueueFamilyIndices                  m_queueFamilyIndices;
+	VkQueue                             m_graphicsQueue{};
+	VkQueue                             m_presentQueue{};
 
-	VkSampleCountFlagBits m_msaaSamples = VK_SAMPLE_COUNT_1_BIT;
+	VkSampleCountFlagBits               m_msaaSamples = VK_SAMPLE_COUNT_1_BIT;
 };
 
 #endif /*! VULKANDEVICEMANAGER_H_ */

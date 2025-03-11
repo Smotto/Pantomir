@@ -127,9 +127,9 @@ private:
 	void                                GenerateMipmaps(VkImage image, VkFormat imageFormat, int32_t texWidth, int32_t texHeight, uint32_t mipLevels);
 	void                                TransitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels);
 
-	VkCommandBuffer                     BeginSingleTimeCommands();
-	void                                EndSingleTimeCommands(VkCommandBuffer commandBuffer);
-	void                                RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+	VkCommandBuffer                     BeginSingleTimeCommands() const;
+	void                                EndSingleTimeCommands(VkCommandBuffer commandBuffer) const;
+	void                                RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) const;
 
 	void                                CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
 	void                                CopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);

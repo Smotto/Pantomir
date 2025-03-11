@@ -5,18 +5,19 @@
 
 InputManager::InputManager(const PantomirWindow* window)
     : m_window(window) {
+	GLFWwindow* glfwWindow = m_window->GetNativeWindow();
 	// Store this instance in the window's user pointer for callback access
-	glfwSetWindowUserPointer(m_window->GetNativeWindow(), this);
+	glfwSetWindowUserPointer(glfwWindow, this);
 
 	// Register GLFW callbacks
-	glfwSetKeyCallback(m_window->GetNativeWindow(), KeyCallback);
-	glfwSetMouseButtonCallback(m_window->GetNativeWindow(), MouseButtonCallback);
-	glfwSetCursorPosCallback(m_window->GetNativeWindow(), MouseMoveCallback);
-	glfwSetScrollCallback(m_window->GetNativeWindow(), ScrollCallback);
+	glfwSetKeyCallback(glfwWindow, KeyCallback);
+	glfwSetMouseButtonCallback(glfwWindow, MouseButtonCallback);
+	glfwSetCursorPosCallback(glfwWindow, MouseMoveCallback);
+	glfwSetScrollCallback(glfwWindow, ScrollCallback);
 
 	// Initialize mouse position
 	double xpos, ypos;
-	glfwGetCursorPos(m_window->GetNativeWindow(), &xpos, &ypos);
+	glfwGetCursorPos(glfwWindow, &xpos, &ypos);
 	m_mousePosition = glm::vec2(static_cast<float>(xpos), static_cast<float>(ypos));
 }
 
@@ -71,10 +72,9 @@ void InputManager::Update() {
 }
 
 // Static GLFW callbacks: Forward to instance methods
-void InputManager::KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
-    InputManager* input = static_cast<InputManager*>(glfwGetWindowUserPointer(window));
-    if (input) {
-        KeyEvent event{key, action};
+void InputManager::KeyCallback(GLFWwindow* window, const int key, int scancode, const int action, int mods) {
+	if (InputManager* input = static_cast<InputManager*>(glfwGetWindowUserPointer(window))) {
+        const KeyEvent event{key, action};
         input->DispatchKeyEvent(event);
 
         // Update key state
@@ -85,8 +85,7 @@ void InputManager::KeyCallback(GLFWwindow* window, int key, int scancode, int ac
 }
 
 void InputManager::MouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
-    InputManager* input = static_cast<InputManager*>(glfwGetWindowUserPointer(window));
-    if (input) {
+	if (InputManager* input = static_cast<InputManager*>(glfwGetWindowUserPointer(window))) {
         MouseButtonEvent event{button, action};
         input->DispatchMouseButtonEvent(event);
 
@@ -98,8 +97,7 @@ void InputManager::MouseButtonCallback(GLFWwindow* window, int button, int actio
 }
 
 void InputManager::MouseMoveCallback(GLFWwindow* window, double xpos, double ypos) {
-    InputManager* input = static_cast<InputManager*>(glfwGetWindowUserPointer(window));
-    if (input) {
+	if (InputManager* input = static_cast<InputManager*>(glfwGetWindowUserPointer(window))) {
         MouseMoveEvent event{glm::vec2(static_cast<float>(xpos), static_cast<float>(ypos))};
         input->m_mousePosition = event.position; // Update current position
         input->DispatchMouseMoveEvent(event);
@@ -107,8 +105,7 @@ void InputManager::MouseMoveCallback(GLFWwindow* window, double xpos, double ypo
 }
 
 void InputManager::ScrollCallback(GLFWwindow* window, double xoffset, double yoffset) {
-    InputManager* input = static_cast<InputManager*>(glfwGetWindowUserPointer(window));
-    if (input) {
+	if (InputManager* input = static_cast<InputManager*>(glfwGetWindowUserPointer(window))) {
         ScrollEvent event{static_cast<float>(yoffset)};
         input->m_scrollDelta = event.delta; // Update scroll delta
         input->DispatchScrollEvent(event);

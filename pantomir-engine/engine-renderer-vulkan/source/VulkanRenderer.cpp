@@ -273,6 +273,12 @@ void VulkanRenderer::GenerateMipmaps(VkImage image, VkFormat imageFormat, int32_
 	EndSingleTimeCommands(commandBuffer);
 }
 
+/*
+========================
+VulkanRenderer::CreateSwapChain
+Holds the images for the screen. Allows you to render things to a visible window. KHR suffix means it comes from an extension.
+========================
+*/
 void VulkanRenderer::CreateSwapChain() {
 	VkDevice                 logicalDevice     = m_deviceManager->GetLogicalDevice();
 	VkPhysicalDevice         physicalDevice    = m_deviceManager->GetPhysicalDevice();
@@ -294,7 +300,7 @@ void VulkanRenderer::CreateSwapChain() {
 	createInfo.imageArrayLayers                      = 1;
 	createInfo.imageUsage                            = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
-	QueueFamilyIndices queueFamilyIndices            = m_deviceManager->FindQueueFamilies(physicalDevice);
+	QueueFamilyIndices queueFamilyIndices            = m_deviceManager->GetQueueFamilyIndices();
 	uint32_t           queueFamilyIndices_uint32_t[] = {queueFamilyIndices.graphicsFamily.value(), queueFamilyIndices.presentFamily.value()};
 
 	// If the chips on the GPU aren't logically together, they need to be separated and concurrent.
@@ -309,7 +315,7 @@ void VulkanRenderer::CreateSwapChain() {
 	}
 
 	createInfo.preTransform   = swapChainSupport.capabilities.currentTransform; // IPhone current rotation
-	createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+	createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;              // The images being presented to the window itself ignores the alpha channel.
 	createInfo.presentMode    = presentMode;
 	createInfo.clipped        = VK_TRUE;
 	createInfo.oldSwapchain   = VK_NULL_HANDLE;
@@ -320,6 +326,7 @@ void VulkanRenderer::CreateSwapChain() {
 
 	uint32_t actualImageCount;
 	vkGetSwapchainImagesKHR(logicalDevice, m_swapChain, &actualImageCount, nullptr);
+	LOG(Engine_Renderer, Debug, "Swapchain image count: {}", actualImageCount);
 	m_swapChainImages.resize(actualImageCount);
 	vkGetSwapchainImagesKHR(logicalDevice, m_swapChain, &actualImageCount, m_swapChainImages.data());
 
@@ -335,6 +342,12 @@ void VulkanRenderer::CreateImageViews() {
 	}
 }
 
+/*
+========================
+VulkanRenderer::CreateFramebuffers
+A frame buffer holds the target images for a render pass.
+========================
+*/
 void VulkanRenderer::CreateFramebuffers() {
 	VkDevice device = m_deviceManager->GetLogicalDevice();
 
@@ -360,7 +373,13 @@ void VulkanRenderer::CreateFramebuffers() {
 	}
 }
 
-//////////// Pipeline and Render Pass ////////////
+/*
+========================
+VulkanRenderer::CreateRenderPass
+A Render Pass holds information about the images you are rendering into.
+All drawing commands have to be done inside a render pass.
+========================
+*/
 void VulkanRenderer::CreateRenderPass() {
 	VkAttachmentDescription colorAttachment{};
 	colorAttachment.format         = m_swapChainImageFormat;
@@ -480,6 +499,13 @@ void VulkanRenderer::CreateDescriptorPool() {
 	}
 }
 
+/*
+========================
+VulkanRenderer::CreateDescriptorSets
+VkDescriptorSet holds the binding information that connects shader inputs to data such as VkBuffer resources and VkImage textures.
+It's basically GPU-side pointers that you bind once.
+========================
+*/
 void VulkanRenderer::CreateDescriptorSets() {
 	std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, m_descriptorSetLayout);
 	VkDevice                           device = m_deviceManager->GetLogicalDevice();
@@ -528,6 +554,13 @@ void VulkanRenderer::CreateDescriptorSets() {
 	}
 }
 
+/*
+========================
+VulkanRenderer::CreateGraphicsPipeline
+VkPipeline holds the state of the GPU needed to draw.
+Shaders, rasterization options, depth settings.
+========================
+*/
 void VulkanRenderer::CreateGraphicsPipeline() {
 	auto                            vertShaderCode   = ReadFile(vertShaderPath.string());
 	auto                            fragShaderCode   = ReadFile(fragShaderPath.string());
@@ -893,7 +926,7 @@ void VulkanRenderer::TransitionImageLayout(VkImage image, VkFormat format, VkIma
 	EndSingleTimeCommands(commandBuffer);
 }
 
-VkCommandBuffer VulkanRenderer::BeginSingleTimeCommands() {
+VkCommandBuffer VulkanRenderer::BeginSingleTimeCommands() const {
 	VkCommandBufferAllocateInfo allocInfo{};
 	allocInfo.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 	allocInfo.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
@@ -912,7 +945,7 @@ VkCommandBuffer VulkanRenderer::BeginSingleTimeCommands() {
 	return commandBuffer;
 }
 
-void VulkanRenderer::EndSingleTimeCommands(VkCommandBuffer commandBuffer) {
+void VulkanRenderer::EndSingleTimeCommands(VkCommandBuffer commandBuffer) const {
 	vkEndCommandBuffer(commandBuffer);
 
 	VkSubmitInfo submitInfo{};
@@ -1024,6 +1057,13 @@ void VulkanRenderer::UpdateUniformBuffers(uint32_t currentImage) {
 	memcpy(m_uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
 }
 
+/*
+========================
+VulkanRenderer::CreateCommandBuffers
+A command buffer encodes GPU commands.
+All execution that is performed on the GPU itself (not in the driver) has to be encoded in a VkCommandBuffer.
+========================
+*/
 void VulkanRenderer::CreateCommandBuffers() {
 	m_commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
 	VkCommandBufferAllocateInfo allocInfo{};
@@ -1037,7 +1077,7 @@ void VulkanRenderer::CreateCommandBuffers() {
 	}
 }
 
-void VulkanRenderer::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
+void VulkanRenderer::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) const {
 	VkCommandBufferBeginInfo beginInfo{};
 	beginInfo.sType            = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 	beginInfo.flags            = 0;
@@ -1050,7 +1090,7 @@ void VulkanRenderer::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
 	VkRenderPassBeginInfo renderPassInfo{};
 	renderPassInfo.sType             = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 	renderPassInfo.renderPass        = m_renderPass;
-	renderPassInfo.framebuffer       = m_swapChainFramebuffers[imageIndex];
+	renderPassInfo.framebuffer       = m_swapChainFramebuffers[imageIndex]; // 1 frame buffer for each swapchain image
 	renderPassInfo.renderArea.offset = {0, 0};
 	renderPassInfo.renderArea.extent = m_swapChainExtent;
 
@@ -1100,6 +1140,13 @@ void VulkanRenderer::RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t
 	}
 }
 
+/*
+========================
+VulkanRenderer::CreateSyncObjects
+VkSemaphore synchronizes GPU to CPU execution of commands. Used for syncing multiple command buffer submissions one after the other.
+VkFence synchronizes GPU to CPU execution of commands. Used to know if a command buffer has finished being executed on the GPU.
+========================
+*/
 void VulkanRenderer::CreateSyncObjects() {
 	m_imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
 	m_renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
@@ -1121,10 +1168,11 @@ void VulkanRenderer::CreateSyncObjects() {
 }
 
 void VulkanRenderer::DrawFrame() {
-	vkWaitForFences(m_deviceManager->GetLogicalDevice(), 1, &m_inFlightFences[m_currentFrame], VK_TRUE, UINT64_MAX);
+	VkDevice logicalDevice = m_deviceManager->GetLogicalDevice();
+	vkWaitForFences(logicalDevice, 1, &m_inFlightFences[m_currentFrame], VK_TRUE, UINT64_MAX);
 
 	uint32_t imageIndex;
-	VkResult result = vkAcquireNextImageKHR(m_deviceManager->GetLogicalDevice(), m_swapChain, UINT64_MAX, m_imageAvailableSemaphores[m_currentFrame], VK_NULL_HANDLE, &imageIndex);
+	VkResult result = vkAcquireNextImageKHR(logicalDevice, m_swapChain, UINT64_MAX, m_imageAvailableSemaphores[m_currentFrame], VK_NULL_HANDLE, &imageIndex);
 	if (result == VK_ERROR_OUT_OF_DATE_KHR) {
 		m_framebufferResized = false;
 		RecreateSwapChain();
@@ -1133,7 +1181,7 @@ void VulkanRenderer::DrawFrame() {
 		throw std::runtime_error("failed to acquire swap chain image!");
 	}
 
-	vkResetFences(m_deviceManager->GetLogicalDevice(), 1, &m_inFlightFences[m_currentFrame]);
+	vkResetFences(logicalDevice, 1, &m_inFlightFences[m_currentFrame]);
 	vkResetCommandBuffer(m_commandBuffers[m_currentFrame], 0);
 	RecordCommandBuffer(m_commandBuffers[m_currentFrame], imageIndex);
 
@@ -1186,11 +1234,8 @@ void VulkanRenderer::RecreateSwapChain() {
 		glfwGetFramebufferSize(m_window, &width, &height);
 		glfwWaitEvents();
 	}
-
 	vkDeviceWaitIdle(m_deviceManager->GetLogicalDevice());
-
 	CleanupSwapChain();
-
 	CreateSwapChain();
 	CreateImageViews();
 	CreateColorResources();
@@ -1206,7 +1251,6 @@ void VulkanRenderer::CleanupSwapChain() {
 	vkDestroyImageView(m_deviceManager->GetLogicalDevice(), m_depthImageView, nullptr);
 	vkDestroyImage(m_deviceManager->GetLogicalDevice(), m_depthImage, nullptr);
 	vkFreeMemory(m_deviceManager->GetLogicalDevice(), m_depthImageMemory, nullptr);
-
 	for (size_t i = 0; i < m_swapChainFramebuffers.size(); i++) {
 		vkDestroyFramebuffer(m_deviceManager->GetLogicalDevice(), m_swapChainFramebuffers[i], nullptr);
 	}

@@ -63,21 +63,21 @@ struct Vertex final {
 };
 
 namespace std {
-template <>
-struct hash<Vertex> {
-	std::size_t operator()(const Vertex& vertex) const noexcept {
-		std::size_t seed        = 0;
+	template <>
+	struct hash<Vertex> {
+		std::size_t operator()(const Vertex& vertex) const noexcept {
+			std::size_t seed        = 0;
 
-		auto        hashCombine = [](std::size_t& seed, auto& value) {
-            seed ^= std::hash<std::decay_t<decltype(value)>>{}(value) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-		};
-		hashCombine(seed, vertex.pos);
-		hashCombine(seed, vertex.color);
-		hashCombine(seed, vertex.texCoord);
-		hashCombine(seed, vertex.normal);
+			auto        hashCombine = [](std::size_t& seed, auto& value) {
+                seed ^= std::hash<std::decay_t<decltype(value)>>{}(value) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+			};
+			hashCombine(seed, vertex.pos);
+			hashCombine(seed, vertex.color);
+			hashCombine(seed, vertex.texCoord);
+			hashCombine(seed, vertex.normal);
 
-		return seed;
-	}
-};
+			return seed;
+		}
+	};
 } // namespace std
 #endif /*! VERTEX_H_ */

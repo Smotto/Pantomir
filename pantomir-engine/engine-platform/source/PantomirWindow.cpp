@@ -5,7 +5,7 @@
 #include <stdexcept>
 
 PantomirWindow::PantomirWindow(int width, int height, const std::string& title)
-    : m_title(title), m_width(width), m_height(height) {
+	: m_title(title), m_width(width), m_height(height) {
 	if (!glfwInit()) {
 		throw std::runtime_error("Failed to initialize GLFW");
 	}
@@ -15,20 +15,19 @@ PantomirWindow::PantomirWindow(int width, int height, const std::string& title)
 
 	// Gets the monitor with: "Make this my main display" enabled in display settings on Windows.
 	GLFWmonitor*       monitor = glfwGetPrimaryMonitor();
-	const GLFWvidmode* mode    = glfwGetVideoMode(monitor);
+	const GLFWvidmode* vidMode = glfwGetVideoMode(monitor);
 
-	LOG(Engine_Platform, Debug, "Video Mode: BGR depth: {}b {}g {}r | Resolution:{}x{} {}hz", mode->blueBits, mode->greenBits, mode->redBits, mode->width, mode->height, mode->refreshRate);
+	LOG(Engine_Platform, Debug, "Video Mode: BGR depth: {}b {}g {}r | Resolution:{}x{} {}hz", vidMode->blueBits, vidMode->greenBits, vidMode->redBits, vidMode->width, vidMode->height, vidMode->refreshRate);
 
 	// Use default dimensions if none provided, or clamp to monitor size
 	if (width <= 0 || height <= 0) {
-		m_width  = mode->width * 0.8;  // 80% of monitor width
-		m_height = mode->height * 0.8; // 80% of monitor height
+		m_width  = vidMode->width * 0.8; // 80% of monitor width
+		m_height = vidMode->height * 0.8; // 80% of monitor height
 	} else {
-		m_width  = std::min(width, mode->width);
-		m_height = std::min(height, mode->height);
+		m_width  = std::min(width, vidMode->width);
+		m_height = std::min(height, vidMode->height);
 	}
 
-	// Create window
 	m_window = glfwCreateWindow(m_width, m_height, m_title.c_str(), nullptr, nullptr);
 	if (!m_window) {
 		glfwTerminate();
@@ -36,12 +35,11 @@ PantomirWindow::PantomirWindow(int width, int height, const std::string& title)
 	}
 
 	// Center the window on the primary monitor
-	int xpos = (mode->width - m_width) / 2;
-	int ypos = (mode->height - m_height) / 2;
-	glfwSetWindowPos(m_window, xpos, ypos);
+	int xPos = (vidMode->width - m_width) / 2;
+	int yPos = (vidMode->height - m_height) / 2;
+	glfwSetWindowPos(m_window, xPos, yPos);
 
 	// Set up window properties
-	glfwSetWindowUserPointer(m_window, this);
 	glfwSetFramebufferSizeCallback(m_window, FramebufferResizeCallback);
 }
 

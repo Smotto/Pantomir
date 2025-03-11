@@ -8,6 +8,7 @@
     "stb",
     "assimp",
     "glfw3",
-    "imgui"
+    "imgui",
+    "vulkan-memory-allocator"
   ]
 }

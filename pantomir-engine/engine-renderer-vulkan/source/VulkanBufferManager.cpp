@@ -52,7 +52,8 @@ VulkanBufferManager::RenderModel VulkanBufferManager::CreateRenderModel(const Mo
 }
 
 void VulkanBufferManager::CreateCommandPool() {
-	QueueFamilyIndices      queueFamilyIndices = m_deviceManager->FindQueueFamilies(m_deviceManager->GetPhysicalDevice());
+	// Creating a memory arena on device, NOT host, for commands.
+	QueueFamilyIndices      queueFamilyIndices = m_deviceManager->GetQueueFamilyIndices();
 	VkCommandPoolCreateInfo poolInfo{};
 	poolInfo.sType            = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
 	poolInfo.flags            = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
@@ -87,14 +88,15 @@ void VulkanBufferManager::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usa
 	bufferInfo.usage       = usage;
 	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
+	VkDevice logicalDevice = m_deviceManager->GetLogicalDevice();
 	// Create a handle (an object) that defines what kind of data you'll be storing, how to use it, and size.
-	if (vkCreateBuffer(m_deviceManager->GetLogicalDevice(), &bufferInfo, nullptr, &buffer) != VK_SUCCESS) // Create in GPU Memory, the VkBufferView holds this VkBuffer.
+	if (vkCreateBuffer(logicalDevice, &bufferInfo, nullptr, &buffer) != VK_SUCCESS) // Create in GPU Memory, the VkBufferView holds this VkBuffer.
 	{
 		throw std::runtime_error("failed to create buffer!");
 	}
 
 	VkMemoryRequirements memRequirements;
-	vkGetBufferMemoryRequirements(m_deviceManager->GetLogicalDevice(), buffer, &memRequirements);
+	vkGetBufferMemoryRequirements(logicalDevice, buffer, &memRequirements);
 
 	VkMemoryAllocateInfo allocInfo{};
 	allocInfo.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -102,12 +104,12 @@ void VulkanBufferManager::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usa
 	allocInfo.memoryTypeIndex = FindMemoryType(memRequirements.memoryTypeBits, properties);
 
 	// TODO: You can either implement such an allocator yourself, or use the VulkanMemoryAllocator library provided by the GPUOpen initiative
-	if (vkAllocateMemory(m_deviceManager->GetLogicalDevice(), &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS) // Reserving a block of GPU Memory
+	if (vkAllocateMemory(logicalDevice, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS) // Reserving a block of GPU Memory
 	{
 		throw std::runtime_error("failed to allocate buffer memory!");
 	}
 
-	vkBindBufferMemory(m_deviceManager->GetLogicalDevice(), buffer, bufferMemory, 0);
+	vkBindBufferMemory(logicalDevice, buffer, bufferMemory, 0);
 }
 
 void VulkanBufferManager::CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
