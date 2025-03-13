@@ -1,71 +1,73 @@
-#ifndef PANTOMIR_ENGINE_H
-#define PANTOMIR_ENGINE_H
+#ifndef PANTOMIR_ENGINE_H_
+#define PANTOMIR_ENGINE_H_
 
 #include <VkTypes.h>
-#include <memory>
 
 struct DeletionQueue {
-	std::deque<std::function<void()>> deletors;
+	// Stores a lambda
+	// TODO: Store handles instead of functions instead.
+	std::deque<std::function<void()>> _deletors;
 
-	void                              push_function(std::function<void()>&& function) {
-        deletors.push_back(function);
+	// Moves the function without copying, using r-value
+	void push_function(std::function<void()>&& function) {
+        _deletors.push_back(function);
 	}
 
 	void flush() {
-		// reverse iterate the deletion queue to execute all the functions
-		for (auto it = deletors.rbegin(); it != deletors.rend(); it++) {
-			(*it)(); // call functors
+		// Reverse iterate the deletion queue to execute all the functions
+		for (auto it = _deletors.rbegin(); it != _deletors.rend(); ++it) {
+			(*it)(); // Call functors
 		}
 
-		deletors.clear();
+		_deletors.clear();
 	}
 };
 
 struct FrameData {
-	VkCommandPool   _commandPool;
-	VkCommandBuffer _mainCommandBuffer;
-	VkSemaphore     _swapchainSemaphore, _renderSemaphore;
-	VkFence         _renderFence;
-	DeletionQueue   _deletionQueue;
+	VkCommandPool   _command_pool;
+	VkCommandBuffer _main_command_buffer;
+	VkSemaphore     _swapchain_semaphore, _render_semaphore;
+	VkFence         _render_fence;
+	DeletionQueue   _deletion_queue;
 };
 
 constexpr unsigned int FRAME_OVERLAP = 2;
 
 class PantomirEngine {
 public:
-	AllocatedImage           _drawImage;
-	VkExtent2D               _drawExtent;
+	AllocatedImage           _draw_image;
+	VkExtent2D               _draw_extent;
 	VmaAllocator             _allocator;
-	DeletionQueue            _mainDeletionQueue;
+	DeletionQueue            _main_deletion_queue;
 
-	bool                     _isInitialized{false};
-	int                      _frameNumber{0};
-	bool                     stop_rendering{false};
-	VkExtent2D               _windowExtent{1700, 900};
+	bool                     _is_initialized { false };
+	int                      _frame_number { 0 };
+	bool                     _stop_rendering { false };
+	VkExtent2D               _window_extent { 1700, 900 };
 
-	struct SDL_Window*       _window{nullptr};
+	struct SDL_Window*       _window { nullptr };
 
 	VkInstance               _instance;        // Vulkan Library Handle
 	VkDebugUtilsMessengerEXT _debug_messenger; // Vulkan debug output handle
-	VkPhysicalDevice         _chosenGPU;       // GPU chosen as the default device
+	VkPhysicalDevice         _chosen_GPU;       // GPU chosen as the default device
 	VkDevice                 _device;          // Vulkan device for commands
 	VkSurfaceKHR             _surface;         // Vulkan window surface
 
 	VkSwapchainKHR           _swapchain;
-	VkFormat                 _swapchainImageFormat;
+	VkFormat                 _swapchain_image_format;
 
-	std::vector<VkImage>     _swapchainImages;
-	std::vector<VkImageView> _swapchainImageViews;
-	VkExtent2D               _swapchainExtent;
+	std::vector<VkImage>     _swapchain_images;
+	std::vector<VkImageView> _swapchain_image_views;
+	VkExtent2D               _swapchain_extent;
 
 	FrameData                _frames[FRAME_OVERLAP];
 
 	FrameData&               get_current_frame() {
-        return _frames[_frameNumber % FRAME_OVERLAP];
+        return _frames[_frame_number % FRAME_OVERLAP];
 	};
 
-	VkQueue  _graphicsQueue;
-	uint32_t _graphicsQueueFamily;
+	VkQueue  _graphics_queue;
+	uint32_t _graphics_queue_family;
 
 	PantomirEngine(const PantomirEngine&)                   = delete;
 	PantomirEngine&        operator=(const PantomirEngine&) = delete;
@@ -75,22 +77,23 @@ public:
 		return instance;
 	}
 
-	[[nodiscard]] int Start();
-	void              MainLoop();
+	[[nodiscard]] int start();
+	void              mainLoop();
 	void              draw();
-	void              draw_background(VkCommandBuffer cmd);
+	void              drawBackground(VkCommandBuffer command_buffer);
 
 private:
 	PantomirEngine();
 	~PantomirEngine();
 
-	void init_vulkan();
-	void init_swapchain();
-	void init_commands();
-	void init_sync_structures();
+	void initSDLWindow();
+	void initVulkan();
+	void initSwapchain();
+	void initCommands();
+	void initSyncStructures();
 
-	void create_swapchain(uint32_t width, uint32_t height);
-	void destroy_swapchain();
+	void createSwapchain(uint32_t width, uint32_t height);
+	void destroySwapchain();
 };
 
-#endif // PANTOMIR_ENGINE_H
+#endif /*! PANTOMIR_ENGINE_H_ */

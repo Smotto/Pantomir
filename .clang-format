@@ -62,4 +62,7 @@ AlignConsecutiveAssignments: AcrossEmptyLinesAndComments
 AlignConsecutiveBitFields: AcrossEmptyLinesAndComments
 
 NamespaceIndentation: All
+
+SpaceBeforeCpp11BracedList: true
+Cpp11BracedListStyle: false
 ...
