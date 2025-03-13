@@ -9,6 +9,9 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 
+#define VMA_IMPLEMENTATION
+#include "vk_mem_alloc.h"
+
 #include <chrono>
 #include <iostream>
 #include <thread>
@@ -43,8 +46,10 @@ PantomirEngine::~PantomirEngine() {
 		vkDestroyFence(_device, _frames[i]._renderFence, nullptr);
 		vkDestroySemaphore(_device, _frames[i]._renderSemaphore, nullptr);
 		vkDestroySemaphore(_device, _frames[i]._swapchainSemaphore, nullptr);
-	}
 
+		_frames[i]._deletionQueue.flush();
+	}
+	_mainDeletionQueue.flush();
 	destroy_swapchain();
 
 	vkDestroySurfaceKHR(_instance, _surface, nullptr);
@@ -56,8 +61,8 @@ PantomirEngine::~PantomirEngine() {
 }
 
 void PantomirEngine::init_vulkan() {
-	uint32_t             extensionCount = 0;
-	const char* const*   extensionNames = SDL_Vulkan_GetInstanceExtensions(&extensionCount);
+	uint32_t           extensionCount = 0;
+	const char* const* extensionNames = SDL_Vulkan_GetInstanceExtensions(&extensionCount);
 
 	if (!extensionNames) {
 		throw std::runtime_error("Failed to get Vulkan extensions from SDL: " + std::string(SDL_GetError()));
@@ -65,15 +70,19 @@ void PantomirEngine::init_vulkan() {
 	// Convert to vector for use with vkb
 	std::vector<const char*> extensions(extensionNames, extensionNames + extensionCount);
 
+	for (const auto& extension : extensions) {
+		LOG(Engine_Renderer, Debug, "Extension: {}", extension);
+	}
+
 	vkb::InstanceBuilder builder;
 
 	// Then pass these extensions to your instance builder
-	auto inst_ret = builder.set_app_name("Vulkan Initializer")
-						  .request_validation_layers(true)
-						  .use_default_debug_messenger()
-						  .require_api_version(1, 3, 0)
-						  .enable_extensions(extensions)
-						  .build();
+	auto                 inst_ret = builder.set_app_name("Vulkan Initializer")
+	                    .request_validation_layers(true) // For debugging
+	                    .use_default_debug_messenger()   // For debugging
+	                    .require_api_version(1, 3, 0)    // Using Vulkan 1.3
+	                    .enable_extensions(extensions)   // Goes through available extensions on the physical device. If all the extensions I've chosen are available, then return true;
+	                    .build();
 
 	vkb::Instance vkb_inst = inst_ret.value();
 
@@ -103,17 +112,65 @@ void PantomirEngine::init_vulkan() {
 
 	vkb::DeviceBuilder deviceBuilder{physicalDevice};
 
-	vkb::Device        vkbDevice = deviceBuilder.build().value();
+	vkb::Device        vkbDevice         = deviceBuilder.build().value();
 
-	_device                      = vkbDevice.device;
-	_chosenGPU                   = physicalDevice.physical_device;
+	_device                              = vkbDevice.device;
+	_chosenGPU                           = physicalDevice.physical_device;
 
-	_graphicsQueue               = vkbDevice.get_queue(vkb::QueueType::graphics).value();
-	_graphicsQueueFamily         = vkbDevice.get_queue_index(vkb::QueueType::graphics).value();
+	_graphicsQueue                       = vkbDevice.get_queue(vkb::QueueType::graphics).value();
+	_graphicsQueueFamily                 = vkbDevice.get_queue_index(vkb::QueueType::graphics).value();
+
+	// initialize the memory allocator
+	VmaAllocatorCreateInfo allocatorInfo = {};
+	allocatorInfo.physicalDevice         = _chosenGPU;
+	allocatorInfo.device                 = _device;
+	allocatorInfo.instance               = _instance;
+	allocatorInfo.flags                  = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
+	vmaCreateAllocator(&allocatorInfo, &_allocator);
+
+	_mainDeletionQueue.push_function([&]() {
+		vmaDestroyAllocator(_allocator);
+	});
 }
 
 void PantomirEngine::init_swapchain() {
 	create_swapchain(_windowExtent.width, _windowExtent.height);
+
+	// draw image size will match the window
+	VkExtent3D drawImageExtent = {
+	    _windowExtent.width,
+	    _windowExtent.height,
+	    1};
+
+	_drawImage.imageFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
+	_drawImage.imageExtent = drawImageExtent;
+
+	VkImageUsageFlags drawImageUsages{};
+	drawImageUsages |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+	drawImageUsages |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+	drawImageUsages |= VK_IMAGE_USAGE_STORAGE_BIT;
+	drawImageUsages |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+	VkImageCreateInfo       rimg_info      = vkinit::image_create_info(_drawImage.imageFormat, drawImageUsages, drawImageExtent);
+
+	// For the draw image, we want to allocate it from gpu local memory
+	VmaAllocationCreateInfo rimg_allocinfo = {};
+	rimg_allocinfo.usage                   = VMA_MEMORY_USAGE_GPU_ONLY;
+	rimg_allocinfo.requiredFlags           = VkMemoryPropertyFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+	// allocate and create the image
+	vmaCreateImage(_allocator, &rimg_info, &rimg_allocinfo, &_drawImage.image, &_drawImage.allocation, nullptr);
+
+	// build an image-view for the draw image to use for rendering
+	VkImageViewCreateInfo rview_info = vkinit::imageview_create_info(_drawImage.imageFormat, _drawImage.image, VK_IMAGE_ASPECT_COLOR_BIT);
+
+	VK_CHECK(vkCreateImageView(_device, &rview_info, nullptr, &_drawImage.imageView));
+
+	// add to deletion queues
+	_mainDeletionQueue.push_function([=]() {
+		vkDestroyImageView(_device, _drawImage.imageView, nullptr);
+		vmaDestroyImage(_allocator, _drawImage.image, _drawImage.allocation);
+	});
 }
 
 void PantomirEngine::init_commands() {
@@ -138,7 +195,7 @@ void PantomirEngine::init_sync_structures() {
 	// create synchronization structures
 	// one fence to control when the gpu has finished rendering the frame,
 	// and 2 semaphores to synchronize rendering with swapchain
-	// w e want the fence to start signalled so we can wait on it on the first frame
+	// we want the fence to start signalled so we can wait on it on the first frame
 	VkFenceCreateInfo     fenceCreateInfo     = vkinit::fence_create_info(VK_FENCE_CREATE_SIGNALED_BIT);
 	VkSemaphoreCreateInfo semaphoreCreateInfo = vkinit::semaphore_create_info();
 
@@ -149,6 +206,7 @@ void PantomirEngine::init_sync_structures() {
 		VK_CHECK(vkCreateSemaphore(_device, &semaphoreCreateInfo, nullptr, &_frames[i]._renderSemaphore));
 	}
 }
+
 void PantomirEngine::create_swapchain(uint32_t width, uint32_t height) {
 	vkb::SwapchainBuilder swapchainBuilder{_chosenGPU, _device, _surface};
 
@@ -199,6 +257,8 @@ void PantomirEngine::draw() {
 	VK_CHECK(vkWaitForFences(_device, 1, &get_current_frame()._renderFence, true, 1000000000));
 	VK_CHECK(vkResetFences(_device, 1, &get_current_frame()._renderFence));
 
+	get_current_frame()._deletionQueue.flush();
+
 	uint32_t swapchainImageIndex;
 	VK_CHECK(vkAcquireNextImageKHR(_device, _swapchain, 1000000000, get_current_frame()._swapchainSemaphore, nullptr, &swapchainImageIndex));
 
@@ -212,24 +272,26 @@ void PantomirEngine::draw() {
 	// begin the command buffer recording. We will use this command buffer exactly once, so we want to let vulkan know that
 	VkCommandBufferBeginInfo cmdBeginInfo = vkinit::command_buffer_begin_info(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
-	// start the command buffer recording
+	_drawExtent.width                     = _drawImage.imageExtent.width;
+	_drawExtent.height                    = _drawImage.imageExtent.height;
+
 	VK_CHECK(vkBeginCommandBuffer(cmd, &cmdBeginInfo));
 
-	// make the swapchain image into writeable mode before rendering
-	vkutil::transition_image(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+	// transition our main draw image into general layout so we can write into it
+	// we will overwrite it all so we dont care about what was the older layout
+	vkutil::transition_image(cmd, _drawImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 
-	// make a clear-color from frame number. This will flash with a 120 frame period.
-	VkClearColorValue clearValue;
-	float             flash            = std::abs(std::sin(_frameNumber / 120.f));
-	clearValue                         = {{0.0f, 0.0f, flash, 1.0f}};
+	draw_background(cmd);
 
-	VkImageSubresourceRange clearRange = vkinit::image_subresource_range(VK_IMAGE_ASPECT_COLOR_BIT);
+	// transition the draw image and the swapchain image into their correct transfer layouts
+	vkutil::transition_image(cmd, _drawImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+	vkutil::transition_image(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
-	// clear image
-	vkCmdClearColorImage(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_GENERAL, &clearValue, 1, &clearRange);
+	// execute a copy from the draw image into the swapchain
+	vkutil::copy_image_to_image(cmd, _drawImage.image, _swapchainImages[swapchainImageIndex], _drawExtent, _swapchainExtent);
 
-	// make the swapchain image into presentable mode
-	vkutil::transition_image(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+	// set swapchain image layout to Present so we can show it on the screen
+	vkutil::transition_image(cmd, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
 	// finalize the command buffer (we can no longer add commands, but it can now be executed)
 	VK_CHECK(vkEndCommandBuffer(cmd));
@@ -268,6 +330,16 @@ void PantomirEngine::draw() {
 
 	// increase the number of frames drawn
 	_frameNumber++;
+}
+
+void PantomirEngine::draw_background(VkCommandBuffer cmd) {
+	VkClearColorValue clearValue;
+	float             flash            = std::abs(std::sin(_frameNumber / 120.f));
+	clearValue                         = {{0.94901960784313725490196078431373f, 0.5921568627450980392156862745098f, flash, 1.0f}};
+
+	VkImageSubresourceRange clearRange = vkinit::image_subresource_range(VK_IMAGE_ASPECT_COLOR_BIT);
+
+	vkCmdClearColorImage(cmd, _drawImage.image, VK_IMAGE_LAYOUT_GENERAL, &clearValue, 1, &clearRange);
 }
 
 void PantomirEngine::MainLoop() {
