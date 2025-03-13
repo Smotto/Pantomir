@@ -1,38 +1,72 @@
-#ifndef PANTOMIRENGINE_H_
-#define PANTOMIRENGINE_H_
+#ifndef PANTOMIR_ENGINE_H
+#define PANTOMIR_ENGINE_H
 
+#include <VkTypes.h>
 #include <memory>
 
-class InputManager;
-class VulkanInstanceManager;
-class VulkanDeviceManager;
-class VulkanDevice;
-class VulkanRenderer;
-class VulkanResourceManager;
-class VulkanBufferManager;
-class PantomirWindow;
+struct FrameData {
+	VkCommandPool   _commandPool;
+	VkCommandBuffer _mainCommandBuffer;
+	VkSemaphore     _swapchainSemaphore, _renderSemaphore;
+	VkFence         _renderFence;
+};
 
-class PantomirEngine final {
+constexpr unsigned int FRAME_OVERLAP = 2;
+
+class PantomirEngine {
 public:
-	PantomirEngine();
-	~PantomirEngine();
-	int Start() const;
+	bool                     _isInitialized{false};
+	int                      _frameNumber{0};
+	bool                     stop_rendering{false};
+	VkExtent2D               _windowExtent{1700, 900};
+
+	struct SDL_Window*       _window{nullptr};
+
+	VkInstance               _instance;        // Vulkan Library Handle
+	VkDebugUtilsMessengerEXT _debug_messenger; // Vulkan debug output handle
+	VkPhysicalDevice         _chosenGPU;       // GPU chosen as the default device
+	VkDevice                 _device;          // Vulkan device for commands
+	VkSurfaceKHR             _surface;         // Vulkan window surface
+
+	VkSwapchainKHR           _swapchain;
+	VkFormat                 _swapchainImageFormat;
+
+	std::vector<VkImage>     _swapchainImages;
+	std::vector<VkImageView> _swapchainImageViews;
+	VkExtent2D               _swapchainExtent;
+
+	FrameData                _frames[FRAME_OVERLAP];
+
+	FrameData&               get_current_frame() {
+        return _frames[_frameNumber % FRAME_OVERLAP];
+	};
+
+	VkQueue  _graphicsQueue;
+	uint32_t _graphicsQueueFamily;
+
+	PantomirEngine(const PantomirEngine&)                   = delete;
+	PantomirEngine&        operator=(const PantomirEngine&) = delete;
+
+	static PantomirEngine& GetInstance() {
+		static PantomirEngine instance;
+		return instance;
+	}
+
+	[[nodiscard]] int Start();
+	void              MainLoop();
+	void              draw();
 
 private:
-#ifdef NDEBUG
-	const bool m_enableValidationLayers = false;
-#else
-	const bool m_enableValidationLayers = true;
-#endif
+	PantomirEngine();
+	~PantomirEngine();
 
-	std::unique_ptr<PantomirWindow>        m_pantomirWindow;
-	std::unique_ptr<InputManager>          m_inputManager;
-	std::unique_ptr<VulkanInstanceManager> m_vulkanInstanceManager;
-	std::unique_ptr<VulkanDeviceManager>   m_vulkanDeviceManager;
-	std::unique_ptr<VulkanBufferManager>   m_vulkanBufferManager;
-	std::unique_ptr<VulkanResourceManager> m_resourceManager;
-	std::unique_ptr<VulkanRenderer>        m_vulkanRenderer;
+	void init_vulkan();
+	void init_swapchain();
+	void init_commands();
+	void init_sync_structures();
 
-	void                                   MainLoop() const;
+	void create_swapchain(uint32_t width, uint32_t height);
+	void destroy_swapchain();
 };
-#endif /*! PANTOMIRENGINE_H_ */
+
+#endif // PANTOMIR_ENGINE_H

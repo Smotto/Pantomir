@@ -7,7 +7,12 @@
     "glm",
     "stb",
     "assimp",
-    "glfw3",
+    {
+      "name": "sdl3",
+      "features": [
+        "vulkan"
+      ]
+    },
     "imgui",
     "vulkan-memory-allocator"
   ]
