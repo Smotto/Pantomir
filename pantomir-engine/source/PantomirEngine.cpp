@@ -55,11 +55,11 @@ PantomirEngine::~PantomirEngine() {
 }
 
 void PantomirEngine::InitSDLWindow() {
-	constexpr SDL_InitFlags   init_flags   = SDL_INIT_VIDEO;
-	constexpr SDL_WindowFlags window_flags = SDL_WINDOW_VULKAN;
+	constexpr SDL_InitFlags   initFlags   = SDL_INIT_VIDEO;
+	constexpr SDL_WindowFlags windowFlags = SDL_WINDOW_VULKAN;
 
-	SDL_Init(init_flags);
-	_window = SDL_CreateWindow("Vulkan Engine", _windowExtent.width, _windowExtent.height, window_flags);
+	SDL_Init(initFlags);
+	_window = SDL_CreateWindow("Vulkan Engine", _windowExtent.width, _windowExtent.height, windowFlags);
 	if (_window == nullptr) {
 		LOG(Engine, Error, "SDL error when creating a window: {}", SDL_GetError());
 	}
@@ -67,25 +67,25 @@ void PantomirEngine::InitSDLWindow() {
 
 void PantomirEngine::InitVulkan() {
 	// VK_KHR_surface, VK_KHR_win32_surface are extensions that we'll get from SDL for Windows. The minimum required.
-	uint32_t           extension_count = 0;
-	const char* const* extension_names = SDL_Vulkan_GetInstanceExtensions(&extension_count);
-	if (!extension_names) {
+	uint32_t           extensionCount = 0;
+	const char* const* extensionNames = SDL_Vulkan_GetInstanceExtensions(&extensionCount);
+	if (!extensionNames) {
 		throw std::runtime_error("Failed to get Vulkan extensions from SDL: " + std::string(SDL_GetError()));
 	}
-	std::vector<const char*>   extensions(extension_names, extension_names + extension_count);
+	std::vector<const char*>   extensions(extensionNames, extensionNames + extensionCount);
 
-	vkb::InstanceBuilder       instance_builder;
-	vkb::Result<vkb::Instance> instance_builder_result = instance_builder.set_app_name("Vulkan Initializer")
-	                                                         .request_validation_layers(true) // For debugging
-	                                                         .use_default_debug_messenger()   // For debugging
-	                                                         .require_api_version(1, 3, 0)    // Using Vulkan 1.3
-	                                                         .enable_extensions(extensions)   // Goes through available extensions on the physical device. If all the extensions I've chosen are available, then return true;
-	                                                         .build();
+	vkb::InstanceBuilder       instanceBuilder;
+	vkb::Result<vkb::Instance> instanceBuilderResult = instanceBuilder.set_app_name("Vulkan Initializer")
+	                                                       .request_validation_layers(true) // For debugging
+	                                                       .use_default_debug_messenger()   // For debugging
+	                                                       .require_api_version(1, 3, 0)    // Using Vulkan 1.3
+	                                                       .enable_extensions(extensions)   // Goes through available extensions on the physical device. If all the extensions I've chosen are available, then return true;
+	                                                       .build();
 
 	// After enabling extensions for the window, we enable features for a physical device.
-	vkb::Instance built_instance = instance_builder_result.value();
-	_instance                    = built_instance.instance;
-	_debugMessenger              = built_instance.debug_messenger;
+	vkb::Instance builtInstance = instanceBuilderResult.value();
+	_instance                   = builtInstance.instance;
+	_debugMessenger             = builtInstance.debug_messenger;
 
 	// Can now create a Vulkan surface for the window for image presentation.
 	SDL_Vulkan_CreateSurface(_window, _instance, nullptr, &_surface);
@@ -99,28 +99,28 @@ void PantomirEngine::InitVulkan() {
 	features_12.bufferDeviceAddress = true;
 	features_12.descriptorIndexing  = true;
 
-	vkb::PhysicalDeviceSelector physical_device_selector { built_instance };
-	vkb::PhysicalDevice         selected_physical_device = physical_device_selector.set_minimum_version(1, 3)
-	                                                   .set_required_features_13(features_13)
-	                                                   .set_required_features_12(features_12)
-	                                                   .set_surface(_surface)
-	                                                   .select()
-	                                                   .value();
+	vkb::PhysicalDeviceSelector physicalDeviceSelector { builtInstance };
+	vkb::PhysicalDevice         selectedPhysicalDevice = physicalDeviceSelector.set_minimum_version(1, 3)
+	                                                 .set_required_features_13(features_13)
+	                                                 .set_required_features_12(features_12)
+	                                                 .set_surface(_surface)
+	                                                 .select()
+	                                                 .value();
 
-	vkb::DeviceBuilder logical_device_builder { selected_physical_device };
-	vkb::Device        built_logical_device = logical_device_builder.build().value();
+	vkb::DeviceBuilder logicalDeviceBuilder { selectedPhysicalDevice };
+	vkb::Device        builtLogicalDevice = logicalDeviceBuilder.build().value();
 
-	_device                                 = built_logical_device.device;
-	_chosen_GPU                             = selected_physical_device.physical_device;
+	_device                               = builtLogicalDevice.device;
+	_chosen_GPU                           = selectedPhysicalDevice.physical_device;
 
-	_graphicsQueue                          = built_logical_device.get_queue(vkb::QueueType::graphics).value();
-	_graphicsQueueFamily                    = built_logical_device.get_queue_index(vkb::QueueType::graphics).value(); // ID Tag for GPU logical units; Useful for command pools, buffers, images.
+	_graphicsQueue                        = builtLogicalDevice.get_queue(vkb::QueueType::graphics).value();
+	_graphicsQueueFamily                  = builtLogicalDevice.get_queue_index(vkb::QueueType::graphics).value(); // ID Tag for GPU logical units; Useful for command pools, buffers, images.
 
-	VmaAllocatorCreateInfo allocatorInfo    = {};
-	allocatorInfo.physicalDevice            = _chosen_GPU;
-	allocatorInfo.device                    = _device;
-	allocatorInfo.instance                  = _instance;
-	allocatorInfo.flags                     = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
+	VmaAllocatorCreateInfo allocatorInfo  = {};
+	allocatorInfo.physicalDevice          = _chosen_GPU;
+	allocatorInfo.device                  = _device;
+	allocatorInfo.instance                = _instance;
+	allocatorInfo.flags                   = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
 	vmaCreateAllocator(&allocatorInfo, &_allocator);
 
 	_mainDeletionQueue.push_function([&]() {
@@ -132,14 +132,14 @@ void PantomirEngine::InitSwapchain() {
 	CreateSwapchain(_windowExtent.width, _windowExtent.height);
 
 	// Draw image size will match the window
-	VkExtent3D draw_image_extent = {
+	VkExtent3D drawImageExtent = {
 		_windowExtent.width,
 		_windowExtent.height,
 		1
 	};
 
 	_drawImage._imageFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
-	_drawImage._imageExtent = draw_image_extent;
+	_drawImage._imageExtent = drawImageExtent;
 
 	VkImageUsageFlags drawImageUsages {};
 	drawImageUsages |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
@@ -147,20 +147,20 @@ void PantomirEngine::InitSwapchain() {
 	drawImageUsages |= VK_IMAGE_USAGE_STORAGE_BIT;
 	drawImageUsages |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
-	VkImageCreateInfo       render_image_info       = vkinit::ImageCreateInfo(_drawImage._imageFormat, drawImageUsages, draw_image_extent);
+	VkImageCreateInfo       renderImageInfo      = vkinit::ImageCreateInfo(_drawImage._imageFormat, drawImageUsages, drawImageExtent);
 
 	// For the draw image, we want to allocate it from gpu local memory
-	VmaAllocationCreateInfo render_image_alloc_info = {};
-	render_image_alloc_info.usage                   = VMA_MEMORY_USAGE_GPU_ONLY;
-	render_image_alloc_info.requiredFlags           = static_cast<VkMemoryPropertyFlags>(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	VmaAllocationCreateInfo renderImageAllocInfo = {};
+	renderImageAllocInfo.usage                   = VMA_MEMORY_USAGE_GPU_ONLY;
+	renderImageAllocInfo.requiredFlags           = static_cast<VkMemoryPropertyFlags>(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
 	// allocate and create the image
-	vmaCreateImage(_allocator, &render_image_info, &render_image_alloc_info, &_drawImage._image, &_drawImage._allocation, nullptr);
+	vmaCreateImage(_allocator, &renderImageInfo, &renderImageAllocInfo, &_drawImage._image, &_drawImage._allocation, nullptr);
 
 	// build an image-view for the draw image to use for rendering
-	VkImageViewCreateInfo render_view_info = vkinit::ImageviewCreateInfo(_drawImage._imageFormat, _drawImage._image, VK_IMAGE_ASPECT_COLOR_BIT);
+	VkImageViewCreateInfo renderViewInfo = vkinit::ImageviewCreateInfo(_drawImage._imageFormat, _drawImage._image, VK_IMAGE_ASPECT_COLOR_BIT);
 
-	VK_CHECK(vkCreateImageView(_device, &render_view_info, nullptr, &_drawImage._imageView));
+	VK_CHECK(vkCreateImageView(_device, &renderViewInfo, nullptr, &_drawImage._imageView));
 
 	// add to deletion queues
 	_mainDeletionQueue.push_function([=]() {
@@ -172,17 +172,16 @@ void PantomirEngine::InitSwapchain() {
 void PantomirEngine::InitCommands() {
 	// create a command pool for commands submitted to the graphics queue.
 	// we also want the pool to allow for resetting of individual command buffers
-	VkCommandPoolCreateInfo command_pool_info = vkinit::CommandPoolCreateInfo(
+	VkCommandPoolCreateInfo commandPoolInfo = vkinit::CommandPoolCreateInfo(
 	    _graphicsQueueFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
 
 	for (auto& frame : _frames) {
-		VK_CHECK(vkCreateCommandPool(_device, &command_pool_info, nullptr, &frame._commandPool));
+		VK_CHECK(vkCreateCommandPool(_device, &commandPoolInfo, nullptr, &frame._commandPool));
 
 		// allocate the default command buffer that we will use for rendering
-		VkCommandBufferAllocateInfo command_alloc_info =
-		    vkinit::CommandBufferAllocateInfo(frame._commandPool, 1);
+		VkCommandBufferAllocateInfo commandAllocInfo = vkinit::CommandBufferAllocateInfo(frame._commandPool, 1);
 
-		VK_CHECK(vkAllocateCommandBuffers(_device, &command_alloc_info, &frame._mainCommandBuffer));
+		VK_CHECK(vkAllocateCommandBuffers(_device, &commandAllocInfo, &frame._mainCommandBuffer));
 	}
 }
 
@@ -286,12 +285,12 @@ void PantomirEngine::InitBackgroundPipelines() {
 }
 
 void PantomirEngine::CreateSwapchain(uint32_t width, uint32_t height) {
-	vkb::SwapchainBuilder swapchain_builder { _chosen_GPU, _device, _surface };
+	vkb::SwapchainBuilder swapchainBuilder { _chosen_GPU, _device, _surface };
 
 	_swapchainImageFormat = VK_FORMAT_B8G8R8A8_UNORM;
 
-	vkb::Swapchain built_swapchain =
-	    swapchain_builder
+	vkb::Swapchain builtSwapchain =
+	    swapchainBuilder
 	        //.use_default_format_selection()
 	        .set_desired_format(VkSurfaceFormatKHR {
 	            .format     = _swapchainImageFormat,
@@ -303,11 +302,11 @@ void PantomirEngine::CreateSwapchain(uint32_t width, uint32_t height) {
 	        .build()
 	        .value();
 
-	_swapchainExtent     = built_swapchain.extent;
+	_swapchainExtent     = builtSwapchain.extent;
 	// store swapchain and its related images
-	_swapchain           = built_swapchain.swapchain;
-	_swapchainImages     = built_swapchain.get_images().value();
-	_swapchainImageViews = built_swapchain.get_image_views().value();
+	_swapchain           = builtSwapchain.swapchain;
+	_swapchainImages     = builtSwapchain.get_images().value();
+	_swapchainImageViews = builtSwapchain.get_image_views().value();
 }
 
 void PantomirEngine::DestroySwapchain() {
@@ -338,14 +337,14 @@ void PantomirEngine::Draw() {
 
 	get_current_frame()._deletionQueue.flush();
 
-	uint32_t swapchain_image_index;
-	VK_CHECK(vkAcquireNextImageKHR(_device, _swapchain, 1000000000, get_current_frame()._swapchainSemaphore, nullptr, &swapchain_image_index));
+	uint32_t swapchainImageIndex;
+	VK_CHECK(vkAcquireNextImageKHR(_device, _swapchain, 1000000000, get_current_frame()._swapchainSemaphore, nullptr, &swapchainImageIndex));
 
-	VkCommandBuffer command_buffer = get_current_frame()._mainCommandBuffer;
+	VkCommandBuffer commandBuffer = get_current_frame()._mainCommandBuffer;
 
 	// Now that we are sure that the commands finished executing, we can safely
 	// Reset the command buffer to begin recording again.
-	VK_CHECK(vkResetCommandBuffer(command_buffer, 0));
+	VK_CHECK(vkResetCommandBuffer(commandBuffer, 0));
 
 	// Begin the command buffer recording. We will use this command buffer exactly once, so we want to let vulkan know that
 	VkCommandBufferBeginInfo command_buffer_begin_info = vkinit::CommandBufferBeginInfo(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
@@ -354,42 +353,42 @@ void PantomirEngine::Draw() {
 	_drawExtent.height                                 = _drawImage._imageExtent.height;
 
 	/* Start Recording */
-	VK_CHECK(vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info));
+	VK_CHECK(vkBeginCommandBuffer(commandBuffer, &command_buffer_begin_info));
 
 	// Transition our main draw image into general layout so we can write into it
 	// We will overwrite it all so we don't care about what was the older layout
-	vkutil::TransitionImage(command_buffer, _drawImage._image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+	vkutil::TransitionImage(commandBuffer, _drawImage._image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 
-	DrawBackground(command_buffer);
+	DrawBackground(commandBuffer);
 
 	// Transition the draw image and the swapchain image into their correct transfer layouts
-	vkutil::TransitionImage(command_buffer, _drawImage._image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-	vkutil::TransitionImage(command_buffer, _swapchainImages[swapchain_image_index], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+	vkutil::TransitionImage(commandBuffer, _drawImage._image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+	vkutil::TransitionImage(commandBuffer, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
 	// Execute a copy from the draw image into the swapchain
-	vkutil::CopyImageToImage(command_buffer, _drawImage._image, _swapchainImages[swapchain_image_index], _drawExtent, _swapchainExtent);
+	vkutil::CopyImageToImage(commandBuffer, _drawImage._image, _swapchainImages[swapchainImageIndex], _drawExtent, _swapchainExtent);
 
 	// Set swapchain image layout to Present so we can show it on the screen
-	vkutil::TransitionImage(command_buffer, _swapchainImages[swapchain_image_index], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+	vkutil::TransitionImage(commandBuffer, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
 	// Finalize the command buffer (we can no longer add commands, but it can now be executed)
-	VK_CHECK(vkEndCommandBuffer(command_buffer));
+	VK_CHECK(vkEndCommandBuffer(commandBuffer));
 	/* End Recording */
 
 	// Prepare the submission to the queue.
 	// We want to wait on the _presentSemaphore, as that semaphore is signaled when the swapchain is ready
 	// We will signal the _renderSemaphore, to signal that rendering has finished
 
-	VkCommandBufferSubmitInfo command_buffer_submit_info = vkinit::CommandBufferSubmitInfo(command_buffer);
+	VkCommandBufferSubmitInfo commandBufferSubmitInfo = vkinit::CommandBufferSubmitInfo(commandBuffer);
 
-	VkSemaphoreSubmitInfo     wait_info                  = vkinit::SemaphoreSubmitInfo(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR, get_current_frame()._swapchainSemaphore);
-	VkSemaphoreSubmitInfo     signal_info                = vkinit::SemaphoreSubmitInfo(VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, get_current_frame()._renderSemaphore);
+	VkSemaphoreSubmitInfo     waitInfo                  = vkinit::SemaphoreSubmitInfo(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR, get_current_frame()._swapchainSemaphore);
+	VkSemaphoreSubmitInfo     signalInfo                = vkinit::SemaphoreSubmitInfo(VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, get_current_frame()._renderSemaphore);
 
-	VkSubmitInfo2             submit_info                = vkinit::SubmitInfo(&command_buffer_submit_info, &signal_info, &wait_info);
+	VkSubmitInfo2             submitInfo                = vkinit::SubmitInfo(&commandBufferSubmitInfo, &signalInfo, &waitInfo);
 
 	// Submit command buffer to the queue and execute it.
 	//  _renderFence will now block until the graphic commands finish execution
-	VK_CHECK(vkQueueSubmit2(_graphicsQueue, 1, &submit_info, get_current_frame()._renderFence));
+	VK_CHECK(vkQueueSubmit2(_graphicsQueue, 1, &submitInfo, get_current_frame()._renderFence));
 
 	// Prepare present
 	//  this will put the image we just rendered to into the visible window.
@@ -404,7 +403,7 @@ void PantomirEngine::Draw() {
 	presentInfo.pWaitSemaphores    = &get_current_frame()._renderSemaphore;
 	presentInfo.waitSemaphoreCount = 1;
 
-	presentInfo.pImageIndices      = &swapchain_image_index;
+	presentInfo.pImageIndices      = &swapchainImageIndex;
 
 	VK_CHECK(vkQueuePresentKHR(_graphicsQueue, &presentInfo));
 
@@ -412,15 +411,15 @@ void PantomirEngine::Draw() {
 	_frameNumber++;
 }
 
-void PantomirEngine::DrawBackground(VkCommandBuffer command_buffer) {
+void PantomirEngine::DrawBackground(VkCommandBuffer commandBuffer) {
 	// bind the gradient drawing compute pipeline
-	vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, _gradientPipeline);
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, _gradientPipeline);
 
 	// bind the descriptor set containing the draw image for the compute pipeline
-	vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, _gradientPipelineLayout, 0, 1, &_drawImageDescriptors, 0, nullptr);
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, _gradientPipelineLayout, 0, 1, &_drawImageDescriptors, 0, nullptr);
 
 	// execute the compute pipeline dispatch. We are using 16x16 workgroup size so we need to divide by it
-	vkCmdDispatch(command_buffer, std::ceil(_drawExtent.width / 16.0), std::ceil(_drawExtent.height / 16.0), 1);
+	vkCmdDispatch(commandBuffer, std::ceil(_drawExtent.width / 16.0), std::ceil(_drawExtent.height / 16.0), 1);
 }
 
 void PantomirEngine::MainLoop() {
@@ -437,7 +436,7 @@ void PantomirEngine::MainLoop() {
 		}
 
 		// Do not draw if we are minimized
-		if (_stop_rendering) {
+		if (_stopRendering) {
 			// throttle the speed to avoid the endless spinning
 			std::this_thread::sleep_for(std::chrono::milliseconds(100));
 			continue;

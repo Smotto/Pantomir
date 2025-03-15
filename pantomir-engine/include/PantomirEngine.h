@@ -47,9 +47,9 @@ public:
 	VmaAllocator             _allocator {};
 	DeletionQueue            _mainDeletionQueue;
 
-	bool                     _is_initialized { false };
+	bool                     _isInitialized { false };
 	int                      _frameNumber { 0 };
-	bool                     _stop_rendering { false };
+	bool                     _stopRendering { false };
 	VkExtent2D               _windowExtent { 1700, 900 };
 
 	struct SDL_Window*       _window { nullptr };
@@ -87,7 +87,7 @@ public:
 	[[nodiscard]] int Start();
 	void              MainLoop();
 	void              Draw();
-	void              DrawBackground(VkCommandBuffer command_buffer);
+	void              DrawBackground(VkCommandBuffer commandBuffer);
 
 private:
 	PantomirEngine();
