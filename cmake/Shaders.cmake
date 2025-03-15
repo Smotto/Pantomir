@@ -7,7 +7,7 @@ if (NOT GLSLC)
     message(FATAL_ERROR "glslc not found!")
 endif()
 
-file(GLOB SHADER_FILES CONFIGURE_DEPENDS "${SHADERS_SOURCE_DIR}/*.vert" "${SHADERS_SOURCE_DIR}/*.frag")
+file(GLOB SHADER_FILES CONFIGURE_DEPENDS "${SHADERS_SOURCE_DIR}/*.vert" "${SHADERS_SOURCE_DIR}/*.frag" "${SHADERS_SOURCE_DIR}/*.comp")
 
 foreach(shader ${SHADER_FILES})
     get_filename_component(shader_name ${shader} NAME)

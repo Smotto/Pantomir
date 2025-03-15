@@ -1,7 +1,8 @@
 #ifndef PANTOMIR_ENGINE_H_
 #define PANTOMIR_ENGINE_H_
 
-#include <VkTypes.h>
+#include "VkDescriptors.h"
+#include "VkTypes.h"
 
 struct DeletionQueue {
 	// Stores a lambda
@@ -9,7 +10,7 @@ struct DeletionQueue {
 	std::deque<std::function<void()>> _deletors;
 
 	// Moves the function without copying, using r-value
-	void push_function(std::function<void()>&& function) {
+	void                              push_function(std::function<void()>&& function) {
         _deletors.push_back(function);
 	}
 
@@ -24,50 +25,56 @@ struct DeletionQueue {
 };
 
 struct FrameData {
-	VkCommandPool   _command_pool;
-	VkCommandBuffer _main_command_buffer;
-	VkSemaphore     _swapchain_semaphore, _render_semaphore;
-	VkFence         _render_fence;
-	DeletionQueue   _deletion_queue;
+	VkCommandPool   _commandPool {};
+	VkCommandBuffer _mainCommandBuffer {};
+	VkSemaphore     _swapchainSemaphore {}, _renderSemaphore {};
+	VkFence         _renderFence {};
+	DeletionQueue   _deletionQueue;
 };
 
-constexpr unsigned int FRAME_OVERLAP = 2;
+constexpr unsigned int     FRAME_OVERLAP = 2;
+inline DescriptorAllocator globalDescriptorAllocator;
 
 class PantomirEngine {
 public:
-	AllocatedImage           _draw_image;
-	VkExtent2D               _draw_extent;
-	VmaAllocator             _allocator;
-	DeletionQueue            _main_deletion_queue;
+	VkPipeline               _gradientPipeline;
+	VkPipelineLayout         _gradientPipelineLayout;
+	VkDescriptorSet          _drawImageDescriptors;
+	VkDescriptorSetLayout    _drawImageDescriptorLayout;
+
+	AllocatedImage           _drawImage {};
+	VkExtent2D               _drawExtent {};
+	VmaAllocator             _allocator {};
+	DeletionQueue            _mainDeletionQueue;
 
 	bool                     _is_initialized { false };
-	int                      _frame_number { 0 };
+	int                      _frameNumber { 0 };
 	bool                     _stop_rendering { false };
-	VkExtent2D               _window_extent { 1700, 900 };
+	VkExtent2D               _windowExtent { 1700, 900 };
 
 	struct SDL_Window*       _window { nullptr };
 
-	VkInstance               _instance;        // Vulkan Library Handle
-	VkDebugUtilsMessengerEXT _debug_messenger; // Vulkan debug output handle
-	VkPhysicalDevice         _chosen_GPU;       // GPU chosen as the default device
-	VkDevice                 _device;          // Vulkan device for commands
-	VkSurfaceKHR             _surface;         // Vulkan window surface
+	VkInstance               _instance {};       // Vulkan Library Handle
+	VkDebugUtilsMessengerEXT _debugMessenger {}; // Vulkan debug output handle
+	VkPhysicalDevice         _chosen_GPU {};     // GPU chosen as the default device
+	VkDevice                 _device {};         // Vulkan device for commands
+	VkSurfaceKHR             _surface {};        // Vulkan window surface
 
-	VkSwapchainKHR           _swapchain;
-	VkFormat                 _swapchain_image_format;
+	VkSwapchainKHR           _swapchain {};
+	VkFormat                 _swapchainImageFormat;
 
-	std::vector<VkImage>     _swapchain_images;
-	std::vector<VkImageView> _swapchain_image_views;
-	VkExtent2D               _swapchain_extent;
+	std::vector<VkImage>     _swapchainImages;
+	std::vector<VkImageView> _swapchainImageViews;
+	VkExtent2D               _swapchainExtent {};
 
 	FrameData                _frames[FRAME_OVERLAP];
 
 	FrameData&               get_current_frame() {
-        return _frames[_frame_number % FRAME_OVERLAP];
+        return _frames[_frameNumber % FRAME_OVERLAP];
 	};
 
-	VkQueue  _graphics_queue;
-	uint32_t _graphics_queue_family;
+	VkQueue  _graphicsQueue {};
+	uint32_t _graphicsQueueFamily {};
 
 	PantomirEngine(const PantomirEngine&)                   = delete;
 	PantomirEngine&        operator=(const PantomirEngine&) = delete;
@@ -77,23 +84,26 @@ public:
 		return instance;
 	}
 
-	[[nodiscard]] int start();
-	void              mainLoop();
-	void              draw();
-	void              drawBackground(VkCommandBuffer command_buffer);
+	[[nodiscard]] int Start();
+	void              MainLoop();
+	void              Draw();
+	void              DrawBackground(VkCommandBuffer command_buffer);
 
 private:
 	PantomirEngine();
 	~PantomirEngine();
 
-	void initSDLWindow();
-	void initVulkan();
-	void initSwapchain();
-	void initCommands();
-	void initSyncStructures();
+	void InitSDLWindow();
+	void InitVulkan();
+	void InitSwapchain();
+	void InitCommands();
+	void InitSyncStructures();
+	void InitDescriptors();
+	void InitPipelines();
+	void InitBackgroundPipelines();
 
-	void createSwapchain(uint32_t width, uint32_t height);
-	void destroySwapchain();
+	void CreateSwapchain(uint32_t width, uint32_t height);
+	void DestroySwapchain();
 };
 
 #endif /*! PANTOMIR_ENGINE_H_ */

@@ -11,19 +11,19 @@
 #include <string>
 #include <vector>
 
-#include <vulkan/vulkan.h>
-#include <vulkan/vk_enum_string_helper.h>
 #include <vma/vk_mem_alloc.h>
+#include <vulkan/vk_enum_string_helper.h>
+#include <vulkan/vulkan.h>
 
 #include <glm/mat4x4.hpp>
 #include <glm/vec4.hpp>
 
 struct AllocatedImage {
-	VkImage image;
-	VkImageView imageView;
-	VmaAllocation allocation;
-	VkExtent3D imageExtent;
-	VkFormat imageFormat;
+	VkImage       _image;
+	VkImageView   _imageView;
+	VmaAllocation _allocation;
+	VkExtent3D    _imageExtent;
+	VkFormat      _imageFormat;
 };
 
 #define VK_CHECK(x)                                                          \
