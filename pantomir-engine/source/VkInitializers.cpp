@@ -113,8 +113,7 @@ VkPresentInfoKHR vkinit::PresentInfo() {
 }
 
 //> color_info
-VkRenderingAttachmentInfo vkinit::AttachmentInfo(
-    VkImageView view, VkClearValue* clear, VkImageLayout layout /*= VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL*/) {
+VkRenderingAttachmentInfo vkinit::AttachmentInfo(VkImageView view, VkClearValue* clear, VkImageLayout layout /*= VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL*/) {
 	VkRenderingAttachmentInfo colorAttachment {};
 	colorAttachment.sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
 	colorAttachment.pNext       = nullptr;

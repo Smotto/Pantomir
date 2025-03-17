@@ -43,6 +43,7 @@ target_link_libraries(pantomir-engine PRIVATE
         vk-bootstrap::vk-bootstrap # Custom Vulkan library for initialization
         GPUOpen::VulkanMemoryAllocator
         SDL3::SDL3           # Window
+        imgui::imgui
 )
 
 # Set output directory properties

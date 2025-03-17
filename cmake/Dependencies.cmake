@@ -18,7 +18,6 @@ include(${CMAKE_CURRENT_LIST_DIR}/Dependencies/vk-bootstrap.cmake)
 find_package(Vulkan REQUIRED) # Vulkan INSTALLED ON YOUR OS
 
 # All vcpkgs need to be found for CMake
-find_package(imgui CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(SDL3 CONFIG REQUIRED)
 find_package(assimp CONFIG REQUIRED)

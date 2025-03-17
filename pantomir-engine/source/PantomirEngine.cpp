@@ -18,6 +18,10 @@
 #include "VkImages.h"
 #include "VkInitializers.h"
 
+#include "imgui.h"
+#include "imgui_impl_sdl3.h"
+#include "imgui_impl_vulkan.h"
+
 PantomirEngine::PantomirEngine() {
 	InitSDLWindow();
 	InitVulkan();
@@ -26,6 +30,7 @@ PantomirEngine::PantomirEngine() {
 	InitSyncStructures();
 	InitDescriptors();
 	InitPipelines();
+	InitImgui();
 }
 
 PantomirEngine::~PantomirEngine() {
@@ -111,13 +116,13 @@ void PantomirEngine::InitVulkan() {
 	vkb::Device        builtLogicalDevice = logicalDeviceBuilder.build().value();
 
 	_device                               = builtLogicalDevice.device;
-	_chosen_GPU                           = selectedPhysicalDevice.physical_device;
+	_chosenGPU                            = selectedPhysicalDevice.physical_device;
 
 	_graphicsQueue                        = builtLogicalDevice.get_queue(vkb::QueueType::graphics).value();
 	_graphicsQueueFamily                  = builtLogicalDevice.get_queue_index(vkb::QueueType::graphics).value(); // ID Tag for GPU logical units; Useful for command pools, buffers, images.
 
 	VmaAllocatorCreateInfo allocatorInfo  = {};
-	allocatorInfo.physicalDevice          = _chosen_GPU;
+	allocatorInfo.physicalDevice          = _chosenGPU;
 	allocatorInfo.device                  = _device;
 	allocatorInfo.instance                = _instance;
 	allocatorInfo.flags                   = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
@@ -175,6 +180,18 @@ void PantomirEngine::InitCommands() {
 	VkCommandPoolCreateInfo commandPoolInfo = vkinit::CommandPoolCreateInfo(
 	    _graphicsQueueFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
 
+	// commands for ImGUI
+	VK_CHECK(vkCreateCommandPool(_device, &commandPoolInfo, nullptr, &_immCommandPool));
+
+	// allocate the command buffer for immediate submits
+	VkCommandBufferAllocateInfo cmdAllocInfo = vkinit::CommandBufferAllocateInfo(_immCommandPool, 1);
+
+	VK_CHECK(vkAllocateCommandBuffers(_device, &cmdAllocInfo, &_immCommandBuffer));
+
+	_mainDeletionQueue.push_function([=]() {
+	vkDestroyCommandPool(_device, _immCommandPool, nullptr);
+	});
+
 	for (auto& frame : _frames) {
 		VK_CHECK(vkCreateCommandPool(_device, &commandPoolInfo, nullptr, &frame._commandPool));
 
@@ -195,7 +212,7 @@ void PantomirEngine::InitSyncStructures() {
 
 	for (int i = 0; i < FRAME_OVERLAP; i++) {
 		VK_CHECK(vkCreateFence(_device, &fenceCreateInfo, nullptr, &_frames[i]._renderFence));
-
+		_mainDeletionQueue.push_function([=]() { vkDestroyFence(_device, _immFence, nullptr); });
 		VK_CHECK(vkCreateSemaphore(_device, &semaphoreCreateInfo, nullptr, &_frames[i]._swapchainSemaphore));
 		VK_CHECK(vkCreateSemaphore(_device, &semaphoreCreateInfo, nullptr, &_frames[i]._renderSemaphore));
 	}
@@ -284,8 +301,71 @@ void PantomirEngine::InitBackgroundPipelines() {
 	});
 }
 
+void PantomirEngine::InitImgui() {
+	// 1: create descriptor pool for IMGUI
+	//  the size of the pool is very oversize, but it's copied from imgui demo
+	//  itself.
+	VkDescriptorPoolSize       pool_sizes[] = { { VK_DESCRIPTOR_TYPE_SAMPLER, 1000 },
+		                                        { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 },
+		                                        { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000 },
+		                                        { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000 },
+		                                        { VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000 },
+		                                        { VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000 },
+		                                        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000 },
+		                                        { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000 },
+		                                        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000 },
+		                                        { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000 },
+		                                        { VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000 } };
+
+	VkDescriptorPoolCreateInfo pool_info    = {};
+	pool_info.sType                         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+	pool_info.flags                         = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+	pool_info.maxSets                       = 1000;
+	pool_info.poolSizeCount                 = (uint32_t)std::size(pool_sizes);
+	pool_info.pPoolSizes                    = pool_sizes;
+
+	VkDescriptorPool imguiPool;
+	VK_CHECK(vkCreateDescriptorPool(_device, &pool_info, nullptr, &imguiPool));
+
+	// 2: initialize imgui library
+
+	// this initializes the core structures of imgui
+	ImGui::CreateContext();
+
+	// this initializes imgui for SDL
+	ImGui_ImplSDL3_InitForVulkan(_window);
+
+	// this initializes imgui for Vulkan
+	ImGui_ImplVulkan_InitInfo init_info                           = {};
+	init_info.Instance                                            = _instance;
+	init_info.PhysicalDevice                                      = _chosenGPU;
+	init_info.Device                                              = _device;
+	init_info.Queue                                               = _graphicsQueue;
+	init_info.DescriptorPool                                      = imguiPool;
+	init_info.MinImageCount                                       = 3;
+	init_info.ImageCount                                          = 3;
+	init_info.UseDynamicRendering                                 = true;
+
+	// dynamic rendering parameters for imgui to use
+	init_info.PipelineRenderingCreateInfo                         = { .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
+	init_info.PipelineRenderingCreateInfo.colorAttachmentCount    = 1;
+	init_info.PipelineRenderingCreateInfo.pColorAttachmentFormats = &_swapchainImageFormat;
+
+	init_info.MSAASamples                                         = VK_SAMPLE_COUNT_1_BIT;
+
+	ImGui_ImplVulkan_Init(&init_info);
+
+	ImGui_ImplVulkan_CreateFontsTexture();
+
+	// Add the destroy the imgui created structures
+	_mainDeletionQueue.push_function([=]() {
+		ImGui_ImplVulkan_Shutdown();
+		vkDestroyDescriptorPool(_device, imguiPool, nullptr);
+	});
+}
+
 void PantomirEngine::CreateSwapchain(uint32_t width, uint32_t height) {
-	vkb::SwapchainBuilder swapchainBuilder { _chosen_GPU, _device, _surface };
+	vkb::SwapchainBuilder swapchainBuilder { _chosenGPU, _device, _surface };
 
 	_swapchainImageFormat = VK_FORMAT_B8G8R8A8_UNORM;
 
@@ -363,13 +443,17 @@ void PantomirEngine::Draw() {
 
 	// Transition the draw image and the swapchain image into their correct transfer layouts
 	vkutil::TransitionImage(commandBuffer, _drawImage._image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-	vkutil::TransitionImage(commandBuffer, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+	vkutil::TransitionImage(commandBuffer, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL); // Make the swapchain optimal for transfer
 
 	// Execute a copy from the draw image into the swapchain
 	vkutil::CopyImageToImage(commandBuffer, _drawImage._image, _swapchainImages[swapchainImageIndex], _drawExtent, _swapchainExtent);
 
 	// Set swapchain image layout to Present so we can show it on the screen
-	vkutil::TransitionImage(commandBuffer, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+	vkutil::TransitionImage(commandBuffer, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL); // Set the swapchain layout back, now presenting.
+
+	DrawImgui(commandBuffer, _swapchainImageViews[swapchainImageIndex]);
+
+	vkutil::TransitionImage(commandBuffer, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
 	// Finalize the command buffer (we can no longer add commands, but it can now be executed)
 	VK_CHECK(vkEndCommandBuffer(commandBuffer));
@@ -381,10 +465,10 @@ void PantomirEngine::Draw() {
 
 	VkCommandBufferSubmitInfo commandBufferSubmitInfo = vkinit::CommandBufferSubmitInfo(commandBuffer);
 
-	VkSemaphoreSubmitInfo     waitInfo                  = vkinit::SemaphoreSubmitInfo(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR, get_current_frame()._swapchainSemaphore);
-	VkSemaphoreSubmitInfo     signalInfo                = vkinit::SemaphoreSubmitInfo(VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, get_current_frame()._renderSemaphore);
+	VkSemaphoreSubmitInfo     waitInfo                = vkinit::SemaphoreSubmitInfo(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR, get_current_frame()._swapchainSemaphore);
+	VkSemaphoreSubmitInfo     signalInfo              = vkinit::SemaphoreSubmitInfo(VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, get_current_frame()._renderSemaphore);
 
-	VkSubmitInfo2             submitInfo                = vkinit::SubmitInfo(&commandBufferSubmitInfo, &signalInfo, &waitInfo);
+	VkSubmitInfo2             submitInfo              = vkinit::SubmitInfo(&commandBufferSubmitInfo, &signalInfo, &waitInfo);
 
 	// Submit command buffer to the queue and execute it.
 	//  _renderFence will now block until the graphic commands finish execution
@@ -422,6 +506,41 @@ void PantomirEngine::DrawBackground(VkCommandBuffer commandBuffer) {
 	vkCmdDispatch(commandBuffer, std::ceil(_drawExtent.width / 16.0), std::ceil(_drawExtent.height / 16.0), 1);
 }
 
+void PantomirEngine::DrawImgui(VkCommandBuffer cmd, VkImageView targetImageView) {
+	VkRenderingAttachmentInfo colorAttachment = vkinit::AttachmentInfo(targetImageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+	VkRenderingInfo           renderInfo      = vkinit::RenderingInfo(_swapchainExtent, &colorAttachment, nullptr);
+
+	vkCmdBeginRendering(cmd, &renderInfo);
+
+	ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
+
+	vkCmdEndRendering(cmd);
+}
+
+void PantomirEngine::ImmediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function) {
+	VK_CHECK(vkResetFences(_device, 1, &_immFence));
+	VK_CHECK(vkResetCommandBuffer(_immCommandBuffer, 0));
+
+	VkCommandBuffer          cmd          = _immCommandBuffer;
+
+	VkCommandBufferBeginInfo cmdBeginInfo = vkinit::CommandBufferBeginInfo(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+
+	VK_CHECK(vkBeginCommandBuffer(cmd, &cmdBeginInfo));
+
+	function(cmd);
+
+	VK_CHECK(vkEndCommandBuffer(cmd));
+
+	VkCommandBufferSubmitInfo cmdinfo = vkinit::CommandBufferSubmitInfo(cmd);
+	VkSubmitInfo2             submit  = vkinit::SubmitInfo(&cmdinfo, nullptr, nullptr);
+
+	// submit command buffer to the queue and execute it.
+	//  _renderFence will now block until the graphic commands finish execution
+	VK_CHECK(vkQueueSubmit2(_graphicsQueue, 1, &submit, _immFence));
+
+	VK_CHECK(vkWaitForFences(_device, 1, &_immFence, true, 9999999999));
+}
+
 void PantomirEngine::MainLoop() {
 	SDL_Event e;
 	bool      bQuit = false;
@@ -433,6 +552,15 @@ void PantomirEngine::MainLoop() {
 			if (e.type == SDL_EVENT_QUIT) {
 				bQuit = true;
 			}
+
+			if (e.type == SDL_EVENT_WINDOW_MINIMIZED) {
+				_stopRendering = true;
+			}
+			if (e.type == SDL_EVENT_WINDOW_RESTORED) {
+				_stopRendering = false;
+			}
+
+			ImGui_ImplSDL3_ProcessEvent(&e);
 		}
 
 		// Do not draw if we are minimized
@@ -441,6 +569,14 @@ void PantomirEngine::MainLoop() {
 			std::this_thread::sleep_for(std::chrono::milliseconds(100));
 			continue;
 		}
+
+		ImGui_ImplVulkan_NewFrame();
+		ImGui_ImplSDL3_NewFrame();
+		ImGui::NewFrame();
+
+		ImGui::ShowDemoWindow();
+
+		ImGui::Render();
 
 		Draw();
 	}

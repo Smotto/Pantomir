@@ -13,7 +13,6 @@
         "vulkan"
       ]
     },
-    "imgui",
     "vulkan-memory-allocator"
   ]
 }

@@ -37,6 +37,11 @@ inline DescriptorAllocator globalDescriptorAllocator;
 
 class PantomirEngine {
 public:
+	// immediate submit structures
+	VkFence                  _immFence;
+	VkCommandBuffer          _immCommandBuffer;
+	VkCommandPool            _immCommandPool;
+
 	VkPipeline               _gradientPipeline;
 	VkPipelineLayout         _gradientPipelineLayout;
 	VkDescriptorSet          _drawImageDescriptors;
@@ -56,7 +61,7 @@ public:
 
 	VkInstance               _instance {};       // Vulkan Library Handle
 	VkDebugUtilsMessengerEXT _debugMessenger {}; // Vulkan debug output handle
-	VkPhysicalDevice         _chosen_GPU {};     // GPU chosen as the default device
+	VkPhysicalDevice         _chosenGPU {};     // GPU chosen as the default device
 	VkDevice                 _device {};         // Vulkan device for commands
 	VkSurfaceKHR             _surface {};        // Vulkan window surface
 
@@ -88,6 +93,8 @@ public:
 	void              MainLoop();
 	void              Draw();
 	void              DrawBackground(VkCommandBuffer commandBuffer);
+	void              DrawImgui(VkCommandBuffer cmd, VkImageView targetImageView);
+	void              ImmediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function);
 
 private:
 	PantomirEngine();
@@ -101,6 +108,7 @@ private:
 	void InitDescriptors();
 	void InitPipelines();
 	void InitBackgroundPipelines();
+	void InitImgui();
 
 	void CreateSwapchain(uint32_t width, uint32_t height);
 	void DestroySwapchain();
