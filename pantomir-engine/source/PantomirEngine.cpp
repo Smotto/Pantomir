@@ -175,21 +175,21 @@ void PantomirEngine::InitSwapchain() {
 }
 
 void PantomirEngine::InitCommands() {
-	// create a command pool for commands submitted to the graphics queue.
-	// we also want the pool to allow for resetting of individual command buffers
+	// Create a command pool for commands submitted to the graphics queue.
+	// We also want the pool to allow for resetting of individual command buffers
 	VkCommandPoolCreateInfo commandPoolInfo = vkinit::CommandPoolCreateInfo(
 	    _graphicsQueueFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
 
 	// commands for ImGUI
-	VK_CHECK(vkCreateCommandPool(_device, &commandPoolInfo, nullptr, &_immCommandPool));
+	VK_CHECK(vkCreateCommandPool(_device, &commandPoolInfo, nullptr, &_immediateCommandPool));
 
 	// allocate the command buffer for immediate submits
-	VkCommandBufferAllocateInfo cmdAllocInfo = vkinit::CommandBufferAllocateInfo(_immCommandPool, 1);
+	VkCommandBufferAllocateInfo commandAllocInfo = vkinit::CommandBufferAllocateInfo(_immediateCommandPool, 1);
 
-	VK_CHECK(vkAllocateCommandBuffers(_device, &cmdAllocInfo, &_immCommandBuffer));
+	VK_CHECK(vkAllocateCommandBuffers(_device, &commandAllocInfo, &_immediateCommandBuffer));
 
 	_mainDeletionQueue.push_function([=]() {
-	vkDestroyCommandPool(_device, _immCommandPool, nullptr);
+		vkDestroyCommandPool(_device, _immediateCommandPool, nullptr);
 	});
 
 	for (auto& frame : _frames) {
@@ -212,7 +212,7 @@ void PantomirEngine::InitSyncStructures() {
 
 	for (int i = 0; i < FRAME_OVERLAP; i++) {
 		VK_CHECK(vkCreateFence(_device, &fenceCreateInfo, nullptr, &_frames[i]._renderFence));
-		_mainDeletionQueue.push_function([=]() { vkDestroyFence(_device, _immFence, nullptr); });
+		_mainDeletionQueue.push_function([=]() { vkDestroyFence(_device, _immediateFence, nullptr); });
 		VK_CHECK(vkCreateSemaphore(_device, &semaphoreCreateInfo, nullptr, &_frames[i]._swapchainSemaphore));
 		VK_CHECK(vkCreateSemaphore(_device, &semaphoreCreateInfo, nullptr, &_frames[i]._renderSemaphore));
 	}
@@ -270,11 +270,18 @@ void PantomirEngine::InitBackgroundPipelines() {
 	computeLayout.pSetLayouts    = &_drawImageDescriptorLayout;
 	computeLayout.setLayoutCount = 1;
 
+	VkPushConstantRange pushConstant{};
+	pushConstant.offset = 0;
+	pushConstant.size = sizeof(ComputePushConstants);
+	pushConstant.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+	computeLayout.pPushConstantRanges = &pushConstant;
+	computeLayout.pushConstantRangeCount = 1;
+
 	VK_CHECK(vkCreatePipelineLayout(_device, &computeLayout, nullptr, &_gradientPipelineLayout));
 
 	VkShaderModule computeDrawShader;
-
-	if (!vkutil::LoadShaderModule("Assets/Shaders/gradient.comp.spv", _device, &computeDrawShader)) {
+	if (!vkutil::LoadShaderModule("Assets/Shaders/gradient_color.comp.spv", _device, &computeDrawShader)) {
 		LOG(Engine_Renderer, Debug, "Error when building the compute shader.");
 	}
 
@@ -502,6 +509,11 @@ void PantomirEngine::DrawBackground(VkCommandBuffer commandBuffer) {
 	// bind the descriptor set containing the draw image for the compute pipeline
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, _gradientPipelineLayout, 0, 1, &_drawImageDescriptors, 0, nullptr);
 
+	ComputePushConstants pc;
+	pc.data1 = glm::vec4(1, 0, 0, 1);
+	pc.data2 = glm::vec4(0, 0, 1, 1);
+
+	vkCmdPushConstants(commandBuffer, _gradientPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ComputePushConstants), &pc);
 	// execute the compute pipeline dispatch. We are using 16x16 workgroup size so we need to divide by it
 	vkCmdDispatch(commandBuffer, std::ceil(_drawExtent.width / 16.0), std::ceil(_drawExtent.height / 16.0), 1);
 }
@@ -518,10 +530,10 @@ void PantomirEngine::DrawImgui(VkCommandBuffer cmd, VkImageView targetImageView)
 }
 
 void PantomirEngine::ImmediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function) {
-	VK_CHECK(vkResetFences(_device, 1, &_immFence));
-	VK_CHECK(vkResetCommandBuffer(_immCommandBuffer, 0));
+	VK_CHECK(vkResetFences(_device, 1, &_immediateFence));
+	VK_CHECK(vkResetCommandBuffer(_immediateCommandBuffer, 0));
 
-	VkCommandBuffer          cmd          = _immCommandBuffer;
+	VkCommandBuffer          cmd          = _immediateCommandBuffer;
 
 	VkCommandBufferBeginInfo cmdBeginInfo = vkinit::CommandBufferBeginInfo(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
@@ -536,9 +548,9 @@ void PantomirEngine::ImmediateSubmit(std::function<void(VkCommandBuffer cmd)>&& 
 
 	// submit command buffer to the queue and execute it.
 	//  _renderFence will now block until the graphic commands finish execution
-	VK_CHECK(vkQueueSubmit2(_graphicsQueue, 1, &submit, _immFence));
+	VK_CHECK(vkQueueSubmit2(_graphicsQueue, 1, &submit, _immediateFence));
 
-	VK_CHECK(vkWaitForFences(_device, 1, &_immFence, true, 9999999999));
+	VK_CHECK(vkWaitForFences(_device, 1, &_immediateFence, true, 9999999999));
 }
 
 void PantomirEngine::MainLoop() {

@@ -4,6 +4,13 @@
 #include "VkDescriptors.h"
 #include "VkTypes.h"
 
+struct ComputePushConstants {
+	glm::vec4 data1;
+	glm::vec4 data2;
+	glm::vec4 data3;
+	glm::vec4 data4;
+};
+
 struct DeletionQueue {
 	// Stores a lambda
 	// TODO: Store handles instead of functions instead.
@@ -38,9 +45,9 @@ inline DescriptorAllocator globalDescriptorAllocator;
 class PantomirEngine {
 public:
 	// immediate submit structures
-	VkFence                  _immFence;
-	VkCommandBuffer          _immCommandBuffer;
-	VkCommandPool            _immCommandPool;
+	VkFence                  _immediateFence;
+	VkCommandBuffer          _immediateCommandBuffer;
+	VkCommandPool            _immediateCommandPool;
 
 	VkPipeline               _gradientPipeline;
 	VkPipelineLayout         _gradientPipelineLayout;

@@ -1,9 +1,7 @@
 #include "VKPipelines.h"
 #include <fstream>
 
-bool vkutil::LoadShaderModule(const char*     filePath,
-                              VkDevice        device,
-                              VkShaderModule* outShaderModule) {
+bool vkutil::LoadShaderModule(const char* filePath, VkDevice device, VkShaderModule* outShaderModule) {
 	std::ifstream file(filePath, std::ios::ate | std::ios::binary); // Open file with cursor at the end.
 
 	if (!file.is_open()) {

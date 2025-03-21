@@ -2,8 +2,7 @@
 #include <vulkan/vulkan_core.h>
 
 //> init_cmd
-VkCommandPoolCreateInfo vkinit::CommandPoolCreateInfo(uint32_t                 queueFamilyIndex,
-                                                      VkCommandPoolCreateFlags flags /*= 0*/) {
+VkCommandPoolCreateInfo vkinit::CommandPoolCreateInfo(uint32_t queueFamilyIndex, VkCommandPoolCreateFlags flags /*= 0*/) {
 	VkCommandPoolCreateInfo info = {};
 	info.sType                   = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
 	info.pNext                   = nullptr;
@@ -12,8 +11,7 @@ VkCommandPoolCreateInfo vkinit::CommandPoolCreateInfo(uint32_t                 q
 	return info;
 }
 
-VkCommandBufferAllocateInfo vkinit::CommandBufferAllocateInfo(
-    VkCommandPool pool, uint32_t count /*= 1*/) {
+VkCommandBufferAllocateInfo vkinit::CommandBufferAllocateInfo(VkCommandPool pool, uint32_t count /*= 1*/) {
 	VkCommandBufferAllocateInfo info = {};
 	info.sType                       = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 	info.pNext                       = nullptr;
