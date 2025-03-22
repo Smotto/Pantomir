@@ -11,6 +11,15 @@ struct ComputePushConstants {
 	glm::vec4 data4;
 };
 
+struct ComputeEffect {
+	const char* name;
+
+	VkPipeline pipeline;
+	VkPipelineLayout layout;
+
+	ComputePushConstants data;
+};
+
 struct DeletionQueue {
 	// Stores a lambda
 	// TODO: Store handles instead of functions instead.
@@ -44,6 +53,9 @@ inline DescriptorAllocator globalDescriptorAllocator;
 
 class PantomirEngine {
 public:
+	std::vector<ComputeEffect> backgroundEffects;
+	int currentBackgroundEffect{0};
+
 	// immediate submit structures
 	VkFence                  _immediateFence;
 	VkCommandBuffer          _immediateCommandBuffer;
@@ -62,7 +74,7 @@ public:
 	bool                     _isInitialized { false };
 	int                      _frameNumber { 0 };
 	bool                     _stopRendering { false };
-	VkExtent2D               _windowExtent { 1700, 900 };
+	VkExtent2D               _windowExtent { 2056, 1440 };
 
 	struct SDL_Window*       _window { nullptr };
 
