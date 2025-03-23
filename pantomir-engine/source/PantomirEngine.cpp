@@ -31,6 +31,7 @@ PantomirEngine::PantomirEngine() {
 	InitDescriptors();
 	InitPipelines();
 	InitImgui();
+	InitTrianglePipeline();
 }
 
 PantomirEngine::~PantomirEngine() {
@@ -396,10 +397,67 @@ void PantomirEngine::InitImgui() {
 
 	ImGui_ImplVulkan_CreateFontsTexture();
 
-	// Add the destroy the imgui created structures
+	// Add the destroy imgui created structures
 	_mainDeletionQueue.push_function([=]() {
 		ImGui_ImplVulkan_Shutdown();
 		vkDestroyDescriptorPool(_device, imguiPool, nullptr);
+	});
+}
+
+void PantomirEngine::InitTrianglePipeline() {
+	VkShaderModule triangleFragShader;
+	if (!vkutil::LoadShaderModule("Assets/Shaders/colored_triangle.frag.spv", _device, &triangleFragShader)) {
+		LOG(Engine, Error, "Error when building the triangle fragment shader module");
+	}
+	else {
+		LOG(Engine, Info, "Triangle fragment shader succesfully loaded");
+	}
+
+	VkShaderModule triangleVertexShader;
+	if (!vkutil::LoadShaderModule("Assets/Shaders/colored_triangle.vert.spv", _device, &triangleVertexShader)) {
+		LOG(Engine, Error, "Error when building the triangle vertex shader module");
+	}
+	else {
+		LOG(Engine, Info, "Triangle vertex shader succesfully loaded");
+	}
+
+	// Build the pipeline layout that controls the inputs/outputs of the shader
+	// We are not using descriptor sets or other systems yet, so no need to use anything other than empty default
+	VkPipelineLayoutCreateInfo pipeline_layout_info = vkinit::PipelineLayoutCreateInfo();
+	VK_CHECK(vkCreatePipelineLayout(_device, &pipeline_layout_info, nullptr, &_trianglePipelineLayout));
+
+	PipelineBuilder pipelineBuilder;
+
+	// Use the triangle layout we created
+	pipelineBuilder._pipelineLayout = _trianglePipelineLayout;
+	// Connecting the vertex and pixel shaders to the pipeline
+	pipelineBuilder.SetShaders(triangleVertexShader, triangleFragShader);
+	// It will draw triangles
+	pipelineBuilder.SetInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+	// Filled triangles
+	pipelineBuilder.SetPolygonMode(VK_POLYGON_MODE_FILL);
+	// No Backface Culling
+	pipelineBuilder.SetCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+	// No multisampling
+	pipelineBuilder.SetMultisamplingNone();
+	// No blending
+	pipelineBuilder.DisableBlending();
+	// No depth testing
+	pipelineBuilder.DisableDepthtest();
+
+	// Connect the image format we will draw into, from draw image
+	pipelineBuilder.SetColorAttachmentFormat(_drawImage._imageFormat);
+	pipelineBuilder.SetDepthFormat(VK_FORMAT_UNDEFINED);
+
+	// Finally build the pipeline
+	_trianglePipeline = pipelineBuilder.BuildPipeline(_device);
+
+	// Clean structures
+	vkDestroyShaderModule(_device, triangleFragShader, nullptr);
+	vkDestroyShaderModule(_device, triangleVertexShader, nullptr);
+	_mainDeletionQueue.push_function([&]() {
+		vkDestroyPipelineLayout(_device, _trianglePipelineLayout, nullptr);
+		vkDestroyPipeline(_device, _trianglePipeline, nullptr);
 	});
 }
 
@@ -480,8 +538,12 @@ void PantomirEngine::Draw() {
 
 	DrawBackground(commandBuffer);
 
+	vkutil::TransitionImage(commandBuffer, _drawImage._image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
+	DrawGeometry(commandBuffer);
+
 	// Transition the draw image and the swapchain image into their correct transfer layouts
-	vkutil::TransitionImage(commandBuffer, _drawImage._image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+	vkutil::TransitionImage(commandBuffer, _drawImage._image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 	vkutil::TransitionImage(commandBuffer, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL); // Make the swapchain optimal for transfer
 
 	// Execute a copy from the draw image into the swapchain
@@ -546,6 +608,39 @@ void PantomirEngine::DrawBackground(VkCommandBuffer commandBuffer) {
 	vkCmdPushConstants(commandBuffer, _gradientPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ComputePushConstants), &effect.data);
 	// execute the compute pipeline dispatch. We are using 16x16 workgroup size so we need to divide by it
 	vkCmdDispatch(commandBuffer, std::ceil(_drawExtent.width / 16.0), std::ceil(_drawExtent.height / 16.0), 1);
+}
+
+void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
+	// Begin a render pass connected to our draw image
+	VkRenderingAttachmentInfo colorAttachment = vkinit::AttachmentInfo(_drawImage._imageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
+	VkRenderingInfo renderInfo = vkinit::RenderingInfo(_drawExtent, &colorAttachment, nullptr);
+	vkCmdBeginRendering(commandBuffer, &renderInfo);
+
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _trianglePipeline);
+
+	// Set dynamic viewport and scissor
+	VkViewport viewport = {};
+	viewport.x = 0;
+	viewport.y = 0;
+	viewport.width = _drawExtent.width;
+	viewport.height = _drawExtent.height;
+	viewport.minDepth = 0.f;
+	viewport.maxDepth = 1.f;
+
+	vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+	VkRect2D scissor = {};
+	scissor.offset.x = 0;
+	scissor.offset.y = 0;
+	scissor.extent.width = _drawExtent.width;
+	scissor.extent.height = _drawExtent.height;
+
+	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+	// Launch a draw command to draw 3 vertices
+	vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+	vkCmdEndRendering(commandBuffer);
 }
 
 void PantomirEngine::DrawImgui(VkCommandBuffer cmd, VkImageView targetImageView) {

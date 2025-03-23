@@ -53,6 +53,9 @@ inline DescriptorAllocator globalDescriptorAllocator;
 
 class PantomirEngine {
 public:
+	VkPipelineLayout _trianglePipelineLayout;
+	VkPipeline _trianglePipeline;
+
 	std::vector<ComputeEffect> backgroundEffects;
 	int currentBackgroundEffect{0};
 
@@ -112,8 +115,10 @@ public:
 	void              MainLoop();
 	void              Draw();
 	void              DrawBackground(VkCommandBuffer commandBuffer);
+	void              DrawGeometry(VkCommandBuffer commandBuffer);
 	void              DrawImgui(VkCommandBuffer cmd, VkImageView targetImageView);
 	void              ImmediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function);
+
 
 private:
 	PantomirEngine();
@@ -128,6 +133,7 @@ private:
 	void InitPipelines();
 	void InitBackgroundPipelines();
 	void InitImgui();
+	void InitTrianglePipeline();
 
 	void CreateSwapchain(uint32_t width, uint32_t height);
 	void DestroySwapchain();
