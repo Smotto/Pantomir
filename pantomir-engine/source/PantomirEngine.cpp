@@ -32,6 +32,8 @@ PantomirEngine::PantomirEngine() {
 	InitPipelines();
 	InitImgui();
 	InitTrianglePipeline();
+	InitMeshPipeline();
+	InitDefaultData();
 }
 
 PantomirEngine::~PantomirEngine() {
@@ -213,10 +215,12 @@ void PantomirEngine::InitSyncStructures() {
 
 	for (int i = 0; i < FRAME_OVERLAP; i++) {
 		VK_CHECK(vkCreateFence(_device, &fenceCreateInfo, nullptr, &_frames[i]._renderFence));
-		_mainDeletionQueue.push_function([=]() { vkDestroyFence(_device, _immediateFence, nullptr); });
 		VK_CHECK(vkCreateSemaphore(_device, &semaphoreCreateInfo, nullptr, &_frames[i]._swapchainSemaphore));
 		VK_CHECK(vkCreateSemaphore(_device, &semaphoreCreateInfo, nullptr, &_frames[i]._renderSemaphore));
 	}
+
+	VK_CHECK(vkCreateFence(_device, &fenceCreateInfo, nullptr, &_immediateFence));
+	_mainDeletionQueue.push_function([=]() { vkDestroyFence(_device, _immediateFence, nullptr); });
 }
 
 void PantomirEngine::InitDescriptors() {
@@ -271,12 +275,12 @@ void PantomirEngine::InitBackgroundPipelines() {
 	computeLayout.pSetLayouts    = &_drawImageDescriptorLayout;
 	computeLayout.setLayoutCount = 1;
 
-	VkPushConstantRange pushConstant{};
-	pushConstant.offset = 0;
-	pushConstant.size = sizeof(ComputePushConstants);
-	pushConstant.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+	VkPushConstantRange pushConstant {};
+	pushConstant.offset                  = 0;
+	pushConstant.size                    = sizeof(ComputePushConstants);
+	pushConstant.stageFlags              = VK_SHADER_STAGE_COMPUTE_BIT;
 
-	computeLayout.pPushConstantRanges = &pushConstant;
+	computeLayout.pPushConstantRanges    = &pushConstant;
 	computeLayout.pushConstantRangeCount = 1;
 
 	VK_CHECK(vkCreatePipelineLayout(_device, &computeLayout, nullptr, &_gradientPipelineLayout));
@@ -291,47 +295,47 @@ void PantomirEngine::InitBackgroundPipelines() {
 		LOG(Engine_Renderer, Error, "Error when building the compute shader.");
 	}
 
-	VkPipelineShaderStageCreateInfo stageinfo{};
-	stageinfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-	stageinfo.pNext = nullptr;
-	stageinfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-	stageinfo.module = gradientShader;
-	stageinfo.pName = "main";
+	VkPipelineShaderStageCreateInfo stageInfo {};
+	stageInfo.sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	stageInfo.pNext  = nullptr;
+	stageInfo.stage  = VK_SHADER_STAGE_COMPUTE_BIT;
+	stageInfo.module = gradientShader;
+	stageInfo.pName  = "main";
 
-	VkComputePipelineCreateInfo computePipelineCreateInfo{};
-	computePipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-	computePipelineCreateInfo.pNext = nullptr;
+	VkComputePipelineCreateInfo computePipelineCreateInfo {};
+	computePipelineCreateInfo.sType  = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+	computePipelineCreateInfo.pNext  = nullptr;
 	computePipelineCreateInfo.layout = _gradientPipelineLayout;
-	computePipelineCreateInfo.stage = stageinfo;
+	computePipelineCreateInfo.stage  = stageInfo;
 
-	ComputeEffect gradient{};
-	gradient.layout = _gradientPipelineLayout;
-	gradient.name = "gradient";
-	gradient.data = {};
+	ComputeEffect gradient {};
+	gradient.layout     = _gradientPipelineLayout;
+	gradient.name       = "gradient";
+	gradient.data       = {};
 
-	//default colors
+	// default colors
 	gradient.data.data1 = glm::vec4(1, 0, 0, 1);
 	gradient.data.data2 = glm::vec4(0, 0, 1, 1);
 
 	VK_CHECK(vkCreateComputePipelines(_device, VK_NULL_HANDLE, 1, &computePipelineCreateInfo, nullptr, &gradient.pipeline));
 
-	//change the shader module only to create the sky shader
+	// change the shader module only to create the sky shader
 	computePipelineCreateInfo.stage.module = skyShader;
 
-	ComputeEffect sky{};
-	sky.layout = _gradientPipelineLayout;
-	sky.name = "sky";
-	sky.data = {};
-	//default sky parameters
-	sky.data.data1 = glm::vec4(0.1, 0.2, 0.4 ,0.97);
+	ComputeEffect sky {};
+	sky.layout     = _gradientPipelineLayout;
+	sky.name       = "sky";
+	sky.data       = {};
+	// default sky parameters
+	sky.data.data1 = glm::vec4(0.1, 0.2, 0.4, 0.97);
 
 	VK_CHECK(vkCreateComputePipelines(_device, VK_NULL_HANDLE, 1, &computePipelineCreateInfo, nullptr, &sky.pipeline));
 
-	//add the 2 background effects into the array
+	// add the 2 background effects into the array
 	backgroundEffects.push_back(gradient);
 	backgroundEffects.push_back(sky);
 
-	//destroy structures properly
+	// destroy structures properly
 	vkDestroyShaderModule(_device, gradientShader, nullptr);
 	vkDestroyShaderModule(_device, skyShader, nullptr);
 	_mainDeletionQueue.push_function([=]() {
@@ -408,17 +412,15 @@ void PantomirEngine::InitTrianglePipeline() {
 	VkShaderModule triangleFragShader;
 	if (!vkutil::LoadShaderModule("Assets/Shaders/colored_triangle.frag.spv", _device, &triangleFragShader)) {
 		LOG(Engine, Error, "Error when building the triangle fragment shader module");
-	}
-	else {
-		LOG(Engine, Info, "Triangle fragment shader succesfully loaded");
+	} else {
+		LOG(Engine, Info, "Triangle fragment shader successfully loaded");
 	}
 
 	VkShaderModule triangleVertexShader;
 	if (!vkutil::LoadShaderModule("Assets/Shaders/colored_triangle.vert.spv", _device, &triangleVertexShader)) {
 		LOG(Engine, Error, "Error when building the triangle vertex shader module");
-	}
-	else {
-		LOG(Engine, Info, "Triangle vertex shader succesfully loaded");
+	} else {
+		LOG(Engine, Info, "Triangle vertex shader successfully loaded");
 	}
 
 	// Build the pipeline layout that controls the inputs/outputs of the shader
@@ -461,6 +463,163 @@ void PantomirEngine::InitTrianglePipeline() {
 	});
 }
 
+void PantomirEngine::InitMeshPipeline() {
+	VkShaderModule triangleFragShader;
+	if (!vkutil::LoadShaderModule("Assets/Shaders/colored_triangle.frag.spv", _device, &triangleFragShader)) {
+		LOG(Engine, Error, "Error when building the triangle fragment shader module");
+	} else {
+		LOG(Engine, Info, "Triangle fragment shader successfully loaded");
+	}
+
+	VkShaderModule triangleMeshVertexShader;
+	if (!vkutil::LoadShaderModule("Assets/Shaders/colored_triangle_mesh.vert.spv", _device, &triangleMeshVertexShader)) {
+		LOG(Engine, Error, "Error when building the triangle vertex shader module");
+	} else {
+		LOG(Engine, Info, "Triangle mesh vertex shader successfully loaded");
+	}
+
+	VkPushConstantRange bufferRange {};
+	bufferRange.offset                            = 0;
+	bufferRange.size                              = sizeof(GPUDrawPushConstants);
+	bufferRange.stageFlags                        = VK_SHADER_STAGE_VERTEX_BIT;
+
+	VkPipelineLayoutCreateInfo pipelineLayoutInfo = vkinit::PipelineLayoutCreateInfo();
+	pipelineLayoutInfo.pPushConstantRanges        = &bufferRange;
+	pipelineLayoutInfo.pushConstantRangeCount     = 1;
+
+	VK_CHECK(vkCreatePipelineLayout(_device, &pipelineLayoutInfo, nullptr, &_meshPipelineLayout));
+
+	PipelineBuilder pipelineBuilder;
+
+	// Use the triangle layout we created
+	pipelineBuilder._pipelineLayout = _meshPipelineLayout;
+	// Connecting the vertex and pixel shaders to the pipeline
+	pipelineBuilder.SetShaders(triangleMeshVertexShader, triangleFragShader);
+	// It will draw triangles
+	pipelineBuilder.SetInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+	// Filled triangles
+	pipelineBuilder.SetPolygonMode(VK_POLYGON_MODE_FILL);
+	// No Backface culling
+	pipelineBuilder.SetCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+	// No Multisampling
+	pipelineBuilder.SetMultisamplingNone();
+	// No Blending
+	pipelineBuilder.DisableBlending();
+
+	pipelineBuilder.DisableDepthtest();
+
+	// Connect the image format we will draw into, from draw image
+	pipelineBuilder.SetColorAttachmentFormat(_drawImage._imageFormat);
+	pipelineBuilder.SetDepthFormat(VK_FORMAT_UNDEFINED);
+
+	// Finally build the pipeline
+	_meshPipeline = pipelineBuilder.BuildPipeline(_device);
+
+	// Clean structures
+	vkDestroyShaderModule(_device, triangleFragShader, nullptr);
+	vkDestroyShaderModule(_device, triangleMeshVertexShader, nullptr);
+
+	_mainDeletionQueue.push_function([&]() {
+		vkDestroyPipelineLayout(_device, _meshPipelineLayout, nullptr);
+		vkDestroyPipeline(_device, _meshPipeline, nullptr);
+	});
+}
+
+void PantomirEngine::InitDefaultData() {
+	std::array<Vertex, 4> rect_vertices;
+
+	rect_vertices[0].position = { 0.5, -0.5, 0 };
+	rect_vertices[1].position = { 0.5, 0.5, 0 };
+	rect_vertices[2].position = { -0.5, -0.5, 0 };
+	rect_vertices[3].position = { -0.5, 0.5, 0 };
+
+	rect_vertices[0].color    = { 0, 0, 0, 1 };
+	rect_vertices[1].color    = { 0.5, 0.5, 0.5, 1 };
+	rect_vertices[2].color    = { 1, 0, 0, 1 };
+	rect_vertices[3].color    = { 0, 1, 0, 1 };
+
+	std::array<uint32_t, 6> rect_indices;
+
+	rect_indices[0] = 0;
+	rect_indices[1] = 1;
+	rect_indices[2] = 2;
+
+	rect_indices[3] = 2;
+	rect_indices[4] = 1;
+	rect_indices[5] = 3;
+
+	_rectangle       = UploadMesh(rect_indices, rect_vertices);
+
+	// Delete the rectangle data on engine shutdown
+	_mainDeletionQueue.push_function([&]() {
+		DestroyBuffer(_rectangle.indexBuffer);
+		DestroyBuffer(_rectangle.vertexBuffer);
+	});
+}
+
+GPUMeshBuffers PantomirEngine::UploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices) {
+	const size_t   vertexBufferSize = vertices.size() * sizeof(Vertex);
+	const size_t   indexBufferSize  = indices.size() * sizeof(uint32_t);
+
+	GPUMeshBuffers newSurface;
+
+	// Create vertex buffer
+	newSurface.vertexBuffer = CreateBuffer(vertexBufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
+
+	// Find the address of the vertex buffer
+	VkBufferDeviceAddressInfo deviceAddressInfo { .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, .buffer = newSurface.vertexBuffer.buffer };
+	newSurface.vertexBufferAddress = vkGetBufferDeviceAddress(_device, &deviceAddressInfo);
+
+	// Create index buffer
+	newSurface.indexBuffer         = CreateBuffer(indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
+
+	AllocatedBuffer staging        = CreateBuffer(vertexBufferSize + indexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+	void*           data           = staging.allocation->GetMappedData();
+
+	// Copy vertex buffer
+	memcpy(data, vertices.data(), vertexBufferSize);
+	// Copy index buffer
+	memcpy((char*)data + vertexBufferSize, indices.data(), indexBufferSize);
+
+	ImmediateSubmit([&](VkCommandBuffer cmd) {
+		VkBufferCopy vertexCopy { 0 };
+		vertexCopy.dstOffset = 0;
+		vertexCopy.srcOffset = 0;
+		vertexCopy.size      = vertexBufferSize;
+
+		vkCmdCopyBuffer(cmd, staging.buffer, newSurface.vertexBuffer.buffer, 1, &vertexCopy);
+
+		VkBufferCopy indexCopy { 0 };
+		indexCopy.dstOffset = 0;
+		indexCopy.srcOffset = vertexBufferSize;
+		indexCopy.size      = indexBufferSize;
+
+		vkCmdCopyBuffer(cmd, staging.buffer, newSurface.indexBuffer.buffer, 1, &indexCopy);
+	});
+
+	DestroyBuffer(staging);
+
+	return newSurface;
+}
+
+AllocatedBuffer PantomirEngine::CreateBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage) {
+	// Allocate Buffer
+	VkBufferCreateInfo bufferInfo        = { .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
+	bufferInfo.pNext                     = nullptr;
+	bufferInfo.size                      = allocSize;
+
+	bufferInfo.usage                     = usage;
+	VmaAllocationCreateInfo vmaallocInfo = {};
+	vmaallocInfo.usage                   = memoryUsage;
+	vmaallocInfo.flags                   = VMA_ALLOCATION_CREATE_MAPPED_BIT;
+	AllocatedBuffer newBuffer;
+
+	// Allocate the buffer
+	VK_CHECK(vmaCreateBuffer(_allocator, &bufferInfo, &vmaallocInfo, &newBuffer.buffer, &newBuffer.allocation, &newBuffer.info));
+
+	return newBuffer;
+}
+
 void PantomirEngine::CreateSwapchain(uint32_t width, uint32_t height) {
 	vkb::SwapchainBuilder swapchainBuilder { _chosenGPU, _device, _surface };
 
@@ -494,6 +653,10 @@ void PantomirEngine::DestroySwapchain() {
 
 		vkDestroyImageView(_device, _swapchainImageViews[i], nullptr);
 	}
+}
+
+void PantomirEngine::DestroyBuffer(const AllocatedBuffer& buffer) {
+	vmaDestroyBuffer(_allocator, buffer.buffer, buffer.allocation);
 }
 
 int PantomirEngine::Start() {
@@ -614,32 +777,47 @@ void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
 	// Begin a render pass connected to our draw image
 	VkRenderingAttachmentInfo colorAttachment = vkinit::AttachmentInfo(_drawImage._imageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
-	VkRenderingInfo renderInfo = vkinit::RenderingInfo(_drawExtent, &colorAttachment, nullptr);
+	VkRenderingInfo           renderInfo      = vkinit::RenderingInfo(_drawExtent, &colorAttachment, nullptr);
 	vkCmdBeginRendering(commandBuffer, &renderInfo);
 
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _trianglePipeline);
 
 	// Set dynamic viewport and scissor
 	VkViewport viewport = {};
-	viewport.x = 0;
-	viewport.y = 0;
-	viewport.width = _drawExtent.width;
-	viewport.height = _drawExtent.height;
-	viewport.minDepth = 0.f;
-	viewport.maxDepth = 1.f;
+	viewport.x          = 0;
+	viewport.y          = 0;
+	viewport.width      = _drawExtent.width;
+	viewport.height     = _drawExtent.height;
+	viewport.minDepth   = 0.f;
+	viewport.maxDepth   = 1.f;
 
 	vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
 
-	VkRect2D scissor = {};
-	scissor.offset.x = 0;
-	scissor.offset.y = 0;
-	scissor.extent.width = _drawExtent.width;
+	VkRect2D scissor      = {};
+	scissor.offset.x      = 0;
+	scissor.offset.y      = 0;
+	scissor.extent.width  = _drawExtent.width;
 	scissor.extent.height = _drawExtent.height;
 
 	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
 	// Launch a draw command to draw 3 vertices
 	vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _meshPipeline);
+
+	vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+	GPUDrawPushConstants push_constants;
+	push_constants.worldMatrix  = glm::mat4 { 1.f };
+	push_constants.vertexBuffer = _rectangle.vertexBufferAddress;
+
+	vkCmdPushConstants(commandBuffer, _meshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &push_constants);
+	vkCmdBindIndexBuffer(commandBuffer, _rectangle.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+
+	vkCmdDrawIndexed(commandBuffer, 6, 1, 0, 0, 0);
+
 	vkCmdEndRendering(commandBuffer);
 }
 
@@ -654,7 +832,7 @@ void PantomirEngine::DrawImgui(VkCommandBuffer cmd, VkImageView targetImageView)
 	vkCmdEndRendering(cmd);
 }
 
-void PantomirEngine::ImmediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function) {
+void PantomirEngine::ImmediateSubmit(std::function<void(VkCommandBuffer cmd)>&& anonymousFunction) {
 	VK_CHECK(vkResetFences(_device, 1, &_immediateFence));
 	VK_CHECK(vkResetCommandBuffer(_immediateCommandBuffer, 0));
 
@@ -664,12 +842,12 @@ void PantomirEngine::ImmediateSubmit(std::function<void(VkCommandBuffer cmd)>&& 
 
 	VK_CHECK(vkBeginCommandBuffer(cmd, &cmdBeginInfo));
 
-	function(cmd);
+	anonymousFunction(cmd);
 
 	VK_CHECK(vkEndCommandBuffer(cmd));
 
-	VkCommandBufferSubmitInfo cmdinfo = vkinit::CommandBufferSubmitInfo(cmd);
-	VkSubmitInfo2             submit  = vkinit::SubmitInfo(&cmdinfo, nullptr, nullptr);
+	VkCommandBufferSubmitInfo commandInfo = vkinit::CommandBufferSubmitInfo(cmd);
+	VkSubmitInfo2             submit  = vkinit::SubmitInfo(&commandInfo, nullptr, nullptr);
 
 	// submit command buffer to the queue and execute it.
 	//  _renderFence will now block until the graphic commands finish execution
@@ -717,12 +895,12 @@ void PantomirEngine::MainLoop() {
 
 			ImGui::Text("Selected effect: ", selected.name);
 
-			ImGui::SliderInt("Effect Index", &currentBackgroundEffect,0, backgroundEffects.size() - 1);
+			ImGui::SliderInt("Effect Index", &currentBackgroundEffect, 0, backgroundEffects.size() - 1);
 
-			ImGui::InputFloat4("data1",(float*)& selected.data.data1);
-			ImGui::InputFloat4("data2",(float*)& selected.data.data2);
-			ImGui::InputFloat4("data3",(float*)& selected.data.data3);
-			ImGui::InputFloat4("data4",(float*)& selected.data.data4);
+			ImGui::InputFloat4("data1", (float*)&selected.data.data1);
+			ImGui::InputFloat4("data2", (float*)&selected.data.data2);
+			ImGui::InputFloat4("data3", (float*)&selected.data.data3);
+			ImGui::InputFloat4("data4", (float*)&selected.data.data4);
 		}
 		ImGui::End();
 
