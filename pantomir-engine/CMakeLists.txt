@@ -37,7 +37,6 @@ target_link_libraries(pantomir-engine PRIVATE
 target_link_libraries(pantomir-engine PRIVATE
         Vulkan::Vulkan       # Vulkan
         glm::glm             # Math library
-        assimp::assimp       # Model loading
         Stb::Stb             # Image loading
         xxHash::xxhash       # Hashing models
         vk-bootstrap::vk-bootstrap # Custom Vulkan library for initialization

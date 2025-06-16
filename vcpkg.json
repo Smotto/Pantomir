@@ -1,12 +1,11 @@
 {
   "name": "pantomir",
   "version": "1.0.0",
-  "builtin-baseline": "d5ec528843d29e3a52d745a64b469f810b2cedbf",
+  "builtin-baseline": "ef7dbf94b9198bc58f45951adcf1f041fcbc5ea0",
   "dependencies": [
     "xxhash",
     "glm",
     "stb",
-    "assimp",
     {
       "name": "sdl3",
       "features": [
