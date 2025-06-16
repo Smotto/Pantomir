@@ -67,7 +67,23 @@ void PantomirEngine::InitSDLWindow() {
 	constexpr SDL_WindowFlags windowFlags = SDL_WINDOW_VULKAN;
 
 	SDL_Init(initFlags);
-	_window = SDL_CreateWindow("Vulkan Engine", _windowExtent.width, _windowExtent.height, windowFlags);
+
+	SDL_DisplayID id = SDL_GetPrimaryDisplay();
+	SDL_Rect displayBounds{};
+	if (SDL_GetDisplayBounds(id, &displayBounds) == 0) {
+		LOG(Engine, Error, "Failed to get display bounds: {}", SDL_GetError());
+		displayBounds = {0, 0, 1280, 720}; // Fallback
+	}
+
+	int width  = displayBounds.w * 0.5;
+	int height = displayBounds.h * 0.5;
+
+	_windowExtent = { static_cast<uint32_t>(width), static_cast<uint32_t>(height) };
+
+	_window = SDL_CreateWindow("Vulkan Engine",
+                               width, height,
+                               windowFlags);
+
 	if (_window == nullptr) {
 		LOG(Engine, Error, "SDL error when creating a window: {}", SDL_GetError());
 	}
