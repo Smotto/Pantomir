@@ -4,6 +4,8 @@
 #include "VkDescriptors.h"
 #include "VkTypes.h"
 
+struct MeshAsset;
+
 struct ComputePushConstants {
 	glm::vec4 data1;
 	glm::vec4 data2;
@@ -55,10 +57,6 @@ class PantomirEngine {
 public:
 	VkPipelineLayout           _meshPipelineLayout;
 	VkPipeline                 _meshPipeline;
-	GPUMeshBuffers             _rectangle;
-
-	VkPipelineLayout           _trianglePipelineLayout;
-	VkPipeline                 _trianglePipeline;
 
 	std::vector<ComputeEffect> backgroundEffects;
 	int                        currentBackgroundEffect { 0 };
@@ -74,6 +72,7 @@ public:
 	VkDescriptorSetLayout      _drawImageDescriptorLayout;
 
 	AllocatedImage             _drawImage {};
+	AllocatedImage             _depthImage {};
 	VkExtent2D                 _drawExtent {};
 	VmaAllocator               _allocator {};
 	DeletionQueue              _mainDeletionQueue;
@@ -84,6 +83,7 @@ public:
 	VkExtent2D                 _windowExtent { 1280, 720 };
 
 	struct SDL_Window*         _window { nullptr };
+	float                      _windowRatio = 0.8;
 
 	VkInstance                 _instance {};       // Vulkan Library Handle
 	VkDebugUtilsMessengerEXT   _debugMessenger {}; // Vulkan debug output handle
@@ -104,8 +104,10 @@ public:
         return _frames[_frameNumber % FRAME_OVERLAP];
 	};
 
-	VkQueue  _graphicsQueue {};
-	uint32_t _graphicsQueueFamily {};
+	VkQueue                                 _graphicsQueue {};
+	uint32_t                                _graphicsQueueFamily {};
+
+	std::vector<std::shared_ptr<MeshAsset>> _testMeshes;
 
 	PantomirEngine(const PantomirEngine&)                   = delete;
 	PantomirEngine&        operator=(const PantomirEngine&) = delete;
@@ -123,6 +125,8 @@ public:
 	void              DrawImgui(VkCommandBuffer cmd, VkImageView targetImageView);
 	void              ImmediateSubmit(std::function<void(VkCommandBuffer cmd)>&& anonymousFunction);
 
+	GPUMeshBuffers    UploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices);
+
 private:
 	PantomirEngine();
 	~PantomirEngine();
@@ -136,11 +140,8 @@ private:
 	void            InitPipelines();
 	void            InitBackgroundPipelines();
 	void            InitImgui();
-	void            InitTrianglePipeline();
 	void            InitMeshPipeline();
 	void            InitDefaultData();
-
-	GPUMeshBuffers  UploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices);
 
 	AllocatedBuffer CreateBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
 	void            CreateSwapchain(uint32_t width, uint32_t height);

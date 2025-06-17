@@ -1,7 +1,6 @@
 #include <PantomirEngine.h>
 
 #include <chrono>
-#include <iostream>
 #include <thread>
 
 #include <VkBootstrap.h>
@@ -18,9 +17,13 @@
 #include "VkImages.h"
 #include "VkInitializers.h"
 
+#include "VkLoader.h"
 #include "imgui.h"
 #include "imgui_impl_sdl3.h"
 #include "imgui_impl_vulkan.h"
+
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/transform.hpp>
 
 PantomirEngine::PantomirEngine() {
 	InitSDLWindow();
@@ -31,7 +34,6 @@ PantomirEngine::PantomirEngine() {
 	InitDescriptors();
 	InitPipelines();
 	InitImgui();
-	InitTrianglePipeline();
 	InitMeshPipeline();
 	InitDefaultData();
 }
@@ -51,6 +53,12 @@ PantomirEngine::~PantomirEngine() {
 
 		frame._deletionQueue.flush();
 	}
+
+	for (auto& mesh : _testMeshes) {
+		DestroyBuffer(mesh->meshBuffers.indexBuffer);
+		DestroyBuffer(mesh->meshBuffers.vertexBuffer);
+	}
+
 	_mainDeletionQueue.flush();
 	DestroySwapchain();
 
@@ -69,19 +77,20 @@ void PantomirEngine::InitSDLWindow() {
 	SDL_Init(initFlags);
 
 	SDL_DisplayID id = SDL_GetPrimaryDisplay();
-	SDL_Rect displayBounds{};
-	if (SDL_GetDisplayBounds(id, &displayBounds) == 0) {
+	SDL_Rect      displayBounds {};
+	if (!SDL_GetDisplayBounds(id, &displayBounds)) {
 		LOG(Engine, Error, "Failed to get display bounds: {}", SDL_GetError());
-		displayBounds = {0, 0, 1280, 720}; // Fallback
+		displayBounds = { 0, 0, static_cast<int>(_windowExtent.width), static_cast<int>(_windowExtent.height) }; // Fallback
 	}
 
-	int width  = displayBounds.w * 0.5;
-	int height = displayBounds.h * 0.5;
+	int width     = displayBounds.w * _windowRatio;
+	int height    = displayBounds.h * _windowRatio;
 
 	_windowExtent = { static_cast<uint32_t>(width), static_cast<uint32_t>(height) };
 
-	_window = SDL_CreateWindow("Vulkan Engine",
-                               width, height,
+	_window       = SDL_CreateWindow("Vulkan Engine",
+                               width,
+                               height,
                                windowFlags);
 
 	if (_window == nullptr) {
@@ -178,18 +187,34 @@ void PantomirEngine::InitSwapchain() {
 	renderImageAllocInfo.usage                   = VMA_MEMORY_USAGE_GPU_ONLY;
 	renderImageAllocInfo.requiredFlags           = static_cast<VkMemoryPropertyFlags>(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-	// allocate and create the image
+	// Allocate and create the image
 	vmaCreateImage(_allocator, &renderImageInfo, &renderImageAllocInfo, &_drawImage._image, &_drawImage._allocation, nullptr);
 
-	// build an image-view for the draw image to use for rendering
+	// For the draw image to use for rendering
 	VkImageViewCreateInfo renderViewInfo = vkinit::ImageviewCreateInfo(_drawImage._imageFormat, _drawImage._image, VK_IMAGE_ASPECT_COLOR_BIT);
 
 	VK_CHECK(vkCreateImageView(_device, &renderViewInfo, nullptr, &_drawImage._imageView));
 
-	// add to deletion queues
+	_depthImage._imageFormat = VK_FORMAT_D32_SFLOAT;
+	_depthImage._imageExtent = drawImageExtent;
+	VkImageUsageFlags depthImageUsages {};
+	depthImageUsages |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+
+	VkImageCreateInfo dimg_info = vkinit::ImageCreateInfo(_depthImage._imageFormat, depthImageUsages, drawImageExtent);
+
+	vmaCreateImage(_allocator, &dimg_info, &renderImageAllocInfo, &_depthImage._image, &_depthImage._allocation, nullptr);
+
+	// For the draw image to use for rendering
+	VkImageViewCreateInfo dview_info = vkinit::ImageviewCreateInfo(_depthImage._imageFormat, _depthImage._image, VK_IMAGE_ASPECT_DEPTH_BIT);
+
+	VK_CHECK(vkCreateImageView(_device, &dview_info, nullptr, &_depthImage._imageView));
+
 	_mainDeletionQueue.push_function([=]() {
 		vkDestroyImageView(_device, _drawImage._imageView, nullptr);
 		vmaDestroyImage(_allocator, _drawImage._image, _drawImage._allocation);
+
+		vkDestroyImageView(_device, _depthImage._imageView, nullptr);
+		vmaDestroyImage(_allocator, _depthImage._image, _depthImage._allocation);
 	});
 }
 
@@ -424,61 +449,6 @@ void PantomirEngine::InitImgui() {
 	});
 }
 
-void PantomirEngine::InitTrianglePipeline() {
-	VkShaderModule triangleFragShader;
-	if (!vkutil::LoadShaderModule("Assets/Shaders/colored_triangle.frag.spv", _device, &triangleFragShader)) {
-		LOG(Engine, Error, "Error when building the triangle fragment shader module");
-	} else {
-		LOG(Engine, Info, "Triangle fragment shader successfully loaded");
-	}
-
-	VkShaderModule triangleVertexShader;
-	if (!vkutil::LoadShaderModule("Assets/Shaders/colored_triangle.vert.spv", _device, &triangleVertexShader)) {
-		LOG(Engine, Error, "Error when building the triangle vertex shader module");
-	} else {
-		LOG(Engine, Info, "Triangle vertex shader successfully loaded");
-	}
-
-	// Build the pipeline layout that controls the inputs/outputs of the shader
-	// We are not using descriptor sets or other systems yet, so no need to use anything other than empty default
-	VkPipelineLayoutCreateInfo pipeline_layout_info = vkinit::PipelineLayoutCreateInfo();
-	VK_CHECK(vkCreatePipelineLayout(_device, &pipeline_layout_info, nullptr, &_trianglePipelineLayout));
-
-	PipelineBuilder pipelineBuilder;
-
-	// Use the triangle layout we created
-	pipelineBuilder._pipelineLayout = _trianglePipelineLayout;
-	// Connecting the vertex and pixel shaders to the pipeline
-	pipelineBuilder.SetShaders(triangleVertexShader, triangleFragShader);
-	// It will draw triangles
-	pipelineBuilder.SetInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-	// Filled triangles
-	pipelineBuilder.SetPolygonMode(VK_POLYGON_MODE_FILL);
-	// No Backface Culling
-	pipelineBuilder.SetCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
-	// No multisampling
-	pipelineBuilder.SetMultisamplingNone();
-	// No blending
-	pipelineBuilder.DisableBlending();
-	// No depth testing
-	pipelineBuilder.DisableDepthtest();
-
-	// Connect the image format we will draw into, from draw image
-	pipelineBuilder.SetColorAttachmentFormat(_drawImage._imageFormat);
-	pipelineBuilder.SetDepthFormat(VK_FORMAT_UNDEFINED);
-
-	// Finally build the pipeline
-	_trianglePipeline = pipelineBuilder.BuildPipeline(_device);
-
-	// Clean structures
-	vkDestroyShaderModule(_device, triangleFragShader, nullptr);
-	vkDestroyShaderModule(_device, triangleVertexShader, nullptr);
-	_mainDeletionQueue.push_function([&]() {
-		vkDestroyPipelineLayout(_device, _trianglePipelineLayout, nullptr);
-		vkDestroyPipeline(_device, _trianglePipeline, nullptr);
-	});
-}
-
 void PantomirEngine::InitMeshPipeline() {
 	VkShaderModule triangleFragShader;
 	if (!vkutil::LoadShaderModule("Assets/Shaders/colored_triangle.frag.spv", _device, &triangleFragShader)) {
@@ -522,11 +492,11 @@ void PantomirEngine::InitMeshPipeline() {
 	// No Blending
 	pipelineBuilder.DisableBlending();
 
-	pipelineBuilder.DisableDepthtest();
+	pipelineBuilder.EnableDepthtest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
 
-	// Connect the image format we will draw into, from draw image
+	// connect the image format we will draw into, from draw image
 	pipelineBuilder.SetColorAttachmentFormat(_drawImage._imageFormat);
-	pipelineBuilder.SetDepthFormat(VK_FORMAT_UNDEFINED);
+	pipelineBuilder.SetDepthFormat(_depthImage._imageFormat);
 
 	// Finally build the pipeline
 	_meshPipeline = pipelineBuilder.BuildPipeline(_device);
@@ -542,35 +512,7 @@ void PantomirEngine::InitMeshPipeline() {
 }
 
 void PantomirEngine::InitDefaultData() {
-	std::array<Vertex, 4> rect_vertices;
-
-	rect_vertices[0].position = { 0.5, -0.5, 0 };
-	rect_vertices[1].position = { 0.5, 0.5, 0 };
-	rect_vertices[2].position = { -0.5, -0.5, 0 };
-	rect_vertices[3].position = { -0.5, 0.5, 0 };
-
-	rect_vertices[0].color    = { 0, 0, 0, 1 };
-	rect_vertices[1].color    = { 0.5, 0.5, 0.5, 1 };
-	rect_vertices[2].color    = { 1, 0, 0, 1 };
-	rect_vertices[3].color    = { 0, 1, 0, 1 };
-
-	std::array<uint32_t, 6> rect_indices;
-
-	rect_indices[0] = 0;
-	rect_indices[1] = 1;
-	rect_indices[2] = 2;
-
-	rect_indices[3] = 2;
-	rect_indices[4] = 1;
-	rect_indices[5] = 3;
-
-	_rectangle       = UploadMesh(rect_indices, rect_vertices);
-
-	// Delete the rectangle data on engine shutdown
-	_mainDeletionQueue.push_function([&]() {
-		DestroyBuffer(_rectangle.indexBuffer);
-		DestroyBuffer(_rectangle.vertexBuffer);
-	});
+	_testMeshes = VkLoader::LoadGltfMeshes(this, "Assets\\Models\\basicmesh.glb").value();
 }
 
 GPUMeshBuffers PantomirEngine::UploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices) {
@@ -655,7 +597,7 @@ void PantomirEngine::CreateSwapchain(uint32_t width, uint32_t height) {
 	        .value();
 
 	_swapchainExtent     = builtSwapchain.extent;
-	// store swapchain and its related images
+	// Store swapchain and its related images
 	_swapchain           = builtSwapchain.swapchain;
 	_swapchainImages     = builtSwapchain.get_images().value();
 	_swapchainImageViews = builtSwapchain.get_image_views().value();
@@ -664,7 +606,7 @@ void PantomirEngine::CreateSwapchain(uint32_t width, uint32_t height) {
 void PantomirEngine::DestroySwapchain() {
 	vkDestroySwapchainKHR(_device, _swapchain, nullptr);
 
-	// destroy swapchain resources
+	// Destroy swapchain resources
 	for (int i = 0; i < _swapchainImageViews.size(); i++) {
 
 		vkDestroyImageView(_device, _swapchainImageViews[i], nullptr);
@@ -718,6 +660,7 @@ void PantomirEngine::Draw() {
 	DrawBackground(commandBuffer);
 
 	vkutil::TransitionImage(commandBuffer, _drawImage._image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+	vkutil::TransitionImage(commandBuffer, _depthImage._image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 
 	DrawGeometry(commandBuffer);
 
@@ -791,12 +734,10 @@ void PantomirEngine::DrawBackground(VkCommandBuffer commandBuffer) {
 
 void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
 	// Begin a render pass connected to our draw image
-	VkRenderingAttachmentInfo colorAttachment = vkinit::AttachmentInfo(_drawImage._imageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-
-	VkRenderingInfo           renderInfo      = vkinit::RenderingInfo(_drawExtent, &colorAttachment, nullptr);
+	VkRenderingAttachmentInfo colorAttachment = vkinit::AttachmentInfo(_drawImage._imageView, nullptr, VK_IMAGE_LAYOUT_GENERAL);
+	VkRenderingAttachmentInfo depthAttachment = vkinit::DepthAttachmentInfo(_depthImage._imageView, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+	VkRenderingInfo           renderInfo      = vkinit::RenderingInfo(_drawExtent, &colorAttachment, &depthAttachment);
 	vkCmdBeginRendering(commandBuffer, &renderInfo);
-
-	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _trianglePipeline);
 
 	// Set dynamic viewport and scissor
 	VkViewport viewport = {};
@@ -806,7 +747,6 @@ void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
 	viewport.height     = _drawExtent.height;
 	viewport.minDepth   = 0.f;
 	viewport.maxDepth   = 1.f;
-
 	vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
 
 	VkRect2D scissor      = {};
@@ -814,25 +754,23 @@ void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
 	scissor.offset.y      = 0;
 	scissor.extent.width  = _drawExtent.width;
 	scissor.extent.height = _drawExtent.height;
-
 	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-	// Launch a draw command to draw 3 vertices
-	vkCmdDraw(commandBuffer, 3, 1, 0, 0);
-
+	// Bind mesh pipeline
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _meshPipeline);
 
-	vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
-	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+	// Camera and transform setup
+	glm::mat4 view       = glm::translate(glm::vec3 { 0, 0, -5 });
+	glm::mat4 projection = glm::perspective(glm::radians(70.f), (float)_drawExtent.width / (float)_drawExtent.height, 10000.f, 0.1f);
+	projection[1][1] *= -1; // Flip Y for GLTF-style axis
 
 	GPUDrawPushConstants push_constants;
-	push_constants.worldMatrix  = glm::mat4 { 1.f };
-	push_constants.vertexBuffer = _rectangle.vertexBufferAddress;
+	push_constants.worldMatrix  = projection * view;
+	push_constants.vertexBuffer = _testMeshes[2]->meshBuffers.vertexBufferAddress;
 
 	vkCmdPushConstants(commandBuffer, _meshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &push_constants);
-	vkCmdBindIndexBuffer(commandBuffer, _rectangle.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-
-	vkCmdDrawIndexed(commandBuffer, 6, 1, 0, 0, 0);
+	vkCmdBindIndexBuffer(commandBuffer, _testMeshes[2]->meshBuffers.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+	vkCmdDrawIndexed(commandBuffer, _testMeshes[2]->surfaces[0].count, 1, _testMeshes[2]->surfaces[0].startIndex, 0, 0);
 
 	vkCmdEndRendering(commandBuffer);
 }
@@ -863,9 +801,9 @@ void PantomirEngine::ImmediateSubmit(std::function<void(VkCommandBuffer cmd)>&& 
 	VK_CHECK(vkEndCommandBuffer(cmd));
 
 	VkCommandBufferSubmitInfo commandInfo = vkinit::CommandBufferSubmitInfo(cmd);
-	VkSubmitInfo2             submit  = vkinit::SubmitInfo(&commandInfo, nullptr, nullptr);
+	VkSubmitInfo2             submit      = vkinit::SubmitInfo(&commandInfo, nullptr, nullptr);
 
-	// submit command buffer to the queue and execute it.
+	// Submit command buffer to the queue and execute it.
 	//  _renderFence will now block until the graphic commands finish execution
 	VK_CHECK(vkQueueSubmit2(_graphicsQueue, 1, &submit, _immediateFence));
 

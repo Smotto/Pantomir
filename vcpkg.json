@@ -6,6 +6,7 @@
     "xxhash",
     "glm",
     "stb",
+    "fastgltf",
     {
       "name": "sdl3",
       "features": [

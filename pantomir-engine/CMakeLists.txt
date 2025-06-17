@@ -38,6 +38,7 @@ target_link_libraries(pantomir-engine PRIVATE
         Vulkan::Vulkan       # Vulkan
         glm::glm             # Math library
         Stb::Stb             # Image loading
+        fastgltf::fastgltf   # Model Loading
         xxHash::xxhash       # Hashing models
         vk-bootstrap::vk-bootstrap # Custom Vulkan library for initialization
         GPUOpen::VulkanMemoryAllocator
