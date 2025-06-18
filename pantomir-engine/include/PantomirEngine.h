@@ -58,8 +58,8 @@ public:
 	VkPipelineLayout           _meshPipelineLayout;
 	VkPipeline                 _meshPipeline;
 
-	std::vector<ComputeEffect> backgroundEffects;
-	int                        currentBackgroundEffect { 0 };
+	std::vector<ComputeEffect> _backgroundEffects;
+	int                        _currentBackgroundEffect { 0 };
 
 	// immediate submit structures
 	VkFence                    _immediateFence;
@@ -80,10 +80,12 @@ public:
 	bool                       _isInitialized { false };
 	int                        _frameNumber { 0 };
 	bool                       _stopRendering { false };
+	bool                       _resizeRequested { false };
 	VkExtent2D                 _windowExtent { 1280, 720 };
 
 	struct SDL_Window*         _window { nullptr };
 	float                      _windowRatio = 0.8;
+	float                      _renderScale  = 1.f;
 
 	VkInstance                 _instance {};       // Vulkan Library Handle
 	VkDebugUtilsMessengerEXT   _debugMessenger {}; // Vulkan debug output handle
@@ -146,6 +148,7 @@ private:
 	AllocatedBuffer CreateBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
 	void            CreateSwapchain(uint32_t width, uint32_t height);
 	void            DestroySwapchain();
+	void            ResizeSwapchain();
 	void            DestroyBuffer(const AllocatedBuffer& buffer);
 };
 

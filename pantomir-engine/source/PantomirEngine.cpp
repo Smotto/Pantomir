@@ -72,7 +72,7 @@ PantomirEngine::~PantomirEngine() {
 
 void PantomirEngine::InitSDLWindow() {
 	constexpr SDL_InitFlags   initFlags   = SDL_INIT_VIDEO;
-	constexpr SDL_WindowFlags windowFlags = SDL_WINDOW_VULKAN;
+	constexpr SDL_WindowFlags windowFlags = SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE;
 
 	SDL_Init(initFlags);
 
@@ -373,8 +373,8 @@ void PantomirEngine::InitBackgroundPipelines() {
 	VK_CHECK(vkCreateComputePipelines(_device, VK_NULL_HANDLE, 1, &computePipelineCreateInfo, nullptr, &sky.pipeline));
 
 	// add the 2 background effects into the array
-	backgroundEffects.push_back(gradient);
-	backgroundEffects.push_back(sky);
+	_backgroundEffects.push_back(gradient);
+	_backgroundEffects.push_back(sky);
 
 	// destroy structures properly
 	vkDestroyShaderModule(_device, gradientShader, nullptr);
@@ -490,7 +490,7 @@ void PantomirEngine::InitMeshPipeline() {
 	// No Multisampling
 	pipelineBuilder.SetMultisamplingNone();
 	// No Blending
-//	pipelineBuilder.DisableBlending();
+	//	pipelineBuilder.DisableBlending();
 	pipelineBuilder.EnableBlendingAdditive();
 
 	pipelineBuilder.EnableDepthtest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
@@ -637,7 +637,11 @@ void PantomirEngine::Draw() {
 	get_current_frame()._deletionQueue.flush();
 
 	uint32_t swapchainImageIndex;
-	VK_CHECK(vkAcquireNextImageKHR(_device, _swapchain, 1000000000, get_current_frame()._swapchainSemaphore, nullptr, &swapchainImageIndex));
+	VkResult acquireNextImageKhr = vkAcquireNextImageKHR(_device, _swapchain, 1000000000, get_current_frame()._swapchainSemaphore, nullptr, &swapchainImageIndex);
+	if (acquireNextImageKhr == VK_ERROR_OUT_OF_DATE_KHR) {
+		_resizeRequested = true;
+		return;
+	}
 
 	VkCommandBuffer commandBuffer = get_current_frame()._mainCommandBuffer;
 
@@ -648,8 +652,8 @@ void PantomirEngine::Draw() {
 	// Begin the command buffer recording. We will use this command buffer exactly once, so we want to let vulkan know that
 	VkCommandBufferBeginInfo command_buffer_begin_info = vkinit::CommandBufferBeginInfo(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
-	_drawExtent.width                                  = _drawImage._imageExtent.width;
-	_drawExtent.height                                 = _drawImage._imageExtent.height;
+	_drawExtent.height = std::min(_swapchainExtent.height, _drawImage._imageExtent.height) * _renderScale;
+	_drawExtent.width= std::min(_swapchainExtent.width, _drawImage._imageExtent.width) * _renderScale;
 
 	/* Start Recording */
 	VK_CHECK(vkBeginCommandBuffer(commandBuffer, &command_buffer_begin_info));
@@ -713,14 +717,17 @@ void PantomirEngine::Draw() {
 
 	presentInfo.pImageIndices      = &swapchainImageIndex;
 
-	VK_CHECK(vkQueuePresentKHR(_graphicsQueue, &presentInfo));
+	VkResult presentResult         = vkQueuePresentKHR(_graphicsQueue, &presentInfo);
+	if (presentResult == VK_ERROR_OUT_OF_DATE_KHR) {
+		_resizeRequested = true;
+	}
 
 	// increase the number of frames drawn
 	_frameNumber++;
 }
 
 void PantomirEngine::DrawBackground(VkCommandBuffer commandBuffer) {
-	ComputeEffect& effect = backgroundEffects[currentBackgroundEffect];
+	ComputeEffect& effect = _backgroundEffects[_currentBackgroundEffect];
 
 	// bind the background compute pipeline
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, effect.pipeline);
@@ -823,6 +830,10 @@ void PantomirEngine::MainLoop() {
 				bQuit = true;
 			}
 
+			if (e.type == SDL_EVENT_WINDOW_RESIZED) {
+				_resizeRequested = true;
+			}
+
 			if (e.type == SDL_EVENT_WINDOW_MINIMIZED) {
 				_stopRendering = true;
 			}
@@ -840,17 +851,23 @@ void PantomirEngine::MainLoop() {
 			continue;
 		}
 
+		if (_resizeRequested) {
+			ResizeSwapchain();
+		}
+
 		ImGui_ImplVulkan_NewFrame();
 		ImGui_ImplSDL3_NewFrame();
 		ImGui::NewFrame();
 
 		if (ImGui::Begin("background")) {
 
-			ComputeEffect& selected = backgroundEffects[currentBackgroundEffect];
+			ComputeEffect& selected = _backgroundEffects[_currentBackgroundEffect];
+
+			ImGui::SliderFloat("Render Scale", &_renderScale, 0.3f, 1.f);
 
 			ImGui::Text("Selected effect: ", selected.name);
 
-			ImGui::SliderInt("Effect Index", &currentBackgroundEffect, 0, backgroundEffects.size() - 1);
+			ImGui::SliderInt("Effect Index", &_currentBackgroundEffect, 0, _backgroundEffects.size() - 1);
 
 			ImGui::InputFloat4("data1", (float*)&selected.data.data1);
 			ImGui::InputFloat4("data2", (float*)&selected.data.data2);
@@ -863,6 +880,17 @@ void PantomirEngine::MainLoop() {
 
 		Draw();
 	}
+}
+
+void PantomirEngine::ResizeSwapchain() {
+	vkDeviceWaitIdle(_device);
+	DestroySwapchain();
+	int w, h;
+	SDL_GetWindowSize(_window, &w, &h);
+	_windowExtent.width  = w;
+	_windowExtent.height = h;
+	CreateSwapchain(w, h);
+	_resizeRequested = false;
 }
 
 int main(int argc, char* argv[]) {
