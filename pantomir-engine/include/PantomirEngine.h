@@ -6,6 +6,15 @@
 
 struct MeshAsset;
 
+struct GPUSceneData {
+	glm::mat4 view;
+	glm::mat4 proj;
+	glm::mat4 viewproj;
+	glm::vec4 ambientColor;
+	glm::vec4 sunlightDirection; // w for sun power
+	glm::vec4 sunlightColor;
+};
+
 struct ComputePushConstants {
 	glm::vec4 data1;
 	glm::vec4 data2;
@@ -43,11 +52,14 @@ struct DeletionQueue {
 };
 
 struct FrameData {
-	VkCommandPool   _commandPool {};
-	VkCommandBuffer _mainCommandBuffer {};
-	VkSemaphore     _swapchainSemaphore {}, _renderSemaphore {};
-	VkFence         _renderFence {};
-	DeletionQueue   _deletionQueue;
+	VkSemaphore                 _swapchainSemaphore {}, _renderSemaphore {};
+	VkFence                     _renderFence {};
+
+	VkCommandPool               _commandPool {};
+	VkCommandBuffer             _mainCommandBuffer {};
+
+	DeletionQueue               _deletionQueue;
+	DescriptorAllocatorGrowable _frameDescriptors;
 };
 
 constexpr unsigned int     FRAME_OVERLAP = 2;
@@ -71,6 +83,9 @@ public:
 	VkDescriptorSet            _drawImageDescriptors;
 	VkDescriptorSetLayout      _drawImageDescriptorLayout;
 
+	GPUSceneData               _sceneData;
+	VkDescriptorSetLayout      _gpuSceneDataDescriptorLayout;
+
 	AllocatedImage             _drawImage {};
 	AllocatedImage             _depthImage {};
 	VkExtent2D                 _drawExtent {};
@@ -85,7 +100,7 @@ public:
 
 	struct SDL_Window*         _window { nullptr };
 	float                      _windowRatio = 0.8;
-	float                      _renderScale  = 1.f;
+	float                      _renderScale = 1.f;
 
 	VkInstance                 _instance {};       // Vulkan Library Handle
 	VkDebugUtilsMessengerEXT   _debugMessenger {}; // Vulkan debug output handle
