@@ -490,7 +490,8 @@ void PantomirEngine::InitMeshPipeline() {
 	// No Multisampling
 	pipelineBuilder.SetMultisamplingNone();
 	// No Blending
-	pipelineBuilder.DisableBlending();
+//	pipelineBuilder.DisableBlending();
+	pipelineBuilder.EnableBlendingAdditive();
 
 	pipelineBuilder.EnableDepthtest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
 

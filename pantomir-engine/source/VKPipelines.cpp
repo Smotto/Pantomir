@@ -116,15 +116,15 @@ void PipelineBuilder::SetDepthFormat(VkFormat format) {
 }
 
 void PipelineBuilder::EnableDepthtest(bool depthWriteEnable, VkCompareOp op) {
-	_depthStencil.depthTestEnable = VK_TRUE;
-	_depthStencil.depthWriteEnable = depthWriteEnable;
-	_depthStencil.depthCompareOp = op;
+	_depthStencil.depthTestEnable       = VK_TRUE;
+	_depthStencil.depthWriteEnable      = depthWriteEnable;
+	_depthStencil.depthCompareOp        = op;
 	_depthStencil.depthBoundsTestEnable = VK_FALSE;
-	_depthStencil.stencilTestEnable = VK_FALSE;
-	_depthStencil.front = {};
-	_depthStencil.back = {};
-	_depthStencil.minDepthBounds = 0.f;
-	_depthStencil.maxDepthBounds = 1.f;
+	_depthStencil.stencilTestEnable     = VK_FALSE;
+	_depthStencil.front                 = {};
+	_depthStencil.back                  = {};
+	_depthStencil.minDepthBounds        = 0.f;
+	_depthStencil.maxDepthBounds        = 1.f;
 }
 
 void PipelineBuilder::DisableDepthtest() {
@@ -148,6 +148,28 @@ void PipelineBuilder::Clear() {
 	_depthStencil         = { .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO };
 	_renderInfo           = { .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
 	_shaderStages.clear();
+}
+
+void PipelineBuilder::EnableBlendingAdditive() {
+	_colorBlendAttachment.colorWriteMask      = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+	_colorBlendAttachment.blendEnable         = VK_TRUE;
+	_colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+	_colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
+	_colorBlendAttachment.colorBlendOp        = VK_BLEND_OP_ADD;
+	_colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+	_colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+	_colorBlendAttachment.alphaBlendOp        = VK_BLEND_OP_ADD;
+}
+
+void PipelineBuilder::EnableBlendingAlphablend() {
+	_colorBlendAttachment.colorWriteMask      = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+	_colorBlendAttachment.blendEnable         = VK_TRUE;
+	_colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+	_colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+	_colorBlendAttachment.colorBlendOp        = VK_BLEND_OP_ADD;
+	_colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+	_colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+	_colorBlendAttachment.alphaBlendOp        = VK_BLEND_OP_ADD;
 }
 
 bool vkutil::LoadShaderModule(const char* filePath, VkDevice device, VkShaderModule* outShaderModule) {
