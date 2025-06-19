@@ -116,8 +116,7 @@ public:
 	VkExtent2D                 _swapchainExtent {};
 
 	FrameData                  _frames[FRAME_OVERLAP];
-
-	FrameData&                 get_current_frame() {
+	FrameData&                 GetCurrentFrame() {
         return _frames[_frameNumber % FRAME_OVERLAP];
 	};
 
@@ -125,6 +124,16 @@ public:
 	uint32_t                                _graphicsQueueFamily {};
 
 	std::vector<std::shared_ptr<MeshAsset>> _testMeshes;
+
+	AllocatedImage _whiteImage;
+	AllocatedImage _blackImage;
+	AllocatedImage _greyImage;
+	AllocatedImage _errorCheckerboardImage;
+
+	VkSampler _defaultSamplerLinear;
+	VkSampler _defaultSamplerNearest;
+
+	VkDescriptorSetLayout _singleImageDescriptorLayout;
 
 	PantomirEngine(const PantomirEngine&)                   = delete;
 	PantomirEngine&        operator=(const PantomirEngine&) = delete;
@@ -143,6 +152,9 @@ public:
 	void              ImmediateSubmit(std::function<void(VkCommandBuffer cmd)>&& anonymousFunction);
 
 	GPUMeshBuffers    UploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices);
+	AllocatedImage    CreateImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
+	AllocatedImage    CreateImage(void* data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
+	void              DestroyImage(const AllocatedImage& img);
 
 private:
 	PantomirEngine();

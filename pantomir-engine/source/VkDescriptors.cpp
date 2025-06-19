@@ -1,20 +1,23 @@
 #include "VkDescriptors.h"
+#include "LoggerMacros.h"
 #include "VkTypes.h"
 
-void DescriptorWriter::Clear()
-{
+void DescriptorWriter::Clear() {
 	_imageInfos.clear();
 	_writes.clear();
 	_bufferInfos.clear();
 }
 
-void DescriptorWriter::UpdateSet(VkDevice device, VkDescriptorSet set)
-{
+void DescriptorWriter::UpdateSet(VkDevice device, VkDescriptorSet set) {
 	for (VkWriteDescriptorSet& write : _writes) {
 		write.dstSet = set;
 	}
 
-	vkUpdateDescriptorSets(device, (uint32_t)_writes.size(), _writes.data(), 0, nullptr);
+	vkUpdateDescriptorSets(device,
+	                       static_cast<uint32_t>(_writes.size()),
+	                       _writes.data(),
+	                       0,
+	                       nullptr);
 }
 
 void DescriptorWriter::WriteBuffer(int binding, VkBuffer buffer, size_t size, size_t offset, VkDescriptorType type) {
@@ -34,21 +37,19 @@ void DescriptorWriter::WriteBuffer(int binding, VkBuffer buffer, size_t size, si
 	_writes.push_back(write);
 }
 
-void DescriptorWriter::WriteImage(int binding,VkImageView image, VkSampler sampler,  VkImageLayout layout, VkDescriptorType type)
-{
-	VkDescriptorImageInfo& info = _imageInfos.emplace_back(VkDescriptorImageInfo{
-	     .sampler = sampler,
-	     .imageView = image,
-	     .imageLayout = layout
-    });
+void DescriptorWriter::WriteImage(int binding, VkImageView image, VkSampler sampler, VkImageLayout layout, VkDescriptorType type) {
+	VkDescriptorImageInfo& info  = _imageInfos.emplace_back(VkDescriptorImageInfo {
+	     .sampler     = sampler,
+	     .imageView   = image,
+	     .imageLayout = layout });
 
-	VkWriteDescriptorSet write = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+	VkWriteDescriptorSet   write = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
 
-	write.dstBinding = binding;
-	write.dstSet = VK_NULL_HANDLE; //left empty for now until we need to write it
-	write.descriptorCount = 1;
-	write.descriptorType = type;
-	write.pImageInfo = &info;
+	write.dstBinding             = binding;
+	write.dstSet                 = VK_NULL_HANDLE; // left empty for now until we need to write it
+	write.descriptorCount        = 1;
+	write.descriptorType         = type;
+	write.pImageInfo             = &info;
 
 	_writes.push_back(write);
 }
@@ -67,30 +68,29 @@ void DescriptorAllocatorGrowable::Init(VkDevice device, uint32_t maxSets, std::s
 	_readyPools.push_back(newPool);
 }
 
-VkDescriptorSet DescriptorAllocatorGrowable::Allocate(VkDevice device, VkDescriptorSetLayout layout, void* pNext)
-{
-	//get or create a pool to allocate from
-	VkDescriptorPool poolToUse = GetPool(device);
+VkDescriptorSet DescriptorAllocatorGrowable::Allocate(VkDevice device, VkDescriptorSetLayout layout, void* pNext) {
+	// Get or create a pool to allocate from
+	VkDescriptorPool            poolToUse = GetPool(device);
 
 	VkDescriptorSetAllocateInfo allocInfo = {};
-	allocInfo.pNext = pNext;
-	allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-	allocInfo.descriptorPool = poolToUse;
-	allocInfo.descriptorSetCount = 1;
-	allocInfo.pSetLayouts = &layout;
+	allocInfo.pNext                       = pNext;
+	allocInfo.sType                       = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+	allocInfo.descriptorPool              = poolToUse;
+	allocInfo.descriptorSetCount          = 1;
+	allocInfo.pSetLayouts                 = &layout;
 
 	VkDescriptorSet ds;
-	VkResult result = vkAllocateDescriptorSets(device, &allocInfo, &ds);
+	VkResult        result = vkAllocateDescriptorSets(device, &allocInfo, &ds);
 
-	//allocation failed. Try again
+	// Allocation failed. Try again
 	if (result == VK_ERROR_OUT_OF_POOL_MEMORY || result == VK_ERROR_FRAGMENTED_POOL) {
 
 		_fullPools.push_back(poolToUse);
 
-		poolToUse = GetPool(device);
+		poolToUse                = GetPool(device);
 		allocInfo.descriptorPool = poolToUse;
 
-		VK_CHECK( vkAllocateDescriptorSets(device, &allocInfo, &ds));
+		VK_CHECK(vkAllocateDescriptorSets(device, &allocInfo, &ds));
 	}
 
 	_readyPools.push_back(poolToUse);
@@ -104,7 +104,7 @@ VkDescriptorPool DescriptorAllocatorGrowable::GetPool(VkDevice device) {
 		_readyPools.pop_back();
 	} else {
 		// need to create a new pool
-		newPool     = CreatePool(device, _setsPerPool, _ratios);
+		newPool      = CreatePool(device, _setsPerPool, _ratios);
 
 		_setsPerPool = _setsPerPool * 1.5;
 		if (_setsPerPool > 4092) {

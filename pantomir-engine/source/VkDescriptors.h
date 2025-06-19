@@ -60,10 +60,6 @@ struct DescriptorLayoutBuilder {
 	VkDescriptorSetLayout                     Build(VkDevice device, VkShaderStageFlags shaderStages, void* pNext = nullptr, VkDescriptorSetLayoutCreateFlags flags = 0);
 
 	void                                      Clear();
-	void                                      UpdateSet(VkDevice device, VkDescriptorSet set);
-};
-
-class VkDescriptors {
 };
 
 #endif /*! VKDESCRIPTORS_H_ */
