@@ -1,25 +1,25 @@
 #ifndef PANTOMIR_ENGINE_H_
 #define PANTOMIR_ENGINE_H_
 
-#include "../source/VkDescriptors.h"
+#include "Camera.h"
 #include "VkDescriptors.h"
 #include "VkTypes.h"
 
-//class IRenderable {
+// class IRenderable {
 //	virtual void Draw(const glm::mat4& topMatrix, DrawContext& ctx) = 0;
-//};
+// };
 
 struct MeshAsset;
 
 struct RenderObject {
-	uint32_t indexCount;
-	uint32_t firstIndex;
-	VkBuffer indexBuffer;
+	uint32_t          indexCount;
+	uint32_t          firstIndex;
+	VkBuffer          indexBuffer;
 
 	MaterialInstance* material;
 
-	glm::mat4 transform;
-	VkDeviceAddress vertexBufferAddress;
+	glm::mat4         transform;
+	VkDeviceAddress   vertexBufferAddress;
 };
 
 struct DrawContext {
@@ -30,7 +30,7 @@ struct MeshNode : public Node {
 
 	std::shared_ptr<MeshAsset> mesh;
 
-	virtual void Draw(const glm::mat4& topMatrix, DrawContext& ctx) override;
+	virtual void               Draw(const glm::mat4& topMatrix, DrawContext& ctx) override;
 };
 
 struct GPUSceneData {
@@ -89,7 +89,7 @@ struct FrameData {
 	DescriptorAllocatorGrowable _frameDescriptors;
 };
 
-constexpr unsigned int     FRAME_OVERLAP = 2;
+constexpr unsigned int             FRAME_OVERLAP = 2;
 inline DescriptorAllocatorGrowable globalDescriptorAllocator;
 
 class PantomirEngine;
@@ -125,61 +125,63 @@ struct GLTFMetallic_Roughness {
 
 class PantomirEngine {
 public:
-	VkPipelineLayout           _meshPipelineLayout;
-	VkPipeline                 _meshPipeline;
+	Camera                                                 _mainCamera;
 
-	std::vector<ComputeEffect> _backgroundEffects;
-	int                        _currentBackgroundEffect { 0 };
+	VkPipelineLayout                                       _meshPipelineLayout;
+	VkPipeline                                             _meshPipeline;
+
+	std::vector<ComputeEffect>                             _backgroundEffects;
+	int                                                    _currentBackgroundEffect { 0 };
 
 	// immediate submit structures
-	VkFence                    _immediateFence;
-	VkCommandBuffer            _immediateCommandBuffer;
-	VkCommandPool              _immediateCommandPool;
+	VkFence                                                _immediateFence;
+	VkCommandBuffer                                        _immediateCommandBuffer;
+	VkCommandPool                                          _immediateCommandPool;
 
-	VkPipeline                 _gradientPipeline;
-	VkPipelineLayout           _gradientPipelineLayout;
-	VkDescriptorSet            _drawImageDescriptors;
-	VkDescriptorSetLayout      _drawImageDescriptorLayout;
+	VkPipeline                                             _gradientPipeline;
+	VkPipelineLayout                                       _gradientPipelineLayout;
+	VkDescriptorSet                                        _drawImageDescriptors;
+	VkDescriptorSetLayout                                  _drawImageDescriptorLayout;
 
-	GPUSceneData               _sceneData;
-	VkDescriptorSetLayout      _gpuSceneDataDescriptorLayout;
+	GPUSceneData                                           _sceneData;
+	VkDescriptorSetLayout                                  _gpuSceneDataDescriptorLayout;
 
-	DrawContext _mainDrawContext;
+	DrawContext                                            _mainDrawContext;
 	std::unordered_map<std::string, std::shared_ptr<Node>> loadedNodes;
 
-	void UpdateScene();
+	void                                                   UpdateScene();
 
-	AllocatedImage             _drawImage {};
-	AllocatedImage             _depthImage {};
-	VkExtent2D                 _drawExtent {};
-	VmaAllocator               _allocator {};
-	DeletionQueue              _mainDeletionQueue;
+	AllocatedImage                                         _drawImage {};
+	AllocatedImage                                         _depthImage {};
+	VkExtent2D                                             _drawExtent {};
+	VmaAllocator                                           _allocator {};
+	DeletionQueue                                          _mainDeletionQueue;
 
-	bool                       _isInitialized { false };
-	int                        _frameNumber { 0 };
-	bool                       _stopRendering { false };
-	bool                       _resizeRequested { false };
-	VkExtent2D                 _windowExtent { 1280, 720 };
+	bool                                                   _isInitialized { false };
+	int                                                    _frameNumber { 0 };
+	bool                                                   _stopRendering { false };
+	bool                                                   _resizeRequested { false };
+	VkExtent2D                                             _windowExtent { 1280, 720 };
 
-	struct SDL_Window*         _window { nullptr };
-	float                      _windowRatio = 0.8;
-	float                      _renderScale = 1.f;
+	struct SDL_Window*                                     _window { nullptr };
+	float                                                  _windowRatio = 0.8;
+	float                                                  _renderScale = 1.f;
 
-	VkInstance                 _instance {};       // Vulkan Library Handle
-	VkDebugUtilsMessengerEXT   _debugMessenger {}; // Vulkan debug output handle
-	VkPhysicalDevice           _chosenGPU {};      // GPU chosen as the default device
-	VkDevice                   _device {};         // Vulkan device for commands
-	VkSurfaceKHR               _surface {};        // Vulkan window surface
+	VkInstance                                             _instance {};       // Vulkan Library Handle
+	VkDebugUtilsMessengerEXT                               _debugMessenger {}; // Vulkan debug output handle
+	VkPhysicalDevice                                       _chosenGPU {};      // GPU chosen as the default device
+	VkDevice                                               _device {};         // Vulkan device for commands
+	VkSurfaceKHR                                           _surface {};        // Vulkan window surface
 
-	VkSwapchainKHR             _swapchain {};
-	VkFormat                   _swapchainImageFormat;
+	VkSwapchainKHR                                         _swapchain {};
+	VkFormat                                               _swapchainImageFormat;
 
-	std::vector<VkImage>       _swapchainImages;
-	std::vector<VkImageView>   _swapchainImageViews;
-	VkExtent2D                 _swapchainExtent {};
+	std::vector<VkImage>                                   _swapchainImages;
+	std::vector<VkImageView>                               _swapchainImageViews;
+	VkExtent2D                                             _swapchainExtent {};
 
-	FrameData                  _frames[FRAME_OVERLAP];
-	FrameData&                 GetCurrentFrame() {
+	FrameData                                              _frames[FRAME_OVERLAP];
+	FrameData&                                             GetCurrentFrame() {
         return _frames[_frameNumber % FRAME_OVERLAP];
 	};
 

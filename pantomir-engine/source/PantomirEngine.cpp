@@ -22,6 +22,8 @@
 #include "imgui_impl_sdl3.h"
 #include "imgui_impl_vulkan.h"
 
+#include "Camera.h"
+
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/transform.hpp>
 
@@ -537,6 +539,12 @@ void PantomirEngine::InitMeshPipeline() {
 }
 
 void PantomirEngine::InitDefaultData() {
+	_mainCamera.velocity = glm::vec3(0.f);
+	_mainCamera.position = glm::vec3(0, 0, 5);
+
+	_mainCamera.pitch = 0;
+	_mainCamera.yaw = 0;
+
 	_testMeshes                           = VkLoader::LoadGltfMeshes(this, "Assets\\Models\\basicmesh.glb").value();
 
 	// 3 default textures, white, grey, black. 1 pixel each
@@ -953,6 +961,8 @@ void PantomirEngine::MainLoop() {
 				bQuit = true;
 			}
 
+			_mainCamera.ProcessSDLEvent(e);
+
 			if (e.type == SDL_EVENT_WINDOW_RESIZED) {
 				_resizeRequested = true;
 			}
@@ -1089,18 +1099,24 @@ void PantomirEngine::DestroyImage(const AllocatedImage& img) {
 }
 
 void PantomirEngine::UpdateScene() {
-	_mainDrawContext.OpaqueSurfaces.clear();
+	_mainCamera.Update();
 
-	loadedNodes["Suzanne"]->Draw(glm::mat4 { 1.f }, _mainDrawContext);
+	glm::mat4 view = _mainCamera.GetViewMatrix();
 
-	_sceneData.view = glm::translate(glm::vec3 { 0, 0, -5 });
 	// camera projection
-	_sceneData.proj = glm::perspective(glm::radians(70.f), (float)_windowExtent.width / (float)_windowExtent.height, 10000.f, 0.1f);
+	glm::mat4 projection = glm::perspective(glm::radians(70.f), (float)_windowExtent.width / (float)_windowExtent.height, 10000.f, 0.1f);
 
 	// invert the Y direction on projection matrix so that we are more similar
 	// to opengl and gltf axis
-	_sceneData.proj[1][1] *= -1;
-	_sceneData.viewproj          = _sceneData.proj * _sceneData.view;
+	projection[1][1] *= -1;
+
+	_sceneData.view = view;
+	_sceneData.proj = projection;
+	_sceneData.viewproj = projection * view;
+
+	_mainDrawContext.OpaqueSurfaces.clear();
+
+	loadedNodes["Suzanne"]->Draw(glm::mat4 { 1.f }, _mainDrawContext);
 
 	// some default lighting parameters
 	_sceneData.ambientColor      = glm::vec4(.1f);
