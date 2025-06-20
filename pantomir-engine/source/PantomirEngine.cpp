@@ -267,7 +267,10 @@ void PantomirEngine::InitSyncStructures() {
 void PantomirEngine::InitDescriptors() {
 	// Create a descriptor pool that will hold 10 sets with 1 image each
 	std::vector<DescriptorAllocatorGrowable::PoolSizeRatio> sizes = {
-		{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1 }
+		{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1 },
+		{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1 },
+		{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1 },
+		{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1 },
 	};
 
 	globalDescriptorAllocator.Init(_device, 10, sizes);
@@ -514,7 +517,6 @@ void PantomirEngine::InitMeshPipeline() {
 	// Blending On/Off
 	pipelineBuilder.EnableBlendingAdditive();
 	//		pipelineBuilder.DisableBlending();
-
 	pipelineBuilder.EnableDepthtest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
 
 	// connect the image format we will draw into, from draw image
@@ -601,6 +603,20 @@ void PantomirEngine::InitDefaultData() {
 	materialResources.dataBufferOffset = 0;
 
 	_defaultData                       = _metalRoughMaterial.WriteMaterial(_device, MaterialPass::MainColor, materialResources, globalDescriptorAllocator);
+
+	for (auto& mesh : _testMeshes) {
+		std::shared_ptr<MeshNode> newNode = std::make_shared<MeshNode>();
+		newNode->mesh                     = mesh;
+
+		newNode->localTransform           = glm::mat4 { 1.f };
+		newNode->worldTransform           = glm::mat4 { 1.f };
+
+		for (auto& s : newNode->mesh->surfaces) {
+			s.material = std::make_shared<GLTFMaterial>(_defaultData);
+		}
+
+		loadedNodes[mesh->name] = std::move(newNode);
+	}
 }
 
 GPUMeshBuffers PantomirEngine::UploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices) {
@@ -717,6 +733,7 @@ int PantomirEngine::Start() {
 }
 
 void PantomirEngine::Draw() {
+	UpdateScene();
 	// CPU-GPU synchronization: wait until the gpu has finished rendering the last frame. Timeout of 1 second
 	VK_CHECK(vkWaitForFences(_device, 1, &GetCurrentFrame()._renderFence, true, 1000000000));
 	VK_CHECK(vkResetFences(_device, 1, &GetCurrentFrame()._renderFence));
@@ -871,31 +888,20 @@ void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
 	scissor.extent.height = _drawExtent.height;
 	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-	// Bind mesh pipeline
-	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _meshPipeline);
+	for (const RenderObject& draw : _mainDrawContext.OpaqueSurfaces) {
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.material->pipeline->pipeline);
+		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.material->pipeline->layout, 0, 1, &globalDescriptor, 0, nullptr);
+		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.material->pipeline->layout, 1, 1, &draw.material->materialSet, 0, nullptr);
 
-	VkDescriptorSet imageSet = GetCurrentFrame()._frameDescriptors.Allocate(_device, _singleImageDescriptorLayout);
-	assert(imageSet != VK_NULL_HANDLE);
-	{
-		DescriptorWriter imageWriter;
-		imageWriter.WriteImage(0, _errorCheckerboardImage._imageView, _defaultSamplerNearest, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-		imageWriter.UpdateSet(_device, imageSet);
+		vkCmdBindIndexBuffer(commandBuffer, draw.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+
+		GPUDrawPushConstants pushConstants;
+		pushConstants.vertexBuffer = draw.vertexBufferAddress;
+		pushConstants.worldMatrix  = draw.transform;
+		vkCmdPushConstants(commandBuffer, draw.material->pipeline->layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
+
+		vkCmdDrawIndexed(commandBuffer, draw.indexCount, 1, draw.firstIndex, 0, 0);
 	}
-
-	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _meshPipelineLayout, 0, 1, &imageSet, 0, nullptr);
-
-	// Camera and transform setup
-	glm::mat4 view       = glm::translate(glm::vec3 { 0, 0, -5 });
-	glm::mat4 projection = glm::perspective(glm::radians(70.f), (float)_drawExtent.width / (float)_drawExtent.height, 10000.f, 0.1f);
-	projection[1][1] *= -1; // Flip Y for GLTF-style axis
-
-	GPUDrawPushConstants push_constants;
-	push_constants.worldMatrix  = projection * view;
-	push_constants.vertexBuffer = _testMeshes[2]->meshBuffers.vertexBufferAddress;
-
-	vkCmdPushConstants(commandBuffer, _meshPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &push_constants);
-	vkCmdBindIndexBuffer(commandBuffer, _testMeshes[2]->meshBuffers.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-	vkCmdDrawIndexed(commandBuffer, _testMeshes[2]->surfaces[0].count, 1, _testMeshes[2]->surfaces[0].startIndex, 0, 0);
 
 	vkCmdEndRendering(commandBuffer);
 }
@@ -1082,6 +1088,34 @@ void PantomirEngine::DestroyImage(const AllocatedImage& img) {
 	vmaDestroyImage(_allocator, img._image, img._allocation);
 }
 
+void PantomirEngine::UpdateScene() {
+	_mainDrawContext.OpaqueSurfaces.clear();
+
+	loadedNodes["Suzanne"]->Draw(glm::mat4 { 1.f }, _mainDrawContext);
+
+	_sceneData.view = glm::translate(glm::vec3 { 0, 0, -5 });
+	// camera projection
+	_sceneData.proj = glm::perspective(glm::radians(70.f), (float)_windowExtent.width / (float)_windowExtent.height, 10000.f, 0.1f);
+
+	// invert the Y direction on projection matrix so that we are more similar
+	// to opengl and gltf axis
+	_sceneData.proj[1][1] *= -1;
+	_sceneData.viewproj          = _sceneData.proj * _sceneData.view;
+
+	// some default lighting parameters
+	_sceneData.ambientColor      = glm::vec4(.1f);
+	_sceneData.sunlightColor     = glm::vec4(1.f);
+	_sceneData.sunlightDirection = glm::vec4(0, 1, 0.5, 1.f);
+
+	for (int x = -3; x < 3; x++) {
+
+		glm::mat4 scale       = glm::scale(glm::vec3 { 0.2 });
+		glm::mat4 translation = glm::translate(glm::vec3 { x, 1, 0 });
+
+		loadedNodes["Cube"]->Draw(translation * scale, _mainDrawContext);
+	}
+}
+
 int main(int argc, char* argv[]) {
 	return PantomirEngine::GetInstance().Start();
 }
@@ -1107,10 +1141,9 @@ void GLTFMetallic_Roughness::BuildPipelines(PantomirEngine* engine) {
 	layoutBuilder.AddBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 	layoutBuilder.AddBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 
-	materialLayout                              = layoutBuilder.Build(engine->_device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+	_materialLayout                             = layoutBuilder.Build(engine->_device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 
-	VkDescriptorSetLayout      layouts[]        = { engine->_gpuSceneDataDescriptorLayout,
-		                                            materialLayout };
+	VkDescriptorSetLayout      layouts[]        = { engine->_gpuSceneDataDescriptorLayout, _materialLayout };
 
 	VkPipelineLayoutCreateInfo mesh_layout_info = vkinit::PipelineLayoutCreateInfo();
 	mesh_layout_info.setLayoutCount             = 2;
@@ -1121,8 +1154,8 @@ void GLTFMetallic_Roughness::BuildPipelines(PantomirEngine* engine) {
 	VkPipelineLayout newLayout;
 	VK_CHECK(vkCreatePipelineLayout(engine->_device, &mesh_layout_info, nullptr, &newLayout));
 
-	opaquePipeline.layout      = newLayout;
-	transparentPipeline.layout = newLayout;
+	_opaquePipeline.layout      = newLayout;
+	_transparentPipeline.layout = newLayout;
 
 	// build the stage-create-info for both vertex and fragment stages. This lets
 	// the pipeline know the shader modules per stage
@@ -1143,14 +1176,14 @@ void GLTFMetallic_Roughness::BuildPipelines(PantomirEngine* engine) {
 	pipelineBuilder._pipelineLayout = newLayout;
 
 	// finally build the pipeline
-	opaquePipeline.pipeline         = pipelineBuilder.BuildPipeline(engine->_device);
+	_opaquePipeline.pipeline        = pipelineBuilder.BuildPipeline(engine->_device);
 
 	// create the transparent variant
 	pipelineBuilder.EnableBlendingAdditive();
 
 	pipelineBuilder.EnableDepthtest(false, VK_COMPARE_OP_GREATER_OR_EQUAL);
 
-	transparentPipeline.pipeline = pipelineBuilder.BuildPipeline(engine->_device);
+	_transparentPipeline.pipeline = pipelineBuilder.BuildPipeline(engine->_device);
 
 	vkDestroyShaderModule(engine->_device, meshFragShader, nullptr);
 	vkDestroyShaderModule(engine->_device, meshVertexShader, nullptr);
@@ -1164,19 +1197,38 @@ MaterialInstance GLTFMetallic_Roughness::WriteMaterial(VkDevice device, Material
 
 	matData.passType = pass;
 	if (pass == MaterialPass::Transparent) {
-		matData.pipeline = &transparentPipeline;
+		matData.pipeline = &_transparentPipeline;
 	} else {
-		matData.pipeline = &opaquePipeline;
+		matData.pipeline = &_opaquePipeline;
 	}
 
-	matData.materialSet = descriptorAllocator.Allocate(device, materialLayout);
+	matData.materialSet = descriptorAllocator.Allocate(device, _materialLayout);
 
-	writer.Clear();
-	writer.WriteBuffer(0, resources.dataBuffer, sizeof(MaterialConstants), resources.dataBufferOffset, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-	writer.WriteImage(1, resources.colorImage._imageView, resources.colorSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-	writer.WriteImage(2, resources.metalRoughImage._imageView, resources.metalRoughSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+	_writer.Clear();
+	_writer.WriteBuffer(0, resources.dataBuffer, sizeof(MaterialConstants), resources.dataBufferOffset, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+	_writer.WriteImage(1, resources.colorImage._imageView, resources.colorSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+	_writer.WriteImage(2, resources.metalRoughImage._imageView, resources.metalRoughSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 
-	writer.UpdateSet(device, matData.materialSet);
+	_writer.UpdateSet(device, matData.materialSet);
 
 	return matData;
+}
+
+void MeshNode::Draw(const glm::mat4& topMatrix, DrawContext& ctx) {
+	glm::mat4 nodeMatrix = topMatrix * worldTransform;
+
+	for (auto& s : mesh->surfaces) {
+		RenderObject def;
+		def.indexCount          = s.count;
+		def.firstIndex          = s.startIndex;
+		def.indexBuffer         = mesh->meshBuffers.indexBuffer.buffer;
+		def.material            = &s.material->data;
+
+		def.transform           = nodeMatrix;
+		def.vertexBufferAddress = mesh->meshBuffers.vertexBufferAddress;
+
+		ctx.OpaqueSurfaces.push_back(def);
+	}
+
+	Node::Draw(topMatrix, ctx);
 }

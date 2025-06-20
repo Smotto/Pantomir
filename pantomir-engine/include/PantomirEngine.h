@@ -12,14 +12,25 @@
 struct MeshAsset;
 
 struct RenderObject {
-	uint32_t          indexCount;
-	uint32_t          firstIndex;
-	VkBuffer          indexBuffer;
+	uint32_t indexCount;
+	uint32_t firstIndex;
+	VkBuffer indexBuffer;
 
 	MaterialInstance* material;
 
-	glm::mat4         transform;
-	VkDeviceAddress   vertexBufferAddress;
+	glm::mat4 transform;
+	VkDeviceAddress vertexBufferAddress;
+};
+
+struct DrawContext {
+	std::vector<RenderObject> OpaqueSurfaces;
+};
+
+struct MeshNode : public Node {
+
+	std::shared_ptr<MeshAsset> mesh;
+
+	virtual void Draw(const glm::mat4& topMatrix, DrawContext& ctx) override;
 };
 
 struct GPUSceneData {
@@ -83,10 +94,10 @@ inline DescriptorAllocatorGrowable globalDescriptorAllocator;
 
 class PantomirEngine;
 struct GLTFMetallic_Roughness {
-	MaterialPipeline      opaquePipeline;
-	MaterialPipeline      transparentPipeline;
+	MaterialPipeline      _opaquePipeline;
+	MaterialPipeline      _transparentPipeline;
 
-	VkDescriptorSetLayout materialLayout;
+	VkDescriptorSetLayout _materialLayout;
 
 	struct MaterialConstants {
 		glm::vec4 colorFactors;
@@ -104,7 +115,7 @@ struct GLTFMetallic_Roughness {
 		uint32_t       dataBufferOffset;
 	};
 
-	DescriptorWriter writer;
+	DescriptorWriter _writer;
 
 	void             BuildPipelines(PantomirEngine* engine);
 	void             ClearResources(VkDevice device);
@@ -132,6 +143,11 @@ public:
 
 	GPUSceneData               _sceneData;
 	VkDescriptorSetLayout      _gpuSceneDataDescriptorLayout;
+
+	DrawContext _mainDrawContext;
+	std::unordered_map<std::string, std::shared_ptr<Node>> loadedNodes;
+
+	void UpdateScene();
 
 	AllocatedImage             _drawImage {};
 	AllocatedImage             _depthImage {};

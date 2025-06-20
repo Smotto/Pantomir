@@ -29,13 +29,13 @@ public:
 	VkDescriptorSet Allocate(VkDevice device, VkDescriptorSetLayout layout, void* pNext = nullptr);
 
 private:
-	VkDescriptorPool              GetPool(VkDevice device);
-	VkDescriptorPool              CreatePool(VkDevice device, uint32_t setCount, std::span<DescriptorAllocatorGrowable::PoolSizeRatio> poolRatios);
+	VkDescriptorPool                                        GetPool(VkDevice device);
+	VkDescriptorPool                                        CreatePool(VkDevice device, uint32_t setCount, std::span<DescriptorAllocatorGrowable::PoolSizeRatio> poolRatios);
 
-	std::vector<DescriptorAllocatorGrowable::PoolSizeRatio>    _ratios;
-	std::vector<VkDescriptorPool> _fullPools;
-	std::vector<VkDescriptorPool> _readyPools;
-	uint32_t                      _setsPerPool;
+	std::vector<DescriptorAllocatorGrowable::PoolSizeRatio> _ratios;
+	std::vector<VkDescriptorPool>                           _fullPools;
+	std::vector<VkDescriptorPool>                           _readyPools;
+	uint32_t                                                _setsPerPool;
 };
 
 struct DescriptorAllocator {

@@ -103,7 +103,7 @@ VkDescriptorPool DescriptorAllocatorGrowable::GetPool(VkDevice device) {
 		newPool = _readyPools.back();
 		_readyPools.pop_back();
 	} else {
-		// need to create a new pool
+		// Need to create a new pool
 		newPool      = CreatePool(device, _setsPerPool, _ratios);
 
 		_setsPerPool = _setsPerPool * 1.5;
