@@ -18,6 +18,22 @@
 #include <glm/mat4x4.hpp>
 #include <glm/vec4.hpp>
 
+enum class MaterialPass :uint8_t {
+	MainColor,
+	Transparent,
+	Other
+};
+struct MaterialPipeline {
+	VkPipeline pipeline;
+	VkPipelineLayout layout;
+};
+
+struct MaterialInstance {
+	MaterialPipeline* pipeline;
+	VkDescriptorSet materialSet;
+	MaterialPass passType;
+};
+
 struct Vertex {
 	glm::vec3 position;
 	float     uv_x;

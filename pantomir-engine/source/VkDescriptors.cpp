@@ -54,7 +54,7 @@ void DescriptorWriter::WriteImage(int binding, VkImageView image, VkSampler samp
 	_writes.push_back(write);
 }
 
-void DescriptorAllocatorGrowable::Init(VkDevice device, uint32_t maxSets, std::span<PoolSizeRatio> poolRatios) {
+void DescriptorAllocatorGrowable::Init(VkDevice device, uint32_t maxSets, std::span<DescriptorAllocatorGrowable::PoolSizeRatio> poolRatios) {
 	_ratios.clear();
 
 	for (auto r : poolRatios) {
@@ -115,12 +115,12 @@ VkDescriptorPool DescriptorAllocatorGrowable::GetPool(VkDevice device) {
 	return newPool;
 }
 
-VkDescriptorPool DescriptorAllocatorGrowable::CreatePool(VkDevice device, uint32_t setCount, std::span<PoolSizeRatio> poolRatios) {
+VkDescriptorPool DescriptorAllocatorGrowable::CreatePool(VkDevice device, uint32_t setCount, std::span<DescriptorAllocatorGrowable::PoolSizeRatio> poolRatios) {
 	std::vector<VkDescriptorPoolSize> poolSizes;
-	for (PoolSizeRatio ratio : poolRatios) {
+	for (DescriptorAllocatorGrowable::PoolSizeRatio ratio : poolRatios) {
 		poolSizes.push_back(VkDescriptorPoolSize {
-		    .type            = ratio.type,
-		    .descriptorCount = uint32_t(ratio.ratio * setCount) });
+		    .type            = ratio._type,
+		    .descriptorCount = uint32_t(ratio._ratio * setCount) });
 	}
 
 	VkDescriptorPoolCreateInfo pool_info = {};

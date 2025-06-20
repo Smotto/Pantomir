@@ -18,11 +18,11 @@ struct DescriptorWriter {
 struct DescriptorAllocatorGrowable {
 public:
 	struct PoolSizeRatio {
-		VkDescriptorType type;
-		float            ratio;
+		VkDescriptorType _type;
+		float            _ratio;
 	};
 
-	void            Init(VkDevice device, uint32_t initialSets, std::span<PoolSizeRatio> poolRatios);
+	void            Init(VkDevice device, uint32_t initialSets, std::span<DescriptorAllocatorGrowable::PoolSizeRatio> poolRatios);
 	void            ClearPools(VkDevice device);
 	void            DestroyPools(VkDevice device);
 
@@ -30,9 +30,9 @@ public:
 
 private:
 	VkDescriptorPool              GetPool(VkDevice device);
-	VkDescriptorPool              CreatePool(VkDevice device, uint32_t setCount, std::span<PoolSizeRatio> poolRatios);
+	VkDescriptorPool              CreatePool(VkDevice device, uint32_t setCount, std::span<DescriptorAllocatorGrowable::PoolSizeRatio> poolRatios);
 
-	std::vector<PoolSizeRatio>    _ratios;
+	std::vector<DescriptorAllocatorGrowable::PoolSizeRatio>    _ratios;
 	std::vector<VkDescriptorPool> _fullPools;
 	std::vector<VkDescriptorPool> _readyPools;
 	uint32_t                      _setsPerPool;

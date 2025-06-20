@@ -1,10 +1,26 @@
 #ifndef PANTOMIR_ENGINE_H_
 #define PANTOMIR_ENGINE_H_
 
+#include "../source/VkDescriptors.h"
 #include "VkDescriptors.h"
 #include "VkTypes.h"
 
+//class IRenderable {
+//	virtual void Draw(const glm::mat4& topMatrix, DrawContext& ctx) = 0;
+//};
+
 struct MeshAsset;
+
+struct RenderObject {
+	uint32_t          indexCount;
+	uint32_t          firstIndex;
+	VkBuffer          indexBuffer;
+
+	MaterialInstance* material;
+
+	glm::mat4         transform;
+	VkDeviceAddress   vertexBufferAddress;
+};
 
 struct GPUSceneData {
 	glm::mat4 view;
@@ -63,7 +79,38 @@ struct FrameData {
 };
 
 constexpr unsigned int     FRAME_OVERLAP = 2;
-inline DescriptorAllocator globalDescriptorAllocator;
+inline DescriptorAllocatorGrowable globalDescriptorAllocator;
+
+class PantomirEngine;
+struct GLTFMetallic_Roughness {
+	MaterialPipeline      opaquePipeline;
+	MaterialPipeline      transparentPipeline;
+
+	VkDescriptorSetLayout materialLayout;
+
+	struct MaterialConstants {
+		glm::vec4 colorFactors;
+		glm::vec4 metal_rough_factors;
+		// padding, we need it anyway for uniform buffers
+		glm::vec4 extra[14];
+	};
+
+	struct MaterialResources {
+		AllocatedImage colorImage;
+		VkSampler      colorSampler;
+		AllocatedImage metalRoughImage;
+		VkSampler      metalRoughSampler;
+		VkBuffer       dataBuffer;
+		uint32_t       dataBufferOffset;
+	};
+
+	DescriptorWriter writer;
+
+	void             BuildPipelines(PantomirEngine* engine);
+	void             ClearResources(VkDevice device);
+
+	MaterialInstance WriteMaterial(VkDevice device, MaterialPass pass, const MaterialResources& resources, DescriptorAllocatorGrowable& descriptorAllocator);
+};
 
 class PantomirEngine {
 public:
@@ -124,16 +171,18 @@ public:
 	uint32_t                                _graphicsQueueFamily {};
 
 	std::vector<std::shared_ptr<MeshAsset>> _testMeshes;
+	MaterialInstance                        _defaultData;
+	GLTFMetallic_Roughness                  _metalRoughMaterial;
 
-	AllocatedImage _whiteImage;
-	AllocatedImage _blackImage;
-	AllocatedImage _greyImage;
-	AllocatedImage _errorCheckerboardImage;
+	AllocatedImage                          _whiteImage;
+	AllocatedImage                          _blackImage;
+	AllocatedImage                          _greyImage;
+	AllocatedImage                          _errorCheckerboardImage;
 
-	VkSampler _defaultSamplerLinear;
-	VkSampler _defaultSamplerNearest;
+	VkSampler                               _defaultSamplerLinear;
+	VkSampler                               _defaultSamplerNearest;
 
-	VkDescriptorSetLayout _singleImageDescriptorLayout;
+	VkDescriptorSetLayout                   _singleImageDescriptorLayout;
 
 	PantomirEngine(const PantomirEngine&)                   = delete;
 	PantomirEngine&        operator=(const PantomirEngine&) = delete;

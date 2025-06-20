@@ -266,11 +266,11 @@ void PantomirEngine::InitSyncStructures() {
 
 void PantomirEngine::InitDescriptors() {
 	// Create a descriptor pool that will hold 10 sets with 1 image each
-	std::vector<DescriptorAllocator::PoolSizeRatio> sizes = {
+	std::vector<DescriptorAllocatorGrowable::PoolSizeRatio> sizes = {
 		{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1 }
 	};
 
-	globalDescriptorAllocator.InitPool(_device, 10, sizes);
+	globalDescriptorAllocator.Init(_device, 10, sizes);
 
 	// make the descriptor set layout for our compute draw
 	{
@@ -301,7 +301,7 @@ void PantomirEngine::InitDescriptors() {
 	writer.UpdateSet(_device, _drawImageDescriptors);
 
 	_mainDeletionQueue.push_function([&]() {
-		globalDescriptorAllocator.DestroyPool(_device);
+		globalDescriptorAllocator.DestroyPools(_device);
 
 		vkDestroyDescriptorSetLayout(_device, _drawImageDescriptorLayout, nullptr);
 	});
@@ -326,6 +326,7 @@ void PantomirEngine::InitDescriptors() {
 
 void PantomirEngine::InitPipelines() {
 	InitBackgroundPipelines();
+	_metalRoughMaterial.BuildPipelines(this);
 }
 
 void PantomirEngine::InitBackgroundPipelines() {
@@ -576,6 +577,30 @@ void PantomirEngine::InitDefaultData() {
 		DestroyImage(_blackImage);
 		DestroyImage(_errorCheckerboardImage);
 	});
+
+	GLTFMetallic_Roughness::MaterialResources materialResources;
+	// default the material textures
+	materialResources.colorImage                                 = _whiteImage;
+	materialResources.colorSampler                               = _defaultSamplerLinear;
+	materialResources.metalRoughImage                            = _whiteImage;
+	materialResources.metalRoughSampler                          = _defaultSamplerLinear;
+
+	// set the uniform buffer for the material data
+	AllocatedBuffer                            materialConstants = CreateBuffer(sizeof(GLTFMetallic_Roughness::MaterialConstants), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+
+	// write the buffer
+	GLTFMetallic_Roughness::MaterialConstants* sceneUniformData  = (GLTFMetallic_Roughness::MaterialConstants*)materialConstants.allocation->GetMappedData();
+	sceneUniformData->colorFactors                               = glm::vec4 { 1, 1, 1, 1 };
+	sceneUniformData->metal_rough_factors                        = glm::vec4 { 1, 0.5, 0, 0 };
+
+	_mainDeletionQueue.push_function([=, this]() {
+		DestroyBuffer(materialConstants);
+	});
+
+	materialResources.dataBuffer       = materialConstants.buffer;
+	materialResources.dataBufferOffset = 0;
+
+	_defaultData                       = _metalRoughMaterial.WriteMaterial(_device, MaterialPass::MainColor, materialResources, globalDescriptorAllocator);
 }
 
 GPUMeshBuffers PantomirEngine::UploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices) {
@@ -1059,4 +1084,99 @@ void PantomirEngine::DestroyImage(const AllocatedImage& img) {
 
 int main(int argc, char* argv[]) {
 	return PantomirEngine::GetInstance().Start();
+}
+
+void GLTFMetallic_Roughness::BuildPipelines(PantomirEngine* engine) {
+	VkShaderModule meshFragShader;
+	if (!vkutil::LoadShaderModule("Assets/Shaders/mesh.frag.spv", engine->_device, &meshFragShader)) {
+		LOG(Engine, Error, "Error when building the triangle fragment shader module");
+	}
+
+	VkShaderModule meshVertexShader;
+	if (!vkutil::LoadShaderModule("Assets/Shaders/mesh.vert.spv", engine->_device, &meshVertexShader)) {
+		LOG(Engine, Error, "Error when building the triangle vertex shader module");
+	}
+
+	VkPushConstantRange matrixRange {};
+	matrixRange.offset     = 0;
+	matrixRange.size       = sizeof(GPUDrawPushConstants);
+	matrixRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+	DescriptorLayoutBuilder layoutBuilder;
+	layoutBuilder.AddBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+	layoutBuilder.AddBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+	layoutBuilder.AddBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+
+	materialLayout                              = layoutBuilder.Build(engine->_device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+
+	VkDescriptorSetLayout      layouts[]        = { engine->_gpuSceneDataDescriptorLayout,
+		                                            materialLayout };
+
+	VkPipelineLayoutCreateInfo mesh_layout_info = vkinit::PipelineLayoutCreateInfo();
+	mesh_layout_info.setLayoutCount             = 2;
+	mesh_layout_info.pSetLayouts                = layouts;
+	mesh_layout_info.pPushConstantRanges        = &matrixRange;
+	mesh_layout_info.pushConstantRangeCount     = 1;
+
+	VkPipelineLayout newLayout;
+	VK_CHECK(vkCreatePipelineLayout(engine->_device, &mesh_layout_info, nullptr, &newLayout));
+
+	opaquePipeline.layout      = newLayout;
+	transparentPipeline.layout = newLayout;
+
+	// build the stage-create-info for both vertex and fragment stages. This lets
+	// the pipeline know the shader modules per stage
+	PipelineBuilder pipelineBuilder;
+	pipelineBuilder.SetShaders(meshVertexShader, meshFragShader);
+	pipelineBuilder.SetInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+	pipelineBuilder.SetPolygonMode(VK_POLYGON_MODE_FILL);
+	pipelineBuilder.SetCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
+	pipelineBuilder.SetMultisamplingNone();
+	pipelineBuilder.DisableBlending();
+	pipelineBuilder.EnableDepthtest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
+
+	// render format
+	pipelineBuilder.SetColorAttachmentFormat(engine->_drawImage._imageFormat);
+	pipelineBuilder.SetDepthFormat(engine->_depthImage._imageFormat);
+
+	// use the triangle layout we created
+	pipelineBuilder._pipelineLayout = newLayout;
+
+	// finally build the pipeline
+	opaquePipeline.pipeline         = pipelineBuilder.BuildPipeline(engine->_device);
+
+	// create the transparent variant
+	pipelineBuilder.EnableBlendingAdditive();
+
+	pipelineBuilder.EnableDepthtest(false, VK_COMPARE_OP_GREATER_OR_EQUAL);
+
+	transparentPipeline.pipeline = pipelineBuilder.BuildPipeline(engine->_device);
+
+	vkDestroyShaderModule(engine->_device, meshFragShader, nullptr);
+	vkDestroyShaderModule(engine->_device, meshVertexShader, nullptr);
+}
+
+void GLTFMetallic_Roughness::ClearResources(VkDevice device) {
+}
+
+MaterialInstance GLTFMetallic_Roughness::WriteMaterial(VkDevice device, MaterialPass pass, const GLTFMetallic_Roughness::MaterialResources& resources, DescriptorAllocatorGrowable& descriptorAllocator) {
+	MaterialInstance matData {};
+
+	matData.passType = pass;
+	if (pass == MaterialPass::Transparent) {
+		matData.pipeline = &transparentPipeline;
+	} else {
+		matData.pipeline = &opaquePipeline;
+	}
+
+	matData.materialSet = descriptorAllocator.Allocate(device, materialLayout);
+
+	writer.Clear();
+	writer.WriteBuffer(0, resources.dataBuffer, sizeof(MaterialConstants), resources.dataBufferOffset, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+	writer.WriteImage(1, resources.colorImage._imageView, resources.colorSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+	writer.WriteImage(2, resources.metalRoughImage._imageView, resources.metalRoughSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+
+	writer.UpdateSet(device, matData.materialSet);
+
+	return matData;
 }
