@@ -545,7 +545,7 @@ void PantomirEngine::InitDefaultData() {
 	_mainCamera.pitch = 0;
 	_mainCamera.yaw = 0;
 
-	_testMeshes                           = VkLoader::LoadGltfMeshes(this, "Assets\\Models\\basicmesh.glb").value();
+	_testMeshes                           = VkLoader::LoadGltf(this, "Assets\\Models\\basicmesh.glb");
 
 	// 3 default textures, white, grey, black. 1 pixel each
 	uint32_t white                        = glm::packUnorm4x8(glm::vec4(1, 1, 1, 1));
