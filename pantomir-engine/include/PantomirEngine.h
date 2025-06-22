@@ -9,6 +9,7 @@
 //	virtual void Draw(const glm::mat4& topMatrix, DrawContext& ctx) = 0;
 // };
 
+struct LoadedGLTF;
 struct MeshAsset;
 
 struct RenderObject {
@@ -94,6 +95,7 @@ inline DescriptorAllocatorGrowable globalDescriptorAllocator;
 
 class PantomirEngine;
 struct GLTFMetallic_Roughness {
+
 	MaterialPipeline      _opaquePipeline;
 	MaterialPipeline      _transparentPipeline;
 
@@ -185,22 +187,22 @@ public:
         return _frames[_frameNumber % FRAME_OVERLAP];
 	};
 
-	VkQueue                                 _graphicsQueue {};
-	uint32_t                                _graphicsQueueFamily {};
+	VkQueue                                                      _graphicsQueue {};
+	uint32_t                                                     _graphicsQueueFamily {};
 
-	std::vector<std::shared_ptr<MeshAsset>> _testMeshes;
-	MaterialInstance                        _defaultData;
-	GLTFMetallic_Roughness                  _metalRoughMaterial;
+	std::unordered_map<std::string, std::shared_ptr<LoadedGLTF>> loadedScenes;
+	MaterialInstance                                             _defaultData;
+	GLTFMetallic_Roughness                                       _metalRoughMaterial;
 
-	AllocatedImage                          _whiteImage;
-	AllocatedImage                          _blackImage;
-	AllocatedImage                          _greyImage;
-	AllocatedImage                          _errorCheckerboardImage;
+	AllocatedImage                                               _whiteImage;
+	AllocatedImage                                               _blackImage;
+	AllocatedImage                                               _greyImage;
+	AllocatedImage                                               _errorCheckerboardImage;
 
-	VkSampler                               _defaultSamplerLinear;
-	VkSampler                               _defaultSamplerNearest;
+	VkSampler                                                    _defaultSamplerLinear;
+	VkSampler                                                    _defaultSamplerNearest;
 
-	VkDescriptorSetLayout                   _singleImageDescriptorLayout;
+	VkDescriptorSetLayout                                        _singleImageDescriptorLayout;
 
 	PantomirEngine(const PantomirEngine&)                   = delete;
 	PantomirEngine&        operator=(const PantomirEngine&) = delete;
@@ -223,27 +225,28 @@ public:
 	AllocatedImage    CreateImage(void* data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
 	void              DestroyImage(const AllocatedImage& img);
 
+	AllocatedBuffer   CreateBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
+
 private:
 	PantomirEngine();
 	~PantomirEngine();
 
-	void            InitSDLWindow();
-	void            InitVulkan();
-	void            InitSwapchain();
-	void            InitCommands();
-	void            InitSyncStructures();
-	void            InitDescriptors();
-	void            InitPipelines();
-	void            InitBackgroundPipelines();
-	void            InitImgui();
-	void            InitMeshPipeline();
-	void            InitDefaultData();
+	void InitSDLWindow();
+	void InitVulkan();
+	void InitSwapchain();
+	void InitCommands();
+	void InitSyncStructures();
+	void InitDescriptors();
+	void InitPipelines();
+	void InitBackgroundPipelines();
+	void InitImgui();
+	void InitMeshPipeline();
+	void InitDefaultData();
 
-	AllocatedBuffer CreateBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
-	void            CreateSwapchain(uint32_t width, uint32_t height);
-	void            DestroySwapchain();
-	void            ResizeSwapchain();
-	void            DestroyBuffer(const AllocatedBuffer& buffer);
+	void CreateSwapchain(uint32_t width, uint32_t height);
+	void DestroySwapchain();
+	void ResizeSwapchain();
+	void DestroyBuffer(const AllocatedBuffer& buffer);
 };
 
 #endif /*! PANTOMIR_ENGINE_H_ */

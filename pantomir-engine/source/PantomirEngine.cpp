@@ -44,6 +44,8 @@ PantomirEngine::~PantomirEngine() {
 	// make sure the gpu has stopped doing its things
 	vkDeviceWaitIdle(_device);
 
+	loadedScenes.clear();
+
 	for (auto& frame : _frames) {
 		// already written from before
 		vkDestroyCommandPool(_device, frame._commandPool, nullptr);
@@ -54,11 +56,6 @@ PantomirEngine::~PantomirEngine() {
 		vkDestroySemaphore(_device, frame._swapchainSemaphore, nullptr);
 
 		frame._deletionQueue.flush();
-	}
-
-	for (auto& mesh : _testMeshes) {
-		DestroyBuffer(mesh->meshBuffers.indexBuffer);
-		DestroyBuffer(mesh->meshBuffers.vertexBuffer);
 	}
 
 	_mainDeletionQueue.flush();
@@ -540,12 +537,10 @@ void PantomirEngine::InitMeshPipeline() {
 
 void PantomirEngine::InitDefaultData() {
 	_mainCamera.velocity = glm::vec3(0.f);
-	_mainCamera.position = glm::vec3(0, 0, 5);
+	_mainCamera.position = glm::vec3(30.f, -00.f, -085.f);
 
 	_mainCamera.pitch = 0;
 	_mainCamera.yaw = 0;
-
-	_testMeshes                           = VkLoader::LoadGltf(this, "Assets\\Models\\basicmesh.glb");
 
 	// 3 default textures, white, grey, black. 1 pixel each
 	uint32_t white                        = glm::packUnorm4x8(glm::vec4(1, 1, 1, 1));
@@ -612,19 +607,12 @@ void PantomirEngine::InitDefaultData() {
 
 	_defaultData                       = _metalRoughMaterial.WriteMaterial(_device, MaterialPass::MainColor, materialResources, globalDescriptorAllocator);
 
-	for (auto& mesh : _testMeshes) {
-		std::shared_ptr<MeshNode> newNode = std::make_shared<MeshNode>();
-		newNode->mesh                     = mesh;
+	std::string structurePath = { "Assets/Models/structure.glb" };
+	auto structureFile = LoadGltf(this,structurePath);
 
-		newNode->localTransform           = glm::mat4 { 1.f };
-		newNode->worldTransform           = glm::mat4 { 1.f };
+	assert(structureFile.has_value());
 
-		for (auto& s : newNode->mesh->surfaces) {
-			s.material = std::make_shared<GLTFMaterial>(_defaultData);
-		}
-
-		loadedNodes[mesh->name] = std::move(newNode);
-	}
+	loadedScenes["structure"] = *structureFile;
 }
 
 GPUMeshBuffers PantomirEngine::UploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices) {
@@ -1116,20 +1104,12 @@ void PantomirEngine::UpdateScene() {
 
 	_mainDrawContext.OpaqueSurfaces.clear();
 
-	loadedNodes["Suzanne"]->Draw(glm::mat4 { 1.f }, _mainDrawContext);
+	loadedScenes["structure"]->Draw(glm::mat4{ 1.f }, _mainDrawContext);
 
 	// some default lighting parameters
 	_sceneData.ambientColor      = glm::vec4(.1f);
 	_sceneData.sunlightColor     = glm::vec4(1.f);
 	_sceneData.sunlightDirection = glm::vec4(0, 1, 0.5, 1.f);
-
-	for (int x = -3; x < 3; x++) {
-
-		glm::mat4 scale       = glm::scale(glm::vec3 { 0.2 });
-		glm::mat4 translation = glm::translate(glm::vec3 { x, 1, 0 });
-
-		loadedNodes["Cube"]->Draw(translation * scale, _mainDrawContext);
-	}
 }
 
 int main(int argc, char* argv[]) {

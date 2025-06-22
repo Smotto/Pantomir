@@ -28,35 +28,33 @@ class PantomirEngine;
 
 struct LoadedGLTF : public IRenderable {
 	// storage for all the data on a given glTF file
-	std::unordered_map<std::string, std::shared_ptr<MeshAsset>>    meshes;
-	std::unordered_map<std::string, std::shared_ptr<Node>>         nodes;
-	std::unordered_map<std::string, AllocatedImage>                images;
-	std::unordered_map<std::string, std::shared_ptr<GLTFMaterial>> materials;
+	std::unordered_map<std::string, std::shared_ptr<MeshAsset>>    _meshes;
+	std::unordered_map<std::string, std::shared_ptr<Node>>         _nodes;
+	std::unordered_map<std::string, AllocatedImage>                _images;
+	std::unordered_map<std::string, std::shared_ptr<GLTFMaterial>> _materials;
 
 	// Nodes that don't have a parent, for iterating through the file in tree order
-	std::vector<std::shared_ptr<Node>>                             topNodes;
+	std::vector<std::shared_ptr<Node>>                             _topNodes;
 
-	std::vector<VkSampler>                                         samplers;
+	std::vector<VkSampler>                                         _samplers;
 
-	DescriptorAllocatorGrowable                                    descriptorPool;
+	DescriptorAllocatorGrowable                                    _descriptorPool;
 
-	AllocatedBuffer                                                materialDataBuffer;
+	AllocatedBuffer                                                _materialDataBuffer;
 
-	PantomirEngine*                                                creator;
+	PantomirEngine*                                                _creator;
 
 	~LoadedGLTF() {
 		ClearAll();
 	};
 
-	virtual void Draw(const glm::mat4& topMatrix, DrawContext& ctx);
+	// std::optional<std::vector<std::shared_ptr<MeshAsset>>> LoadGltfMeshes(PantomirEngine* engine, const std::filesystem::path& filePath); // TODO: Deprecated.
+	virtual void                               Draw(const glm::mat4& topMatrix, DrawContext& ctx);
 
 private:
 	void ClearAll();
 };
 
-namespace VkLoader {
-	std::optional<std::shared_ptr<LoadedGLTF>>             LoadGltf(PantomirEngine* engine, std::string_view filePath);
-	std::optional<std::vector<std::shared_ptr<MeshAsset>>> LoadGltfMeshes(PantomirEngine* engine, const std::filesystem::path& filePath);
-}; // namespace VkLoader
+std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, std::string_view filePath);
 
 #endif /*! VKLOADER_H_ */
