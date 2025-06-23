@@ -108,10 +108,10 @@ void PantomirEngine::InitVulkan() {
 
 	vkb::InstanceBuilder       instanceBuilder;
 	vkb::Result<vkb::Instance> instanceBuilderResult = instanceBuilder.set_app_name("Vulkan Initializer")
-	                                                       .request_validation_layers(true) // For debugging
-	                                                       .use_default_debug_messenger()   // For debugging
-	                                                       .require_api_version(1, 3, 0)    // Using Vulkan 1.3
-	                                                       .enable_extensions(extensions)   // Goes through available extensions on the physical device. If all the extensions I've chosen are available, then return true;
+	                                                       .request_validation_layers(bUseValidationLayers) // For debugging
+	                                                       .use_default_debug_messenger()                   // For debugging
+	                                                       .require_api_version(1, 3, 0)                    // Using Vulkan 1.3
+	                                                       .enable_extensions(extensions)                   // Goes through available extensions on the physical device. If all the extensions I've chosen are available, then return true;
 	                                                       .build();
 
 	// After enabling extensions for the window, we enable features for a physical device.
@@ -536,11 +536,11 @@ void PantomirEngine::InitMeshPipeline() {
 }
 
 void PantomirEngine::InitDefaultData() {
-	_mainCamera.velocity = glm::vec3(0.f);
-	_mainCamera.position = glm::vec3(30.f, -00.f, -085.f);
+	_mainCamera.velocity                  = glm::vec3(0.f);
+	_mainCamera.position                  = glm::vec3(30.f, -00.f, -085.f);
 
-	_mainCamera.pitch = 0;
-	_mainCamera.yaw = 0;
+	_mainCamera.pitch                     = 0;
+	_mainCamera.yaw                       = 0;
 
 	// 3 default textures, white, grey, black. 1 pixel each
 	uint32_t white                        = glm::packUnorm4x8(glm::vec4(1, 1, 1, 1));
@@ -607,8 +607,8 @@ void PantomirEngine::InitDefaultData() {
 
 	_defaultData                       = _metalRoughMaterial.WriteMaterial(_device, MaterialPass::MainColor, materialResources, globalDescriptorAllocator);
 
-	std::string structurePath = { "Assets/Models/structure.glb" };
-	auto structureFile = LoadGltf(this,structurePath);
+	std::string structurePath          = { "Assets/Models/structure.glb" };
+	auto        structureFile          = LoadGltf(this, structurePath);
 
 	assert(structureFile.has_value());
 
@@ -842,8 +842,29 @@ void PantomirEngine::DrawBackground(VkCommandBuffer commandBuffer) {
 }
 
 void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
+	std::vector<uint32_t> opaque_draws;
+	opaque_draws.reserve(_mainDrawContext.OpaqueSurfaces.size());
 
+	for (uint32_t i = 0; i < _mainDrawContext.OpaqueSurfaces.size(); i++) {
+		opaque_draws.push_back(i);
+	}
 
+	// sort the opaque surfaces by material and mesh
+	std::sort(opaque_draws.begin(), opaque_draws.end(), [&](const auto& iA, const auto& iB) {
+		const RenderObject& A = _mainDrawContext.OpaqueSurfaces[iA];
+		const RenderObject& B = _mainDrawContext.OpaqueSurfaces[iB];
+		if (A.material == B.material) {
+			return A.indexBuffer < B.indexBuffer;
+		}
+		else {
+			return A.material < B.material;
+		}
+	});
+
+	stats.drawcall_count               = 0;
+	stats.triangle_count               = 0;
+
+	auto            start              = std::chrono::system_clock::now();
 	// Allocate a new uniform buffer for the scene data
 	AllocatedBuffer gpuSceneDataBuffer = CreateBuffer(sizeof(GPUSceneData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 
@@ -869,40 +890,62 @@ void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
 	VkRenderingInfo           renderInfo      = vkinit::RenderingInfo(_drawExtent, &colorAttachment, &depthAttachment);
 	vkCmdBeginRendering(commandBuffer, &renderInfo);
 
-	// Set dynamic viewport and scissor
-	VkViewport viewport = {};
-	viewport.x          = 0;
-	viewport.y          = 0;
-	viewport.width      = _drawExtent.width;
-	viewport.height     = _drawExtent.height;
-	viewport.minDepth   = 0.f;
-	viewport.maxDepth   = 1.f;
-	vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+	// Defined outside of the draw function, this is the state we will try to skip
+	MaterialPipeline* lastPipeline    = nullptr;
+	MaterialInstance* lastMaterial    = nullptr;
+	VkBuffer          lastIndexBuffer = VK_NULL_HANDLE;
 
-	VkRect2D scissor      = {};
-	scissor.offset.x      = 0;
-	scissor.offset.y      = 0;
-	scissor.extent.width  = _drawExtent.width;
-	scissor.extent.height = _drawExtent.height;
-	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+	auto              draw            = [&](const RenderObject& r) {
+        if (r.material != lastMaterial) {
+            lastMaterial = r.material;
+            // Rebind pipeline and descriptors if the material changed
+            if (r.material->pipeline != lastPipeline) {
 
-	auto draw = [&](const RenderObject& input_draw) {
-		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, input_draw.material->pipeline->pipeline);
-		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, input_draw.material->pipeline->layout, 0, 1, &globalDescriptor, 0, nullptr);
-		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, input_draw.material->pipeline->layout, 1, 1, &input_draw.material->materialSet, 0, nullptr);
+                lastPipeline = r.material->pipeline;
+                vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, r.material->pipeline->pipeline);
+                vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, r.material->pipeline->layout, 0, 1, &globalDescriptor, 0, nullptr);
 
-		vkCmdBindIndexBuffer(commandBuffer, input_draw.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+                VkViewport viewport = {};
+                viewport.x          = 0;
+                viewport.y          = 0;
+                viewport.width      = (float)_windowExtent.width;
+                viewport.height     = (float)_windowExtent.height;
+                viewport.minDepth   = 0.f;
+                viewport.maxDepth   = 1.f;
 
-		GPUDrawPushConstants pushConstants;
-		pushConstants.vertexBuffer = input_draw.vertexBufferAddress;
-		pushConstants.worldMatrix = input_draw.transform;
-		vkCmdPushConstants(commandBuffer, input_draw.material->pipeline->layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
+                vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
 
-		vkCmdDrawIndexed(commandBuffer, input_draw.indexCount, 1, input_draw.firstIndex, 0, 0);
+                VkRect2D scissor      = {};
+                scissor.offset.x      = 0;
+                scissor.offset.y      = 0;
+                scissor.extent.width  = _windowExtent.width;
+                scissor.extent.height = _windowExtent.height;
+
+                vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+            }
+
+            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, r.material->pipeline->layout, 1, 1, &r.material->materialSet, 0, nullptr);
+        }
+        // Rebind index buffer if needed
+        if (r.indexBuffer != lastIndexBuffer) {
+            lastIndexBuffer = r.indexBuffer;
+            vkCmdBindIndexBuffer(commandBuffer, r.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+        }
+        // Calculate final mesh matrix
+        GPUDrawPushConstants push_constants;
+        push_constants.worldMatrix  = r.transform;
+        push_constants.vertexBuffer = r.vertexBufferAddress;
+
+        vkCmdPushConstants(commandBuffer, r.material->pipeline->layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &push_constants);
+
+        vkCmdDrawIndexed(commandBuffer, r.indexCount, 1, r.firstIndex, 0, 0);
+        // Stats
+        stats.drawcall_count++;
+        stats.triangle_count += r.indexCount / 3;
 	};
 
-	for (auto& r : _mainDrawContext.OpaqueSurfaces) {
-		draw(r);
+	for (auto& r : opaque_draws) {
+		draw(_mainDrawContext.OpaqueSurfaces[r]);
 	}
 
 	for (auto& r : _mainDrawContext.TransparentSurfaces) {
@@ -911,6 +954,10 @@ void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
 
 	_mainDrawContext.OpaqueSurfaces.clear();
 	_mainDrawContext.TransparentSurfaces.clear();
+
+	auto end             = std::chrono::system_clock::now();
+	auto elapsed         = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+	stats.mesh_draw_time = elapsed.count() / 1000.f;
 
 	vkCmdEndRendering(commandBuffer);
 }
@@ -955,6 +1002,7 @@ void PantomirEngine::MainLoop() {
 	bool      bQuit = false;
 
 	while (!bQuit) {
+		auto start = std::chrono::system_clock::now();
 		// Handle events on queue
 		while (SDL_PollEvent(&e) != 0) {
 			// Close the window when user alt-f4s or clicks the X button
@@ -1008,11 +1056,24 @@ void PantomirEngine::MainLoop() {
 			ImGui::InputFloat4("data3", (float*)&selected.data.data3);
 			ImGui::InputFloat4("data4", (float*)&selected.data.data4);
 		}
+
+		ImGui::End();
+
+		ImGui::Begin("Stats");
+		ImGui::Text("frametime %f ms", stats.frametime);
+		ImGui::Text("draw time %f ms", stats.mesh_draw_time);
+		ImGui::Text("update time %f ms", stats.scene_update_time);
+		ImGui::Text("triangles %i", stats.triangle_count);
+		ImGui::Text("draws %i", stats.drawcall_count);
 		ImGui::End();
 
 		ImGui::Render();
 
 		Draw();
+
+		auto end        = std::chrono::system_clock::now();
+		auto elapsed    = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+		stats.frametime = elapsed.count() / 1000.f;
 	}
 }
 
@@ -1100,9 +1161,11 @@ void PantomirEngine::DestroyImage(const AllocatedImage& img) {
 }
 
 void PantomirEngine::UpdateScene() {
+	auto start = std::chrono::system_clock::now();
+
 	_mainCamera.Update();
 
-	glm::mat4 view = _mainCamera.GetViewMatrix();
+	glm::mat4 view       = _mainCamera.GetViewMatrix();
 
 	// camera projection
 	glm::mat4 projection = glm::perspective(glm::radians(70.f), static_cast<float>(_windowExtent.width) / static_cast<float>(_windowExtent.height), 10000.f, 0.1f);
@@ -1111,18 +1174,24 @@ void PantomirEngine::UpdateScene() {
 	// to opengl and gltf axis
 	projection[1][1] *= -1;
 
-	_sceneData.view = view;
-	_sceneData.proj = projection;
+	_sceneData.view     = view;
+	_sceneData.proj     = projection;
 	_sceneData.viewproj = projection * view;
 
 	_mainDrawContext.OpaqueSurfaces.clear();
 
-	loadedScenes["structure"]->Draw(glm::mat4{ 1.f }, _mainDrawContext);
+	loadedScenes["structure"]->Draw(glm::mat4 { 1.f }, _mainDrawContext);
 
 	// some default lighting parameters
 	_sceneData.ambientColor      = glm::vec4(.1f);
 	_sceneData.sunlightColor     = glm::vec4(1.f);
 	_sceneData.sunlightDirection = glm::vec4(0, 1, 0.5, 1.f);
+
+	auto end                     = std::chrono::system_clock::now();
+
+	// convert to microseconds (integer), and then come back to miliseconds
+	auto elapsed                 = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+	stats.scene_update_time      = elapsed.count() / 1000.f;
 }
 
 int main(int argc, char* argv[]) {

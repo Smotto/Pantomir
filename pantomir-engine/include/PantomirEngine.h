@@ -12,6 +12,14 @@
 struct LoadedGLTF;
 struct MeshAsset;
 
+struct EngineStats {
+	float frametime;
+	int   triangle_count;
+	int   drawcall_count;
+	float scene_update_time;
+	float mesh_draw_time;
+};
+
 struct RenderObject {
 	uint32_t          indexCount;
 	uint32_t          firstIndex;
@@ -127,6 +135,10 @@ struct GLTFMetallic_Roughness {
 
 class PantomirEngine {
 public:
+	bool                                                   bUseValidationLayers = false;
+
+	EngineStats                                            stats;
+
 	Camera                                                 _mainCamera;
 
 	VkPipelineLayout                                       _meshPipelineLayout {};
