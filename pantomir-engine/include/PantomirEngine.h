@@ -25,6 +25,7 @@ struct RenderObject {
 
 struct DrawContext {
 	std::vector<RenderObject> OpaqueSurfaces;
+	std::vector<RenderObject> TransparentSurfaces;
 };
 
 struct MeshNode : public Node {
@@ -129,24 +130,24 @@ class PantomirEngine {
 public:
 	Camera                                                 _mainCamera;
 
-	VkPipelineLayout                                       _meshPipelineLayout;
-	VkPipeline                                             _meshPipeline;
+	VkPipelineLayout                                       _meshPipelineLayout {};
+	VkPipeline                                             _meshPipeline {};
 
 	std::vector<ComputeEffect>                             _backgroundEffects;
 	int                                                    _currentBackgroundEffect { 0 };
 
 	// immediate submit structures
-	VkFence                                                _immediateFence;
-	VkCommandBuffer                                        _immediateCommandBuffer;
-	VkCommandPool                                          _immediateCommandPool;
+	VkFence                                                _immediateFence {};
+	VkCommandBuffer                                        _immediateCommandBuffer {};
+	VkCommandPool                                          _immediateCommandPool {};
 
-	VkPipeline                                             _gradientPipeline;
-	VkPipelineLayout                                       _gradientPipelineLayout;
-	VkDescriptorSet                                        _drawImageDescriptors;
-	VkDescriptorSetLayout                                  _drawImageDescriptorLayout;
+	VkPipeline                                             _gradientPipeline {};
+	VkPipelineLayout                                       _gradientPipelineLayout {};
+	VkDescriptorSet                                        _drawImageDescriptors {};
+	VkDescriptorSetLayout                                  _drawImageDescriptorLayout {};
 
-	GPUSceneData                                           _sceneData;
-	VkDescriptorSetLayout                                  _gpuSceneDataDescriptorLayout;
+	GPUSceneData                                           _sceneData {};
+	VkDescriptorSetLayout                                  _gpuSceneDataDescriptorLayout {};
 
 	DrawContext                                            _mainDrawContext;
 	std::unordered_map<std::string, std::shared_ptr<Node>> loadedNodes;
@@ -191,18 +192,18 @@ public:
 	uint32_t                                                     _graphicsQueueFamily {};
 
 	std::unordered_map<std::string, std::shared_ptr<LoadedGLTF>> loadedScenes;
-	MaterialInstance                                             _defaultData;
+	MaterialInstance                                             _defaultData {};
 	GLTFMetallic_Roughness                                       _metalRoughMaterial;
 
-	AllocatedImage                                               _whiteImage;
-	AllocatedImage                                               _blackImage;
-	AllocatedImage                                               _greyImage;
-	AllocatedImage                                               _errorCheckerboardImage;
+	AllocatedImage                                               _whiteImage {};
+	AllocatedImage                                               _blackImage {};
+	AllocatedImage                                               _greyImage {};
+	AllocatedImage                                               _errorCheckerboardImage {};
 
-	VkSampler                                                    _defaultSamplerLinear;
-	VkSampler                                                    _defaultSamplerNearest;
+	VkSampler                                                    _defaultSamplerLinear {};
+	VkSampler                                                    _defaultSamplerNearest {};
 
-	VkDescriptorSetLayout                                        _singleImageDescriptorLayout;
+	VkDescriptorSetLayout                                        _singleImageDescriptorLayout {};
 
 	PantomirEngine(const PantomirEngine&)                   = delete;
 	PantomirEngine&        operator=(const PantomirEngine&) = delete;
@@ -226,6 +227,7 @@ public:
 	void              DestroyImage(const AllocatedImage& img);
 
 	AllocatedBuffer   CreateBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
+	void              DestroyBuffer(const AllocatedBuffer& buffer);
 
 private:
 	PantomirEngine();
@@ -246,7 +248,6 @@ private:
 	void CreateSwapchain(uint32_t width, uint32_t height);
 	void DestroySwapchain();
 	void ResizeSwapchain();
-	void DestroyBuffer(const AllocatedBuffer& buffer);
 };
 
 #endif /*! PANTOMIR_ENGINE_H_ */

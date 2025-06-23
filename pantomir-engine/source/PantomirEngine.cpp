@@ -594,7 +594,7 @@ void PantomirEngine::InitDefaultData() {
 	AllocatedBuffer                            materialConstants = CreateBuffer(sizeof(GLTFMetallic_Roughness::MaterialConstants), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 
 	// write the buffer
-	GLTFMetallic_Roughness::MaterialConstants* sceneUniformData  = (GLTFMetallic_Roughness::MaterialConstants*)materialConstants.allocation->GetMappedData();
+	GLTFMetallic_Roughness::MaterialConstants* sceneUniformData  = static_cast<GLTFMetallic_Roughness::MaterialConstants*>(materialConstants.allocation->GetMappedData());
 	sceneUniformData->colorFactors                               = glm::vec4 { 1, 1, 1, 1 };
 	sceneUniformData->metal_rough_factors                        = glm::vec4 { 1, 0.5, 0, 0 };
 
@@ -637,7 +637,7 @@ GPUMeshBuffers PantomirEngine::UploadMesh(std::span<uint32_t> indices, std::span
 	// Copy vertex buffer
 	memcpy(data, vertices.data(), vertexBufferSize);
 	// Copy index buffer
-	memcpy((char*)data + vertexBufferSize, indices.data(), indexBufferSize);
+	memcpy(static_cast<char*>(data) + vertexBufferSize, indices.data(), indexBufferSize);
 
 	ImmediateSubmit([&](VkCommandBuffer cmd) {
 		VkBufferCopy vertexCopy { 0 };
@@ -1092,7 +1092,7 @@ void PantomirEngine::UpdateScene() {
 	glm::mat4 view = _mainCamera.GetViewMatrix();
 
 	// camera projection
-	glm::mat4 projection = glm::perspective(glm::radians(70.f), (float)_windowExtent.width / (float)_windowExtent.height, 10000.f, 0.1f);
+	glm::mat4 projection = glm::perspective(glm::radians(70.f), static_cast<float>(_windowExtent.width) / static_cast<float>(_windowExtent.height), 10000.f, 0.1f);
 
 	// invert the Y direction on projection matrix so that we are more similar
 	// to opengl and gltf axis

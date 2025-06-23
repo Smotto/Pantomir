@@ -6,6 +6,10 @@
 #include <filesystem>
 #include <unordered_map>
 
+namespace fastgltf {
+	struct Image;
+	class Asset;
+}
 struct GLTFMaterial {
 	MaterialInstance data;
 };
@@ -35,26 +39,22 @@ struct LoadedGLTF : public IRenderable {
 
 	// Nodes that don't have a parent, for iterating through the file in tree order
 	std::vector<std::shared_ptr<Node>>                             _topNodes;
-
 	std::vector<VkSampler>                                         _samplers;
-
 	DescriptorAllocatorGrowable                                    _descriptorPool;
-
 	AllocatedBuffer                                                _materialDataBuffer;
-
 	PantomirEngine*                                                _creator;
 
 	~LoadedGLTF() {
 		ClearAll();
 	};
 
-	// std::optional<std::vector<std::shared_ptr<MeshAsset>>> LoadGltfMeshes(PantomirEngine* engine, const std::filesystem::path& filePath); // TODO: Deprecated.
-	virtual void                               Draw(const glm::mat4& topMatrix, DrawContext& ctx);
+	virtual void Draw(const glm::mat4& topMatrix, DrawContext& ctx);
 
 private:
 	void ClearAll();
 };
 
+std::optional<AllocatedImage> LoadImage(PantomirEngine* engine, fastgltf::Asset& asset, fastgltf::Image& image);
 std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, std::string_view filePath);
 
 #endif /*! VKLOADER_H_ */
