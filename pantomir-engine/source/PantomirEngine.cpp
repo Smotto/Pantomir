@@ -842,6 +842,8 @@ void PantomirEngine::DrawBackground(VkCommandBuffer commandBuffer) {
 }
 
 void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
+
+
 	// Allocate a new uniform buffer for the scene data
 	AllocatedBuffer gpuSceneDataBuffer = CreateBuffer(sizeof(GPUSceneData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 
@@ -884,20 +886,31 @@ void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
 	scissor.extent.height = _drawExtent.height;
 	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-	for (const RenderObject& draw : _mainDrawContext.OpaqueSurfaces) {
-		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.material->pipeline->pipeline);
-		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.material->pipeline->layout, 0, 1, &globalDescriptor, 0, nullptr);
-		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, draw.material->pipeline->layout, 1, 1, &draw.material->materialSet, 0, nullptr);
+	auto draw = [&](const RenderObject& input_draw) {
+		vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, input_draw.material->pipeline->pipeline);
+		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, input_draw.material->pipeline->layout, 0, 1, &globalDescriptor, 0, nullptr);
+		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, input_draw.material->pipeline->layout, 1, 1, &input_draw.material->materialSet, 0, nullptr);
 
-		vkCmdBindIndexBuffer(commandBuffer, draw.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+		vkCmdBindIndexBuffer(commandBuffer, input_draw.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
 		GPUDrawPushConstants pushConstants;
-		pushConstants.vertexBuffer = draw.vertexBufferAddress;
-		pushConstants.worldMatrix  = draw.transform;
-		vkCmdPushConstants(commandBuffer, draw.material->pipeline->layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
+		pushConstants.vertexBuffer = input_draw.vertexBufferAddress;
+		pushConstants.worldMatrix = input_draw.transform;
+		vkCmdPushConstants(commandBuffer, input_draw.material->pipeline->layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &pushConstants);
 
-		vkCmdDrawIndexed(commandBuffer, draw.indexCount, 1, draw.firstIndex, 0, 0);
+		vkCmdDrawIndexed(commandBuffer, input_draw.indexCount, 1, input_draw.firstIndex, 0, 0);
+	};
+
+	for (auto& r : _mainDrawContext.OpaqueSurfaces) {
+		draw(r);
 	}
+
+	for (auto& r : _mainDrawContext.TransparentSurfaces) {
+		draw(r);
+	}
+
+	_mainDrawContext.OpaqueSurfaces.clear();
+	_mainDrawContext.TransparentSurfaces.clear();
 
 	vkCmdEndRendering(commandBuffer);
 }
