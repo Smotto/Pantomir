@@ -6,6 +6,7 @@
 namespace vkutil {
 	void TransitionImage(VkCommandBuffer cmd, VkImage image, VkImageLayout currentLayout, VkImageLayout newLayout);
 	void CopyImageToImage(VkCommandBuffer cmd, VkImage source, VkImage destination, VkExtent2D srcSize, VkExtent2D dstSize);
-}; // namespace vkutil
+	void GenerateMipmaps(VkCommandBuffer cmd, VkImage image, VkExtent2D imageSize);
+} // namespace vkutil
 
 #endif /*! VKIMAGES_H_ */

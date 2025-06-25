@@ -125,7 +125,7 @@ struct GLTFMetallic_Roughness {
 
 class PantomirEngine {
 public:
-	bool                                                   bUseValidationLayers = false;
+	bool                                                   bUseValidationLayers = true;
 
 	EngineStats                                            stats;
 

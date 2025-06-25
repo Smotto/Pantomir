@@ -417,7 +417,7 @@ std::optional<AllocatedImage> LoadImage(PantomirEngine* engine, fastgltf::Asset&
 			                       unsigned char* data = stbi_load_from_memory(ptr, size, &width, &height, &nrChannels, 4);
 			                       if (data) {
 				                       VkExtent3D imagesize { static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1 };
-				                       newImage = engine->CreateImage(data, imagesize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, false);
+				                       newImage = engine->CreateImage(data, imagesize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, true);
 				                       stbi_image_free(data);
 			                       } else {
 				                       LOG(Engine, Error, "stbi_load_from_memory failed for ByteView buffer image: {}", stbi_failure_reason());

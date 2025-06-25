@@ -41,20 +41,20 @@ bool IsVisible(const RenderObject& obj, const glm::mat4& viewproj) {
 
 	glm::mat4 matrix = viewproj * obj.transform;
 
-	glm::vec3 min = { 1.5, 1.5, 1.5 };
-	glm::vec3 max = { -1.5, -1.5, -1.5 };
+	glm::vec3 min    = { 1.5, 1.5, 1.5 };
+	glm::vec3 max    = { -1.5, -1.5, -1.5 };
 
 	for (int c = 0; c < 8; c++) {
 		// Project each corner into clip space
 		glm::vec4 v = matrix * glm::vec4(obj.bounds.origin + (corners[c] * obj.bounds.extents), 1.f);
 
 		// Perspective correction
-		v.x = v.x / v.w;
-		v.y = v.y / v.w;
-		v.z = v.z / v.w;
+		v.x         = v.x / v.w;
+		v.y         = v.y / v.w;
+		v.z         = v.z / v.w;
 
-		min = glm::min(glm::vec3 { v.x, v.y, v.z }, min);
-		max = glm::max(glm::vec3 { v.x, v.y, v.z }, max);
+		min         = glm::min(glm::vec3 { v.x, v.y, v.z }, min);
+		max         = glm::max(glm::vec3 { v.x, v.y, v.z }, max);
 	}
 
 	// Check the clip space box is within the view
@@ -895,8 +895,7 @@ void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
 		const RenderObject& B = _mainDrawContext.OpaqueSurfaces[iB];
 		if (A.material == B.material) {
 			return A.indexBuffer < B.indexBuffer;
-		}
-		else {
+		} else {
 			return A.material < B.material;
 		}
 	});
@@ -1187,7 +1186,11 @@ AllocatedImage PantomirEngine::CreateImage(void* data, VkExtent3D size, VkFormat
 		// copy the buffer into the image
 		vkCmdCopyBufferToImage(cmd, uploadbuffer.buffer, new_image._image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
 
-		vkutil::TransitionImage(cmd, new_image._image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+		if (mipmapped) {
+			vkutil::GenerateMipmaps(cmd, new_image._image, VkExtent2D { new_image._imageExtent.width, new_image._imageExtent.height });
+		} else {
+			vkutil::TransitionImage(cmd, new_image._image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+		}
 	});
 
 	DestroyBuffer(uploadbuffer);
@@ -1337,12 +1340,12 @@ void MeshNode::Draw(const glm::mat4& topMatrix, DrawContext& ctx) {
 
 	for (auto& s : mesh->surfaces) {
 		RenderObject def;
-		def.indexCount = s.count;
-		def.firstIndex = s.startIndex;
-		def.indexBuffer = mesh->meshBuffers.indexBuffer.buffer;
-		def.material = &s.material->data;
-		def.bounds = s.bounds;
-		def.transform = nodeMatrix;
+		def.indexCount          = s.count;
+		def.firstIndex          = s.startIndex;
+		def.indexBuffer         = mesh->meshBuffers.indexBuffer.buffer;
+		def.material            = &s.material->data;
+		def.bounds              = s.bounds;
+		def.transform           = nodeMatrix;
 		def.vertexBufferAddress = mesh->meshBuffers.vertexBufferAddress;
 
 		if (s.material->data.passType == MaterialPass::Transparent) {
