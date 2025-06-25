@@ -9,16 +9,34 @@
 namespace fastgltf {
 	struct Image;
 	class Asset;
-}
+} // namespace fastgltf
+
 struct GLTFMaterial {
 	MaterialInstance data;
+};
+
+struct Bounds {
+	glm::vec3 origin;
+	float     sphereRadius;
+	glm::vec3 extents;
 };
 
 struct GeoSurface {
 	uint32_t                      startIndex;
 	uint32_t                      count;
-
+	Bounds                        bounds;
 	std::shared_ptr<GLTFMaterial> material;
+};
+
+struct RenderObject {
+	uint32_t          indexCount;
+	uint32_t          firstIndex;
+	VkBuffer          indexBuffer;
+
+	MaterialInstance* material;
+	Bounds            bounds;
+	glm::mat4         transform;
+	VkDeviceAddress   vertexBufferAddress;
 };
 
 struct MeshAsset {
@@ -54,7 +72,7 @@ private:
 	void ClearAll();
 };
 
-std::optional<AllocatedImage> LoadImage(PantomirEngine* engine, fastgltf::Asset& asset, fastgltf::Image& image);
+std::optional<AllocatedImage>              LoadImage(PantomirEngine* engine, fastgltf::Asset& asset, fastgltf::Image& image);
 std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, std::string_view filePath);
 
 #endif /*! VKLOADER_H_ */

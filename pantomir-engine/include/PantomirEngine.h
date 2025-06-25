@@ -9,6 +9,7 @@
 //	virtual void Draw(const glm::mat4& topMatrix, DrawContext& ctx) = 0;
 // };
 
+struct RenderObject;
 struct LoadedGLTF;
 struct MeshAsset;
 
@@ -18,17 +19,6 @@ struct EngineStats {
 	int   drawcall_count;
 	float scene_update_time;
 	float mesh_draw_time;
-};
-
-struct RenderObject {
-	uint32_t          indexCount;
-	uint32_t          firstIndex;
-	VkBuffer          indexBuffer;
-
-	MaterialInstance* material;
-
-	glm::mat4         transform;
-	VkDeviceAddress   vertexBufferAddress;
 };
 
 struct DrawContext {

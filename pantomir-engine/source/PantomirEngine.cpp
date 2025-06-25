@@ -27,6 +27,44 @@
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/transform.hpp>
 
+bool IsVisible(const RenderObject& obj, const glm::mat4& viewproj) {
+	std::array<glm::vec3, 8> corners {
+		glm::vec3 { 1, 1, 1 },
+		glm::vec3 { 1, 1, -1 },
+		glm::vec3 { 1, -1, 1 },
+		glm::vec3 { 1, -1, -1 },
+		glm::vec3 { -1, 1, 1 },
+		glm::vec3 { -1, 1, -1 },
+		glm::vec3 { -1, -1, 1 },
+		glm::vec3 { -1, -1, -1 },
+	};
+
+	glm::mat4 matrix = viewproj * obj.transform;
+
+	glm::vec3 min = { 1.5, 1.5, 1.5 };
+	glm::vec3 max = { -1.5, -1.5, -1.5 };
+
+	for (int c = 0; c < 8; c++) {
+		// Project each corner into clip space
+		glm::vec4 v = matrix * glm::vec4(obj.bounds.origin + (corners[c] * obj.bounds.extents), 1.f);
+
+		// Perspective correction
+		v.x = v.x / v.w;
+		v.y = v.y / v.w;
+		v.z = v.z / v.w;
+
+		min = glm::min(glm::vec3 { v.x, v.y, v.z }, min);
+		max = glm::max(glm::vec3 { v.x, v.y, v.z }, max);
+	}
+
+	// Check the clip space box is within the view
+	if (min.z > 1.f || max.z < 0.f || min.x > 1.f || max.x < -1.f || min.y > 1.f || max.y < -1.f) {
+		return false;
+	} else {
+		return true;
+	}
+}
+
 PantomirEngine::PantomirEngine() {
 	InitSDLWindow();
 	InitVulkan();
@@ -846,7 +884,9 @@ void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
 	opaque_draws.reserve(_mainDrawContext.OpaqueSurfaces.size());
 
 	for (uint32_t i = 0; i < _mainDrawContext.OpaqueSurfaces.size(); i++) {
-		opaque_draws.push_back(i);
+		if (IsVisible(_mainDrawContext.OpaqueSurfaces[i], _sceneData.viewproj)) {
+			opaque_draws.push_back(i);
+		}
 	}
 
 	// sort the opaque surfaces by material and mesh
@@ -1235,7 +1275,7 @@ void GLTFMetallic_Roughness::BuildPipelines(PantomirEngine* engine) {
 	_opaquePipeline.layout      = newLayout;
 	_transparentPipeline.layout = newLayout;
 
-	// build the stage-create-info for both vertex and fragment stages. This lets
+	// Build the stage-create-info for both vertex and fragment stages. This lets
 	// the pipeline know the shader modules per stage
 	PipelineBuilder pipelineBuilder;
 	pipelineBuilder.SetShaders(meshVertexShader, meshFragShader);
@@ -1246,17 +1286,17 @@ void GLTFMetallic_Roughness::BuildPipelines(PantomirEngine* engine) {
 	pipelineBuilder.DisableBlending();
 	pipelineBuilder.EnableDepthtest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
 
-	// render format
+	// Render format
 	pipelineBuilder.SetColorAttachmentFormat(engine->_drawImage._imageFormat);
 	pipelineBuilder.SetDepthFormat(engine->_depthImage._imageFormat);
 
-	// use the triangle layout we created
+	// Use the triangle layout we created
 	pipelineBuilder._pipelineLayout = newLayout;
 
-	// finally build the pipeline
+	// Finally build the pipeline
 	_opaquePipeline.pipeline        = pipelineBuilder.BuildPipeline(engine->_device);
 
-	// create the transparent variant
+	// Create the transparent variant
 	pipelineBuilder.EnableBlendingAdditive();
 
 	pipelineBuilder.EnableDepthtest(false, VK_COMPARE_OP_GREATER_OR_EQUAL);
@@ -1297,15 +1337,19 @@ void MeshNode::Draw(const glm::mat4& topMatrix, DrawContext& ctx) {
 
 	for (auto& s : mesh->surfaces) {
 		RenderObject def;
-		def.indexCount          = s.count;
-		def.firstIndex          = s.startIndex;
-		def.indexBuffer         = mesh->meshBuffers.indexBuffer.buffer;
-		def.material            = &s.material->data;
-
-		def.transform           = nodeMatrix;
+		def.indexCount = s.count;
+		def.firstIndex = s.startIndex;
+		def.indexBuffer = mesh->meshBuffers.indexBuffer.buffer;
+		def.material = &s.material->data;
+		def.bounds = s.bounds;
+		def.transform = nodeMatrix;
 		def.vertexBufferAddress = mesh->meshBuffers.vertexBufferAddress;
 
-		ctx.OpaqueSurfaces.push_back(def);
+		if (s.material->data.passType == MaterialPass::Transparent) {
+			ctx.TransparentSurfaces.push_back(def);
+		} else {
+			ctx.OpaqueSurfaces.push_back(def);
+		}
 	}
 
 	Node::Draw(topMatrix, ctx);
