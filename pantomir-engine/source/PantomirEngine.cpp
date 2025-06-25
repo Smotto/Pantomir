@@ -574,11 +574,11 @@ void PantomirEngine::InitMeshPipeline() {
 }
 
 void PantomirEngine::InitDefaultData() {
-	_mainCamera.velocity                  = glm::vec3(0.f);
-	_mainCamera.position                  = glm::vec3(30.f, -00.f, -085.f);
+	_mainCamera._velocity                  = glm::vec3(0.f);
+	_mainCamera._position                  = glm::vec3(30.f, -00.f, -085.f);
 
-	_mainCamera.pitch                     = 0;
-	_mainCamera.yaw                       = 0;
+	_mainCamera._pitch                     = 0;
+	_mainCamera._yaw                       = 0;
 
 	// 3 default textures, white, grey, black. 1 pixel each
 	uint32_t white                        = glm::packUnorm4x8(glm::vec4(1, 1, 1, 1));
@@ -1336,7 +1336,7 @@ MaterialInstance GLTFMetallic_Roughness::WriteMaterial(VkDevice device, Material
 }
 
 void MeshNode::Draw(const glm::mat4& topMatrix, DrawContext& ctx) {
-	glm::mat4 nodeMatrix = topMatrix * worldTransform;
+	glm::mat4 nodeMatrix = topMatrix * _worldTransform;
 
 	for (auto& s : mesh->surfaces) {
 		RenderObject def;

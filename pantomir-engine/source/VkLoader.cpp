@@ -294,7 +294,7 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, std:
 
 		std::visit(fastgltf::visitor {
 		               [&](const fastgltf::math::fmat4x4& matrix) {
-			               memcpy(&newNode->localTransform, matrix.data(), sizeof(matrix));
+			               memcpy(&newNode->_localTransform, matrix.data(), sizeof(matrix));
 		               },
 		               [&](const fastgltf::TRS& transform) {
 			               glm::vec3 tl(transform.translation[0], transform.translation[1], transform.translation[2]);
@@ -305,7 +305,7 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, std:
 			               glm::mat4 rm            = glm::toMat4(rot);
 			               glm::mat4 sm            = glm::scale(glm::mat4(1.f), sc);
 
-			               newNode->localTransform = tm * rm * sm;
+			               newNode->_localTransform = tm * rm * sm;
 		               } },
 		           node.transform);
 	}
@@ -316,14 +316,14 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, std:
 		std::shared_ptr<Node>& sceneNode = nodes[i];
 
 		for (auto& c : node.children) {
-			sceneNode->children.push_back(nodes[c]);
-			nodes[c]->parent = sceneNode;
+			sceneNode->_children.push_back(nodes[c]);
+			nodes[c]->_parent = sceneNode;
 		}
 	}
 
 	// Find the top nodes, with no parents
 	for (auto& node : nodes) {
-		if (node->parent.lock() == nullptr) {
+		if (node->_parent.lock() == nullptr) {
 			file._topNodes.push_back(node);
 			node->refreshTransform(glm::mat4 { 1.f });
 		}

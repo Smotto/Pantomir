@@ -41,7 +41,6 @@ struct RenderObject {
 
 struct MeshAsset {
 	std::string             name;
-
 	std::vector<GeoSurface> surfaces;
 	GPUMeshBuffers          meshBuffers;
 };
@@ -72,6 +71,7 @@ private:
 	void ClearAll();
 };
 
+// Free functions
 std::optional<AllocatedImage>              LoadImage(PantomirEngine* engine, fastgltf::Asset& asset, fastgltf::Image& image);
 std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, std::string_view filePath);
 

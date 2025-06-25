@@ -7,19 +7,18 @@ union SDL_Event;
 
 class Camera {
 public:
-	glm::vec3 velocity;
-	glm::vec3 position;
-	// vertical rotation
-	float pitch { 0.f };
-	// horizontal rotation
-	float yaw { 0.f };
+	glm::vec3 _velocity;
+	glm::vec3 _position;
+
+	float     _pitch { 0.f }; // Vertical rotation
+	float     _yaw { 0.f }; // Horizontal rotation
 
 	glm::mat4 GetViewMatrix();
 	glm::mat4 GetRotationMatrix();
 
-	void ProcessSDLEvent(SDL_Event& e);
+	void      ProcessSDLEvent(SDL_Event& e);
 
-	void Update();
+	void      Update();
 };
 
 #endif /*! PANTOMIR_CAMERA_H_ */
