@@ -5,10 +5,6 @@
 #include "VkDescriptors.h"
 #include "VkTypes.h"
 
-// class IRenderable {
-//	virtual void Draw(const glm::mat4& topMatrix, DrawContext& ctx) = 0;
-// };
-
 struct RenderObject;
 struct LoadedGLTF;
 struct MeshAsset;

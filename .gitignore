@@ -1,3 +1,5 @@
+Models/
+
 # Build directories (you can adjust if your build folder has a different name)
 build/
 bin/

@@ -79,16 +79,16 @@ PantomirEngine::PantomirEngine() {
 }
 
 PantomirEngine::~PantomirEngine() {
-	// make sure the gpu has stopped doing its things
+	// Make sure the gpu has stopped doing its things
 	vkDeviceWaitIdle(_device);
 
 	loadedScenes.clear();
 
 	for (auto& frame : _frames) {
-		// already written from before
+		// Already written from before
 		vkDestroyCommandPool(_device, frame._commandPool, nullptr);
 
-		// destroy sync objects
+		// Destroy sync objects
 		vkDestroyFence(_device, frame._renderFence, nullptr);
 		vkDestroySemaphore(_device, frame._renderSemaphore, nullptr);
 		vkDestroySemaphore(_device, frame._swapchainSemaphore, nullptr);
@@ -257,17 +257,16 @@ void PantomirEngine::InitSwapchain() {
 
 void PantomirEngine::InitCommands() {
 	// Create a command pool for commands submitted to the graphics queue.
-	// We also want the pool to allow for resetting of individual command buffers
-	VkCommandPoolCreateInfo commandPoolInfo = vkinit::CommandPoolCreateInfo(
-	    _graphicsQueueFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+	// We also want the pool to allow for resetting of individual command buffers.
+	VkCommandPoolCreateInfo commandPoolInfo = vkinit::CommandPoolCreateInfo(_graphicsQueueFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
 
-	// commands for ImGUI
+	// Commands for ImGUI
 	VK_CHECK(vkCreateCommandPool(_device, &commandPoolInfo, nullptr, &_immediateCommandPool));
 
-	// allocate the command buffer for immediate submits
-	VkCommandBufferAllocateInfo commandAllocInfo = vkinit::CommandBufferAllocateInfo(_immediateCommandPool, 1);
+	// Allocate the command buffer for immediate submits.
+	VkCommandBufferAllocateInfo commandBufferAllocInfoImmediate = vkinit::CommandBufferAllocateInfo(_immediateCommandPool, 1);
 
-	VK_CHECK(vkAllocateCommandBuffers(_device, &commandAllocInfo, &_immediateCommandBuffer));
+	VK_CHECK(vkAllocateCommandBuffers(_device, &commandBufferAllocInfoImmediate, &_immediateCommandBuffer));
 
 	_mainDeletionQueue.push_function([=]() {
 		vkDestroyCommandPool(_device, _immediateCommandPool, nullptr);
@@ -276,25 +275,23 @@ void PantomirEngine::InitCommands() {
 	for (auto& frame : _frames) {
 		VK_CHECK(vkCreateCommandPool(_device, &commandPoolInfo, nullptr, &frame._commandPool));
 
-		// allocate the default command buffer that we will use for rendering
-		VkCommandBufferAllocateInfo commandAllocInfo = vkinit::CommandBufferAllocateInfo(frame._commandPool, 1);
+		// Allocate the default command buffer that we will use for rendering.
+		VkCommandBufferAllocateInfo commandBufferAllocInfo = vkinit::CommandBufferAllocateInfo(frame._commandPool, 1);
 
-		VK_CHECK(vkAllocateCommandBuffers(_device, &commandAllocInfo, &frame._mainCommandBuffer));
+		VK_CHECK(vkAllocateCommandBuffers(_device, &commandBufferAllocInfo, &frame._mainCommandBuffer));
 	}
 }
 
 void PantomirEngine::InitSyncStructures() {
-	// Create synchronization structures
-	// one fence to control when the gpu has finished rendering the frame,
-	// and 2 semaphores to synchronize rendering with swapchain
-	// we want the fence to start signalled so we can wait on it on the first frame
+	// Create synchronization structures one fence to control when the gpu has finished rendering the frame, and 2 semaphores to synchronize rendering with swapchain.
+	// We want the fence to start signaled so we can wait on it on the first frame
 	VkFenceCreateInfo     fenceCreateInfo     = vkinit::FenceCreateInfo(VK_FENCE_CREATE_SIGNALED_BIT);
 	VkSemaphoreCreateInfo semaphoreCreateInfo = vkinit::SemaphoreCreateInfo();
 
-	for (int i = 0; i < FRAME_OVERLAP; i++) {
-		VK_CHECK(vkCreateFence(_device, &fenceCreateInfo, nullptr, &_frames[i]._renderFence));
-		VK_CHECK(vkCreateSemaphore(_device, &semaphoreCreateInfo, nullptr, &_frames[i]._swapchainSemaphore));
-		VK_CHECK(vkCreateSemaphore(_device, &semaphoreCreateInfo, nullptr, &_frames[i]._renderSemaphore));
+	for (auto& _frame : _frames) {
+		VK_CHECK(vkCreateFence(_device, &fenceCreateInfo, nullptr, &_frame._renderFence));
+		VK_CHECK(vkCreateSemaphore(_device, &semaphoreCreateInfo, nullptr, &_frame._swapchainSemaphore));
+		VK_CHECK(vkCreateSemaphore(_device, &semaphoreCreateInfo, nullptr, &_frame._renderSemaphore));
 	}
 
 	VK_CHECK(vkCreateFence(_device, &fenceCreateInfo, nullptr, &_immediateFence));
@@ -302,7 +299,7 @@ void PantomirEngine::InitSyncStructures() {
 }
 
 void PantomirEngine::InitDescriptors() {
-	// Create a descriptor pool that will hold 10 sets with 1 image each
+	// Create a descriptor pool that will hold 10 sets
 	std::vector<DescriptorAllocatorGrowable::PoolSizeRatio> sizes = {
 		{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1 },
 		{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1 },
@@ -312,28 +309,28 @@ void PantomirEngine::InitDescriptors() {
 
 	globalDescriptorAllocator.Init(_device, 10, sizes);
 
-	// make the descriptor set layout for our compute draw
+	// Make the descriptor set layout for our compute draw
 	{
 		DescriptorLayoutBuilder builder;
 		builder.AddBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
 		_drawImageDescriptorLayout = builder.Build(_device, VK_SHADER_STAGE_COMPUTE_BIT);
 	}
 
-	// make the descriptor set layout for our scene draw
+	// Make the descriptor set layout for our scene draw
 	{
 		DescriptorLayoutBuilder builder;
 		builder.AddBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 		_gpuSceneDataDescriptorLayout = builder.Build(_device, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 	}
 
-	// make the descriptor set layout for textures
+	// Make the descriptor set layout for textures
 	{
 		DescriptorLayoutBuilder builder;
 		builder.AddBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 		_singleImageDescriptorLayout = builder.Build(_device, VK_SHADER_STAGE_FRAGMENT_BIT);
 	}
 
-	// allocate a descriptor set for our draw image
+	// Allocate a descriptor set for our draw image
 	_drawImageDescriptors = globalDescriptorAllocator.Allocate(_device, _drawImageDescriptorLayout);
 
 	DescriptorWriter writer;
@@ -574,11 +571,11 @@ void PantomirEngine::InitMeshPipeline() {
 }
 
 void PantomirEngine::InitDefaultData() {
-	_mainCamera._velocity                  = glm::vec3(0.f);
-	_mainCamera._position                  = glm::vec3(30.f, -00.f, -085.f);
+	_mainCamera._velocity                 = glm::vec3(0.f);
+	_mainCamera._position                 = glm::vec3(0.f, 0.f, 0.f);
 
-	_mainCamera._pitch                     = 0;
-	_mainCamera._yaw                       = 0;
+	_mainCamera._pitch                    = 0;
+	_mainCamera._yaw                      = 0;
 
 	// 3 default textures, white, grey, black. 1 pixel each
 	uint32_t white                        = glm::packUnorm4x8(glm::vec4(1, 1, 1, 1));
@@ -645,7 +642,7 @@ void PantomirEngine::InitDefaultData() {
 
 	_defaultData                       = _metalRoughMaterial.WriteMaterial(_device, MaterialPass::MainColor, materialResources, globalDescriptorAllocator);
 
-	std::string structurePath          = { "Assets/Models/structure.glb" };
+	std::string structurePath          = { "Assets/Models/2B.glb" };
 	auto        structureFile          = LoadGltf(this, structurePath);
 
 	assert(structureFile.has_value());
