@@ -1,5 +1,3 @@
-Models/
-
 # Build directories (you can adjust if your build folder has a different name)
 build/
 bin/
@@ -62,3 +60,6 @@ pantomir_log.txt
 
 # Imgui
 imgui.ini
+
+# Assets
+Assets/*
