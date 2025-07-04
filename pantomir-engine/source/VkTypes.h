@@ -86,17 +86,17 @@ struct Node : public IRenderable {
 	glm::mat4 _localTransform;
 	glm::mat4 _worldTransform;
 
-	void refreshTransform(const glm::mat4& parentMatrix)
+	void RefreshTransform(const glm::mat4& parentMatrix)
 	{
 		_worldTransform = parentMatrix * _localTransform;
 		for (auto c : _children) {
-			c->refreshTransform(_worldTransform);
+			c->RefreshTransform(_worldTransform);
 		}
 	}
 
 	virtual void Draw(const glm::mat4& topMatrix, DrawContext& ctx)
 	{
-		// draw children
+		// Draw children
 		for (auto& c : _children) {
 			c->Draw(topMatrix, ctx);
 		}

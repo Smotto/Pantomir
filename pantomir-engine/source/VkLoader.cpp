@@ -322,7 +322,7 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, std:
 	for (auto& node : nodes) {
 		if (node->_parent.lock() == nullptr) {
 			file._topNodes.push_back(node);
-			node->refreshTransform(glm::mat4 { 1.f });
+			node->RefreshTransform(glm::mat4 { 1.f });
 		}
 	}
 

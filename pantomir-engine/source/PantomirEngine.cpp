@@ -93,10 +93,10 @@ PantomirEngine::~PantomirEngine() {
 		vkDestroySemaphore(_device, frame._renderSemaphore, nullptr);
 		vkDestroySemaphore(_device, frame._swapchainSemaphore, nullptr);
 
-		frame._deletionQueue.flush();
+		frame._deletionQueue.Flush();
 	}
 
-	_mainDeletionQueue.flush();
+	_mainDeletionQueue.Flush();
 	DestroySwapchain();
 
 	vkDestroySurfaceKHR(_instance, _surface, nullptr);
@@ -193,7 +193,7 @@ void PantomirEngine::InitVulkan() {
 	allocatorInfo.flags                   = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
 	vmaCreateAllocator(&allocatorInfo, &_allocator);
 
-	_mainDeletionQueue.push_function([&]() {
+	_mainDeletionQueue.PushFunction([&]() {
 		vmaDestroyAllocator(_allocator);
 	});
 }
@@ -246,7 +246,7 @@ void PantomirEngine::InitSwapchain() {
 
 	VK_CHECK(vkCreateImageView(_device, &dview_info, nullptr, &_depthImage._imageView));
 
-	_mainDeletionQueue.push_function([=]() {
+	_mainDeletionQueue.PushFunction([=]() {
 		vkDestroyImageView(_device, _drawImage._imageView, nullptr);
 		vmaDestroyImage(_allocator, _drawImage._image, _drawImage._allocation);
 
@@ -268,7 +268,7 @@ void PantomirEngine::InitCommands() {
 
 	VK_CHECK(vkAllocateCommandBuffers(_device, &commandBufferAllocInfoImmediate, &_immediateCommandBuffer));
 
-	_mainDeletionQueue.push_function([=]() {
+	_mainDeletionQueue.PushFunction([=]() {
 		vkDestroyCommandPool(_device, _immediateCommandPool, nullptr);
 	});
 
@@ -295,7 +295,7 @@ void PantomirEngine::InitSyncStructures() {
 	}
 
 	VK_CHECK(vkCreateFence(_device, &fenceCreateInfo, nullptr, &_immediateFence));
-	_mainDeletionQueue.push_function([=]() { vkDestroyFence(_device, _immediateFence, nullptr); });
+	_mainDeletionQueue.PushFunction([=]() { vkDestroyFence(_device, _immediateFence, nullptr); });
 }
 
 void PantomirEngine::InitDescriptors() {
@@ -337,7 +337,7 @@ void PantomirEngine::InitDescriptors() {
 	writer.WriteImage(0, _drawImage._imageView, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
 	writer.UpdateSet(_device, _drawImageDescriptors);
 
-	_mainDeletionQueue.push_function([&]() {
+	_mainDeletionQueue.PushFunction([&]() {
 		globalDescriptorAllocator.DestroyPools(_device);
 
 		vkDestroyDescriptorSetLayout(_device, _drawImageDescriptorLayout, nullptr);
@@ -355,7 +355,7 @@ void PantomirEngine::InitDescriptors() {
 		_frames[i]._frameDescriptors = DescriptorAllocatorGrowable {};
 		_frames[i]._frameDescriptors.Init(_device, 1000, frame_sizes);
 
-		_mainDeletionQueue.push_function([&, i]() {
+		_mainDeletionQueue.PushFunction([&, i]() {
 			_frames[i]._frameDescriptors.DestroyPools(_device);
 		});
 	}
@@ -436,7 +436,7 @@ void PantomirEngine::InitBackgroundPipelines() {
 	// destroy structures properly
 	vkDestroyShaderModule(_device, gradientShader, nullptr);
 	vkDestroyShaderModule(_device, skyShader, nullptr);
-	_mainDeletionQueue.push_function([=]() {
+	_mainDeletionQueue.PushFunction([=]() {
 		vkDestroyPipelineLayout(_device, _gradientPipelineLayout, nullptr);
 		vkDestroyPipeline(_device, sky.pipeline, nullptr);
 		vkDestroyPipeline(_device, gradient.pipeline, nullptr);
@@ -500,7 +500,7 @@ void PantomirEngine::InitImgui() {
 	ImGui_ImplVulkan_CreateFontsTexture();
 
 	// Add the destroy imgui created structures
-	_mainDeletionQueue.push_function([=]() {
+	_mainDeletionQueue.PushFunction([=]() {
 		ImGui_ImplVulkan_Shutdown();
 		vkDestroyDescriptorPool(_device, imguiPool, nullptr);
 	});
@@ -564,7 +564,7 @@ void PantomirEngine::InitMeshPipeline() {
 	vkDestroyShaderModule(_device, triangleFragShader, nullptr);
 	vkDestroyShaderModule(_device, triangleMeshVertexShader, nullptr);
 
-	_mainDeletionQueue.push_function([&]() {
+	_mainDeletionQueue.PushFunction([&]() {
 		vkDestroyPipelineLayout(_device, _meshPipelineLayout, nullptr);
 		vkDestroyPipeline(_device, _meshPipeline, nullptr);
 	});
@@ -608,7 +608,7 @@ void PantomirEngine::InitDefaultData() {
 	sampl.minFilter = VK_FILTER_LINEAR;
 	vkCreateSampler(_device, &sampl, nullptr, &_defaultSamplerLinear);
 
-	_mainDeletionQueue.push_function([&]() {
+	_mainDeletionQueue.PushFunction([&]() {
 		vkDestroySampler(_device, _defaultSamplerNearest, nullptr);
 		vkDestroySampler(_device, _defaultSamplerLinear, nullptr);
 
@@ -633,7 +633,7 @@ void PantomirEngine::InitDefaultData() {
 	sceneUniformData->colorFactors                               = glm::vec4 { 1, 1, 1, 1 };
 	sceneUniformData->metal_rough_factors                        = glm::vec4 { 1, 0.5, 0, 0 };
 
-	_mainDeletionQueue.push_function([=, this]() {
+	_mainDeletionQueue.PushFunction([=, this]() {
 		DestroyBuffer(materialConstants);
 	});
 
@@ -769,7 +769,7 @@ void PantomirEngine::Draw() {
 	VK_CHECK(vkWaitForFences(_device, 1, &GetCurrentFrame()._renderFence, true, 1000000000));
 	VK_CHECK(vkResetFences(_device, 1, &GetCurrentFrame()._renderFence));
 
-	GetCurrentFrame()._deletionQueue.flush();
+	GetCurrentFrame()._deletionQueue.Flush();
 	GetCurrentFrame()._frameDescriptors.ClearPools(_device);
 
 	uint32_t swapchainImageIndex;
@@ -897,15 +897,15 @@ void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
 		}
 	});
 
-	stats.drawcall_count               = 0;
-	stats.triangle_count               = 0;
+	_stats.drawcall_count              = 0;
+	_stats.triangle_count              = 0;
 
-	auto            start              = std::chrono::system_clock::now();
+	auto            start              = std::chrono::steady_clock::now();
 	// Allocate a new uniform buffer for the scene data
 	AllocatedBuffer gpuSceneDataBuffer = CreateBuffer(sizeof(GPUSceneData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 
 	// Add it to the deletion queue of this frame so it gets deleted once it's been used
-	GetCurrentFrame()._deletionQueue.push_function([=, this]() {
+	GetCurrentFrame()._deletionQueue.PushFunction([=, this]() {
 		DestroyBuffer(gpuSceneDataBuffer);
 	});
 
@@ -976,8 +976,8 @@ void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
 
         vkCmdDrawIndexed(commandBuffer, r.indexCount, 1, r.firstIndex, 0, 0);
         // Stats
-        stats.drawcall_count++;
-        stats.triangle_count += r.indexCount / 3;
+        _stats.drawcall_count++;
+        _stats.triangle_count += r.indexCount / 3;
 	};
 
 	for (auto& r : opaque_draws) {
@@ -991,9 +991,9 @@ void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
 	_mainDrawContext.OpaqueSurfaces.clear();
 	_mainDrawContext.TransparentSurfaces.clear();
 
-	auto end             = std::chrono::system_clock::now();
-	auto elapsed         = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-	stats.mesh_draw_time = elapsed.count() / 1000.f;
+	auto end              = std::chrono::steady_clock::now();
+	auto elapsed          = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+	_stats.mesh_draw_time = elapsed.count() / 1000.f;
 
 	vkCmdEndRendering(commandBuffer);
 }
@@ -1038,7 +1038,7 @@ void PantomirEngine::MainLoop() {
 	bool      bQuit = false;
 
 	while (!bQuit) {
-		auto start = std::chrono::system_clock::now();
+		auto start = std::chrono::steady_clock::now();
 		// Handle events on queue
 		while (SDL_PollEvent(&e) != 0) {
 			// Close the window when user alt-f4s or clicks the X button
@@ -1096,20 +1096,21 @@ void PantomirEngine::MainLoop() {
 		ImGui::End();
 
 		ImGui::Begin("Stats");
-		ImGui::Text("frametime %f ms", stats.frametime);
-		ImGui::Text("draw time %f ms", stats.mesh_draw_time);
-		ImGui::Text("update time %f ms", stats.scene_update_time);
-		ImGui::Text("triangles %i", stats.triangle_count);
-		ImGui::Text("draws %i", stats.drawcall_count);
+		ImGui::Text("frametime %f ms", _stats.frametime);
+		ImGui::Text("draw time %f ms", _stats.mesh_draw_time);
+		ImGui::Text("update time %f ms", _stats.scene_update_time);
+		ImGui::Text("triangles %i", _stats.triangle_count);
+		ImGui::Text("draws %i", _stats.drawcall_count);
 		ImGui::End();
 
 		ImGui::Render();
 
 		Draw();
 
-		auto end        = std::chrono::system_clock::now();
-		auto elapsed    = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-		stats.frametime = elapsed.count() / 1000.f;
+		std::chrono::time_point      end     = std::chrono::steady_clock::now();
+		std::chrono::duration<float> elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+		_stats.frametime                     = elapsed.count() / 1000.f;
+		_deltaTime                           = std::clamp(elapsed.count(), 0.0001f, 0.016f);
 	}
 }
 
@@ -1201,13 +1202,13 @@ void PantomirEngine::DestroyImage(const AllocatedImage& img) {
 }
 
 void PantomirEngine::UpdateScene() {
-	auto start = std::chrono::system_clock::now();
+	auto start = std::chrono::steady_clock::now();
 
-	_mainCamera.Update();
+	_mainCamera.Update(_deltaTime);
 
 	glm::mat4 view       = _mainCamera.GetViewMatrix();
 
-	// camera projection
+	// Camera projection
 	glm::mat4 projection = glm::perspective(glm::radians(70.f), static_cast<float>(_windowExtent.width) / static_cast<float>(_windowExtent.height), 10000.f, 0.1f);
 
 	// invert the Y direction on projection matrix so that we are more similar
@@ -1222,16 +1223,17 @@ void PantomirEngine::UpdateScene() {
 
 	loadedScenes["structure"]->Draw(glm::mat4 { 1.f }, _mainDrawContext);
 
-	// some default lighting parameters
+	// Some default lighting parameters
 	_sceneData.ambientColor      = glm::vec4(.1f);
 	_sceneData.sunlightColor     = glm::vec4(1.f);
 	_sceneData.sunlightDirection = glm::vec4(0, 1, 0.5, 1.f);
 
-	auto end                     = std::chrono::system_clock::now();
+	auto  end                    = std::chrono::steady_clock::now();
+	auto  elapsed                = end - start;
+	float deltaTimeSeconds       = std::chrono::duration<float>(elapsed).count();
 
-	// convert to microseconds (integer), and then come back to miliseconds
-	auto elapsed                 = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-	stats.scene_update_time      = elapsed.count() / 1000.f;
+	_stats.scene_update_time     = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
+	_deltaTime                   = std::clamp(deltaTimeSeconds, 0.0001f, 0.016f);
 }
 
 int main(int argc, char* argv[]) {

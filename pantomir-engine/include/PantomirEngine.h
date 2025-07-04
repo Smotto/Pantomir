@@ -54,22 +54,25 @@ struct ComputeEffect {
 };
 
 struct DeletionQueue {
-	// Stores a lambda
-	// TODO: Store handles instead of functions instead.
-	std::deque<std::function<void()>> _deletors;
+	// Stores a lambda pointer
+	std::deque<std::shared_ptr<std::function<void()>>> _deletors;
 
-	// Moves the function without copying, using r-value
-	void                              push_function(std::function<void()>&& function) {
-        _deletors.push_back(function);
+	void PushFunction(std::function<void()>&& function) {
+		_deletors.push_back(MakeDeletionTask(std::forward<decltype(function)>(function)));
 	}
 
-	void flush() {
+	void Flush() {
 		// Reverse iterate the deletion queue to execute all the functions
 		for (auto it = _deletors.rbegin(); it != _deletors.rend(); ++it) {
-			(*it)(); // Call functors
+			(**it)(); // Call functors
 		}
 
 		_deletors.clear();
+	}
+
+private:
+	inline std::shared_ptr<std::function<void()>>      MakeDeletionTask(auto&& lambda) {
+		return std::make_shared<std::function<void()>>(std::forward<decltype(lambda)>(lambda));
 	}
 };
 
@@ -98,7 +101,7 @@ struct GLTFMetallic_Roughness {
 	struct MaterialConstants {
 		glm::vec4 colorFactors;
 		glm::vec4 metal_rough_factors;
-		// padding, we need it anyway for uniform buffers
+		// Padding, we need it anyway for uniform buffers
 		glm::vec4 extra[14];
 	};
 
@@ -123,7 +126,7 @@ class PantomirEngine {
 public:
 	bool                                                   bUseValidationLayers = true;
 
-	EngineStats                                            stats;
+	EngineStats                                            _stats;
 
 	Camera                                                 _mainCamera;
 
@@ -147,7 +150,7 @@ public:
 	VkDescriptorSetLayout                                  _gpuSceneDataDescriptorLayout {};
 
 	DrawContext                                            _mainDrawContext;
-	std::unordered_map<std::string, std::shared_ptr<Node>> loadedNodes;
+	std::unordered_map<std::string, std::shared_ptr<Node>> _loadedNodes;
 
 	void                                                   UpdateScene();
 
@@ -227,6 +230,8 @@ public:
 	void              DestroyBuffer(const AllocatedBuffer& buffer);
 
 private:
+	float _deltaTime = 0.0f;
+
 	PantomirEngine();
 	~PantomirEngine();
 
