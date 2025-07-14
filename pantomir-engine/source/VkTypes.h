@@ -23,6 +23,7 @@ enum class MaterialPass :uint8_t {
 	Transparent,
 	Other
 };
+
 struct MaterialPipeline {
 	VkPipeline pipeline;
 	VkPipelineLayout layout;

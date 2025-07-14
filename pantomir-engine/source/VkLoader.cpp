@@ -83,7 +83,7 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, std:
 
 	fastgltf::Asset                                         gltf  = std::move(assetResult.get());
 
-	// We can stimate the descriptors we will need accurately
+	// We can estimate the descriptors we will need accurately
 	std::vector<DescriptorAllocatorGrowable::PoolSizeRatio> sizes = { { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 3 },
 		                                                              { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 3 },
 		                                                              { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1 } };
@@ -263,9 +263,9 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, std:
 				maxpos = glm::max(maxpos, vertices[i].position);
 			}
 
-			// Calculate origin and extents from the min/max, use extent lenght for radius
-			newSurface.bounds.origin = (maxpos + minpos) / 2.f;
-			newSurface.bounds.extents = (maxpos - minpos) / 2.f;
+			// Calculate origin and extents from the min/max, use extent length for radius
+			newSurface.bounds.origin       = (maxpos + minpos) / 2.f;
+			newSurface.bounds.extents      = (maxpos - minpos) / 2.f;
 			newSurface.bounds.sphereRadius = glm::length(newSurface.bounds.extents);
 
 			newmesh->surfaces.push_back(newSurface);
@@ -298,9 +298,9 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, std:
 			               glm::quat rot(transform.rotation[3], transform.rotation[0], transform.rotation[1], transform.rotation[2]);
 			               glm::vec3 sc(transform.scale[0], transform.scale[1], transform.scale[2]);
 
-			               glm::mat4 tm            = glm::translate(glm::mat4(1.f), tl);
-			               glm::mat4 rm            = glm::toMat4(rot);
-			               glm::mat4 sm            = glm::scale(glm::mat4(1.f), sc);
+			               glm::mat4 tm             = glm::translate(glm::mat4(1.f), tl);
+			               glm::mat4 rm             = glm::toMat4(rot);
+			               glm::mat4 sm             = glm::scale(glm::mat4(1.f), sc);
 
 			               newNode->_localTransform = tm * rm * sm;
 		               } },
@@ -452,9 +452,8 @@ void LoadedGLTF::ClearAll() {
 	}
 
 	for (auto& [k, v] : _images) {
-
 		if (v._image == _creator->_errorCheckerboardImage._image) {
-			// dont destroy the default images
+			// Dont destroy the default images
 			continue;
 		}
 		_creator->DestroyImage(v);

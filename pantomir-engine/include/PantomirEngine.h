@@ -91,8 +91,8 @@ constexpr unsigned int             FRAME_OVERLAP = 2;
 inline DescriptorAllocatorGrowable globalDescriptorAllocator;
 
 class PantomirEngine;
-struct GLTFMetallic_Roughness {
 
+struct GLTFMetallic_Roughness {
 	MaterialPipeline      _opaquePipeline;
 	MaterialPipeline      _transparentPipeline;
 
@@ -191,7 +191,7 @@ public:
 	VkQueue                                                      _graphicsQueue {};
 	uint32_t                                                     _graphicsQueueFamily {};
 
-	std::unordered_map<std::string, std::shared_ptr<LoadedGLTF>> loadedScenes;
+	std::unordered_map<std::string, std::shared_ptr<LoadedGLTF>> _loadedScenes;
 	MaterialInstance                                             _defaultData {};
 	GLTFMetallic_Roughness                                       _metalRoughMaterial;
 

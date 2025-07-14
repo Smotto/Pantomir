@@ -12,10 +12,10 @@
 #include "vk_mem_alloc.h"
 
 #include "LoggerMacros.h"
-#include "VKPipelines.h"
 #include "VkDescriptors.h"
 #include "VkImages.h"
 #include "VkInitializers.h"
+#include "VkPipelines.h"
 
 #include "VkLoader.h"
 #include "imgui.h"
@@ -82,7 +82,7 @@ PantomirEngine::~PantomirEngine() {
 	// Make sure the gpu has stopped doing its things
 	vkDeviceWaitIdle(_device);
 
-	loadedScenes.clear();
+	_loadedScenes.clear();
 
 	for (auto& frame : _frames) {
 		// Already written from before
@@ -217,41 +217,41 @@ void PantomirEngine::InitSwapchain() {
 	drawImageUsages |= VK_IMAGE_USAGE_STORAGE_BIT;
 	drawImageUsages |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
-	VkImageCreateInfo       renderImageInfo      = vkinit::ImageCreateInfo(_drawImage._imageFormat, drawImageUsages, drawImageExtent);
+	VkImageCreateInfo       drawImageInfo = vkinit::ImageCreateInfo(_drawImage._imageFormat, drawImageUsages, drawImageExtent);
 
 	// For the draw image, we want to allocate it from gpu local memory
-	VmaAllocationCreateInfo renderImageAllocInfo = {};
-	renderImageAllocInfo.usage                   = VMA_MEMORY_USAGE_GPU_ONLY;
-	renderImageAllocInfo.requiredFlags           = static_cast<VkMemoryPropertyFlags>(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	VmaAllocationCreateInfo drawImageAllocInfo {};
+	drawImageAllocInfo.usage         = VMA_MEMORY_USAGE_GPU_ONLY;
+	drawImageAllocInfo.requiredFlags = static_cast<VkMemoryPropertyFlags>(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
 	// Allocate and create the image
-	vmaCreateImage(_allocator, &renderImageInfo, &renderImageAllocInfo, &_drawImage._image, &_drawImage._allocation, nullptr);
+	vmaCreateImage(_allocator, &drawImageInfo, &drawImageAllocInfo, &_drawImage._image, &_drawImage._allocation, nullptr);
 
 	// For the draw image to use for rendering
-	VkImageViewCreateInfo renderViewInfo = vkinit::ImageviewCreateInfo(_drawImage._imageFormat, _drawImage._image, VK_IMAGE_ASPECT_COLOR_BIT);
+	VkImageViewCreateInfo drawViewInfo = vkinit::ImageviewCreateInfo(_drawImage._imageFormat, _drawImage._image, VK_IMAGE_ASPECT_COLOR_BIT);
 
-	VK_CHECK(vkCreateImageView(_device, &renderViewInfo, nullptr, &_drawImage._imageView));
+	VK_CHECK(vkCreateImageView(_device, &drawViewInfo, nullptr, &_drawImage._imageView));
 
 	_depthImage._imageFormat = VK_FORMAT_D32_SFLOAT;
 	_depthImage._imageExtent = drawImageExtent;
 	VkImageUsageFlags depthImageUsages {};
 	depthImageUsages |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 
-	VkImageCreateInfo dimg_info = vkinit::ImageCreateInfo(_depthImage._imageFormat, depthImageUsages, drawImageExtent);
+	VkImageCreateInfo       depthImageInfo = vkinit::ImageCreateInfo(_depthImage._imageFormat, depthImageUsages, drawImageExtent);
 
-	vmaCreateImage(_allocator, &dimg_info, &renderImageAllocInfo, &_depthImage._image, &_depthImage._allocation, nullptr);
+	VmaAllocationCreateInfo depthImageAllocInfo {};
+	depthImageAllocInfo.usage         = VMA_MEMORY_USAGE_GPU_ONLY;
+	depthImageAllocInfo.requiredFlags = static_cast<VkMemoryPropertyFlags>(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	vmaCreateImage(_allocator, &depthImageInfo, &depthImageAllocInfo, &_depthImage._image, &_depthImage._allocation, nullptr);
 
 	// For the draw image to use for rendering
-	VkImageViewCreateInfo dview_info = vkinit::ImageviewCreateInfo(_depthImage._imageFormat, _depthImage._image, VK_IMAGE_ASPECT_DEPTH_BIT);
+	VkImageViewCreateInfo depthViewInfo = vkinit::ImageviewCreateInfo(_depthImage._imageFormat, _depthImage._image, VK_IMAGE_ASPECT_DEPTH_BIT);
 
-	VK_CHECK(vkCreateImageView(_device, &dview_info, nullptr, &_depthImage._imageView));
+	VK_CHECK(vkCreateImageView(_device, &depthViewInfo, nullptr, &_depthImage._imageView));
 
 	_mainDeletionQueue.PushFunction([=]() {
-		vkDestroyImageView(_device, _drawImage._imageView, nullptr);
-		vmaDestroyImage(_allocator, _drawImage._image, _drawImage._allocation);
-
-		vkDestroyImageView(_device, _depthImage._imageView, nullptr);
-		vmaDestroyImage(_allocator, _depthImage._image, _depthImage._allocation);
+		DestroyImage(_drawImage);
+		DestroyImage(_depthImage);
 	});
 }
 
@@ -341,6 +341,8 @@ void PantomirEngine::InitDescriptors() {
 		globalDescriptorAllocator.DestroyPools(_device);
 
 		vkDestroyDescriptorSetLayout(_device, _drawImageDescriptorLayout, nullptr);
+		vkDestroyDescriptorSetLayout(_device, _gpuSceneDataDescriptorLayout, nullptr);
+		vkDestroyDescriptorSetLayout(_device, _singleImageDescriptorLayout, nullptr);
 	});
 
 	for (int i = 0; i < FRAME_OVERLAP; i++) {
@@ -364,6 +366,9 @@ void PantomirEngine::InitDescriptors() {
 void PantomirEngine::InitPipelines() {
 	InitBackgroundPipelines();
 	_metalRoughMaterial.BuildPipelines(this);
+	_mainDeletionQueue.PushFunction([&]() {
+		_metalRoughMaterial.ClearResources(_device);
+	});
 }
 
 void PantomirEngine::InitBackgroundPipelines() {
@@ -572,7 +577,7 @@ void PantomirEngine::InitMeshPipeline() {
 
 void PantomirEngine::InitDefaultData() {
 	_mainCamera._velocity                 = glm::vec3(0.f);
-	_mainCamera._position                 = glm::vec3(0.f, 0.f, 0.f);
+	_mainCamera._position                 = glm::vec3(0.f, 1.f, 1.f);
 
 	_mainCamera._pitch                    = 0;
 	_mainCamera._yaw                      = 0;
@@ -608,14 +613,14 @@ void PantomirEngine::InitDefaultData() {
 	sampl.minFilter = VK_FILTER_LINEAR;
 	vkCreateSampler(_device, &sampl, nullptr, &_defaultSamplerLinear);
 
-	_mainDeletionQueue.PushFunction([&]() {
-		vkDestroySampler(_device, _defaultSamplerNearest, nullptr);
-		vkDestroySampler(_device, _defaultSamplerLinear, nullptr);
+	_mainDeletionQueue.PushFunction([this, device = _device, defaultSamplerNearest = _defaultSamplerNearest, defaultSamplerLinear = _defaultSamplerLinear, whiteImage = _whiteImage, greyImage = _greyImage, blackImage = _blackImage, errorCheckerboardImage = _errorCheckerboardImage]() {
+		vkDestroySampler(device, defaultSamplerNearest, nullptr);
+		vkDestroySampler(device, defaultSamplerLinear, nullptr);
 
-		DestroyImage(_whiteImage);
-		DestroyImage(_greyImage);
-		DestroyImage(_blackImage);
-		DestroyImage(_errorCheckerboardImage);
+		DestroyImage(whiteImage);
+		DestroyImage(greyImage);
+		DestroyImage(blackImage);
+		DestroyImage(errorCheckerboardImage);
 	});
 
 	GLTFMetallic_Roughness::MaterialResources materialResources;
@@ -633,21 +638,21 @@ void PantomirEngine::InitDefaultData() {
 	sceneUniformData->colorFactors                               = glm::vec4 { 1, 1, 1, 1 };
 	sceneUniformData->metal_rough_factors                        = glm::vec4 { 1, 0.5, 0, 0 };
 
+	materialResources.dataBuffer                                 = materialConstants.buffer;
+	materialResources.dataBufferOffset                           = 0;
+
+	_defaultData                                                 = _metalRoughMaterial.WriteMaterial(_device, MaterialPass::MainColor, materialResources, globalDescriptorAllocator);
+
+	std::string modelPath                                        = { "Assets/Models/Echidna1_Giant.glb" };
+	auto        modelFile                                        = LoadGltf(this, modelPath);
+
+	assert(modelFile.has_value());
+
+	_loadedScenes["Echidna1_Giant"] = *modelFile;
+
 	_mainDeletionQueue.PushFunction([=, this]() {
 		DestroyBuffer(materialConstants);
 	});
-
-	materialResources.dataBuffer       = materialConstants.buffer;
-	materialResources.dataBufferOffset = 0;
-
-	_defaultData                       = _metalRoughMaterial.WriteMaterial(_device, MaterialPass::MainColor, materialResources, globalDescriptorAllocator);
-
-	std::string structurePath          = { "Assets/Models/2B.glb" };
-	auto        structureFile          = LoadGltf(this, structurePath);
-
-	assert(structureFile.has_value());
-
-	loadedScenes["structure"] = *structureFile;
 }
 
 GPUMeshBuffers PantomirEngine::UploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices) {
@@ -1160,15 +1165,17 @@ AllocatedImage PantomirEngine::CreateImage(VkExtent3D size, VkFormat format, VkI
 }
 
 AllocatedImage PantomirEngine::CreateImage(void* data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped) {
-	size_t          data_size    = size.depth * size.width * size.height * 4;
-	AllocatedBuffer uploadbuffer = CreateBuffer(data_size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	size_t          dataSize     = size.depth * size.width * size.height * 4;
+	AllocatedBuffer uploadbuffer = CreateBuffer(dataSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 
-	memcpy(uploadbuffer.info.pMappedData, data, data_size);
+	memcpy(uploadbuffer.info.pMappedData, data, dataSize);
 
-	AllocatedImage new_image = CreateImage(size, format, usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, mipmapped);
+	AllocatedImage newImage = CreateImage(size, format, usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, mipmapped);
+
+	LOG(Engine, Debug, "Created image: {}", (void*)newImage._image);
 
 	ImmediateSubmit([&](VkCommandBuffer cmd) {
-		vkutil::TransitionImage(cmd, new_image._image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+		vkutil::TransitionImage(cmd, newImage._image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
 		VkBufferImageCopy copyRegion               = {};
 		copyRegion.bufferOffset                    = 0;
@@ -1182,21 +1189,23 @@ AllocatedImage PantomirEngine::CreateImage(void* data, VkExtent3D size, VkFormat
 		copyRegion.imageExtent                     = size;
 
 		// copy the buffer into the image
-		vkCmdCopyBufferToImage(cmd, uploadbuffer.buffer, new_image._image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+		vkCmdCopyBufferToImage(cmd, uploadbuffer.buffer, newImage._image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
 
 		if (mipmapped) {
-			vkutil::GenerateMipmaps(cmd, new_image._image, VkExtent2D { new_image._imageExtent.width, new_image._imageExtent.height });
+			vkutil::GenerateMipmaps(cmd, newImage._image, VkExtent2D { newImage._imageExtent.width, newImage._imageExtent.height });
 		} else {
-			vkutil::TransitionImage(cmd, new_image._image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+			vkutil::TransitionImage(cmd, newImage._image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 		}
 	});
 
 	DestroyBuffer(uploadbuffer);
 
-	return new_image;
+	return newImage;
 }
 
 void PantomirEngine::DestroyImage(const AllocatedImage& img) {
+	LOG(Engine, Debug, "Destroying image: {}", (void*)img._image);
+
 	vkDestroyImageView(_device, img._imageView, nullptr);
 	vmaDestroyImage(_allocator, img._image, img._allocation);
 }
@@ -1221,19 +1230,19 @@ void PantomirEngine::UpdateScene() {
 
 	_mainDrawContext.OpaqueSurfaces.clear();
 
-	loadedScenes["structure"]->Draw(glm::mat4 { 1.f }, _mainDrawContext);
+	_loadedScenes["Echidna1_Giant"]->Draw(glm::mat4 { 1.f }, _mainDrawContext);
 
 	// Some default lighting parameters
-	_sceneData.ambientColor      = glm::vec4(.1f);
-	_sceneData.sunlightColor     = glm::vec4(1.f);
-	_sceneData.sunlightDirection = glm::vec4(0, 1, 0.5, 1.f);
+	_sceneData.ambientColor                                             = glm::vec4(.1f);
+	_sceneData.sunlightColor                                            = glm::vec4(1.f);
+	_sceneData.sunlightDirection                                        = glm::vec4(0, 1, 0.5, 1.f);
 
-	auto  end                    = std::chrono::steady_clock::now();
-	auto  elapsed                = end - start;
-	float deltaTimeSeconds       = std::chrono::duration<float>(elapsed).count();
+	std::chrono::time_point<std::chrono::steady_clock> end              = std::chrono::steady_clock::now();
+	auto                                               elapsed          = end - start;
+	float                                              deltaTimeSeconds = std::chrono::duration<float>(elapsed).count();
 
-	_stats.scene_update_time     = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
-	_deltaTime                   = std::clamp(deltaTimeSeconds, 0.0001f, 0.016f);
+	_stats.scene_update_time                                            = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
+	_deltaTime                                                          = std::clamp(deltaTimeSeconds, 0.0001f, 0.016f);
 }
 
 int main(int argc, char* argv[]) {
@@ -1310,6 +1319,11 @@ void GLTFMetallic_Roughness::BuildPipelines(PantomirEngine* engine) {
 }
 
 void GLTFMetallic_Roughness::ClearResources(VkDevice device) {
+	vkDestroyPipelineLayout(device, _opaquePipeline.layout, nullptr);
+	// vkDestroyPipelineLayout(device, _transparentPipeline.layout, nullptr);
+	vkDestroyDescriptorSetLayout(device, _materialLayout, nullptr);
+	vkDestroyPipeline(device, _opaquePipeline.pipeline, nullptr);
+	vkDestroyPipeline(device, _transparentPipeline.pipeline, nullptr);
 }
 
 MaterialInstance GLTFMetallic_Roughness::WriteMaterial(VkDevice device, MaterialPass pass, const GLTFMetallic_Roughness::MaterialResources& resources, DescriptorAllocatorGrowable& descriptorAllocator) {
