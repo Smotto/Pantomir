@@ -5,6 +5,7 @@
 #include "VkDescriptors.h"
 #include "VkTypes.h"
 
+class InputSystem;
 struct RenderObject;
 struct LoadedGLTF;
 struct MeshAsset;
@@ -57,8 +58,8 @@ struct DeletionQueue {
 	// Stores a lambda pointer
 	std::deque<std::shared_ptr<std::function<void()>>> _deletors;
 
-	void PushFunction(std::function<void()>&& function) {
-		_deletors.push_back(MakeDeletionTask(std::forward<decltype(function)>(function)));
+	void                                               PushFunction(std::function<void()>&& function) {
+        _deletors.push_back(MakeDeletionTask(std::forward<decltype(function)>(function)));
 	}
 
 	void Flush() {
@@ -71,7 +72,7 @@ struct DeletionQueue {
 	}
 
 private:
-	inline std::shared_ptr<std::function<void()>>      MakeDeletionTask(auto&& lambda) {
+	inline std::shared_ptr<std::function<void()>> MakeDeletionTask(auto&& lambda) {
 		return std::make_shared<std::function<void()>>(std::forward<decltype(lambda)>(lambda));
 	}
 };
@@ -97,6 +98,7 @@ struct GLTFMetallic_Roughness {
 	MaterialPipeline      _transparentPipeline;
 
 	VkDescriptorSetLayout _materialLayout;
+	VkPipelineLayout      _pipelineLayout;
 
 	struct MaterialConstants {
 		glm::vec4 colorFactors;
@@ -124,6 +126,8 @@ struct GLTFMetallic_Roughness {
 
 class PantomirEngine {
 public:
+	std::shared_ptr<InputSystem>                           _inputSystem;
+
 	bool                                                   bUseValidationLayers = true;
 
 	EngineStats                                            _stats;
@@ -151,8 +155,6 @@ public:
 
 	DrawContext                                            _mainDrawContext;
 	std::unordered_map<std::string, std::shared_ptr<Node>> _loadedNodes;
-
-	void                                                   UpdateScene();
 
 	AllocatedImage                                         _drawImage {};
 	AllocatedImage                                         _depthImage {};
@@ -250,6 +252,8 @@ private:
 	void CreateSwapchain(uint32_t width, uint32_t height);
 	void DestroySwapchain();
 	void ResizeSwapchain();
+
+	void UpdateScene();
 };
 
 #endif /*! PANTOMIR_ENGINE_H_ */

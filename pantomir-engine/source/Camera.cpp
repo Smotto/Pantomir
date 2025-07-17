@@ -25,41 +25,67 @@ void Camera::Update(const float deltaTime) {
 	_position += glm::vec3(cameraRotation * glm::vec4(_velocity * 0.5f, 0.f)) * deltaTime;
 }
 
-void Camera::ProcessSDLEvent(SDL_Event& e) {
-	// Key pressed
-	if (e.type == SDL_EVENT_KEY_DOWN) {
-		if (e.key.key == SDLK_W) {
-			_velocity.z = -1 * _speedMultiplier;
-		}
-		if (e.key.key == SDLK_S) {
-			_velocity.z = 1 * _speedMultiplier;
-		}
-		if (e.key.key == SDLK_A) {
-			_velocity.x = -1 * _speedMultiplier;
-		}
-		if (e.key.key == SDLK_D) {
-			_velocity.x = 1 * _speedMultiplier;
-		}
-	}
+void Camera::ProcessSDLEvent(SDL_Event& event, SDL_Window* window) {
+	static bool rightMouseHeld = false;
 
-	// Key released
-	if (e.type == SDL_EVENT_KEY_UP) {
-		if (e.key.key == SDLK_W) {
-			_velocity.z = 0;
-		}
-		if (e.key.key == SDLK_S) {
-			_velocity.z = 0;
-		}
-		if (e.key.key == SDLK_A) {
-			_velocity.x = 0;
-		}
-		if (e.key.key == SDLK_D) {
-			_velocity.x = 0;
-		}
-	}
+	switch (event.type) {
+		case SDL_EVENT_MOUSE_BUTTON_DOWN:
+			if (event.button.button == SDL_BUTTON_RIGHT && event.button.down) {
+				rightMouseHeld = true;
+				int lockX = event.button.x;
+				int lockY = event.button.y;
+				SDL_Rect lockRect = {lockX, lockY, 1, 1};
+				SDL_SetWindowMouseRect(window, &lockRect);
+				SDL_SetWindowRelativeMouseMode(window, true);
+			}
+			break;
 
-	if (e.type == SDL_EVENT_MOUSE_MOTION) {
-		_yaw += (float)e.motion.xrel / 200.f;
-		_pitch -= (float)e.motion.yrel / 200.f;
+		case SDL_EVENT_MOUSE_BUTTON_UP:
+			if (event.button.button == SDL_BUTTON_RIGHT && !event.button.down) {
+				rightMouseHeld = false;
+				SDL_SetWindowMouseRect(window, nullptr);
+				SDL_SetWindowRelativeMouseMode(window, false);
+			}
+			break;
+
+		case SDL_EVENT_MOUSE_MOTION:
+			if (rightMouseHeld) {
+				_yaw += event.motion.xrel / 200.0f;
+				_pitch -= event.motion.yrel / 200.0f;
+			}
+			break;
+
+		case SDL_EVENT_KEY_DOWN:
+			switch (event.key.key) {
+				case SDLK_W:
+					_velocity.z = -_speedMultiplier;
+					break;
+				case SDLK_S:
+					_velocity.z = _speedMultiplier;
+					break;
+				case SDLK_A:
+					_velocity.x = -_speedMultiplier;
+					break;
+				case SDLK_D:
+					_velocity.x = _speedMultiplier;
+					break;
+			}
+			break;
+
+		case SDL_EVENT_KEY_UP:
+			switch (event.key.key) {
+				case SDLK_W:
+				case SDLK_S:
+					_velocity.z = 0;
+					break;
+				case SDLK_A:
+				case SDLK_D:
+					_velocity.x = 0;
+					break;
+			}
+			break;
+
+		default:
+			break;
 	}
 }

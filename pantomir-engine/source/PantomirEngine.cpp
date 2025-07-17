@@ -346,7 +346,6 @@ void PantomirEngine::InitDescriptors() {
 	});
 
 	for (int i = 0; i < FRAME_OVERLAP; i++) {
-		// create a descriptor pool
 		std::vector<DescriptorAllocatorGrowable::PoolSizeRatio> frame_sizes = {
 			{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 3 },
 			{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3 },
@@ -863,7 +862,7 @@ void PantomirEngine::Draw() {
 		_resizeRequested = true;
 	}
 
-	// increase the number of frames drawn
+	// Increase the number of frames drawn
 	_frameNumber++;
 }
 
@@ -891,7 +890,7 @@ void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
 		}
 	}
 
-	// sort the opaque surfaces by material and mesh
+	// Sort the opaque surfaces by material and mesh
 	std::sort(opaque_draws.begin(), opaque_draws.end(), [&](const auto& iA, const auto& iB) {
 		const RenderObject& A = _mainDrawContext.OpaqueSurfaces[iA];
 		const RenderObject& B = _mainDrawContext.OpaqueSurfaces[iB];
@@ -1039,32 +1038,34 @@ void PantomirEngine::ImmediateSubmit(std::function<void(VkCommandBuffer cmd)>&& 
 }
 
 void PantomirEngine::MainLoop() {
-	SDL_Event e;
 	bool      bQuit = false;
 
 	while (!bQuit) {
 		auto start = std::chrono::steady_clock::now();
+
+		SDL_Event event;
+
 		// Handle events on queue
-		while (SDL_PollEvent(&e) != 0) {
+		while (SDL_PollEvent(&event) != 0) {
 			// Close the window when user alt-f4s or clicks the X button
-			if (e.type == SDL_EVENT_QUIT) {
+			if (event.type == SDL_EVENT_QUIT) {
 				bQuit = true;
 			}
 
-			_mainCamera.ProcessSDLEvent(e);
+			_mainCamera.ProcessSDLEvent(event, _window);
 
-			if (e.type == SDL_EVENT_WINDOW_RESIZED) {
+			if (event.type == SDL_EVENT_WINDOW_RESIZED) {
 				_resizeRequested = true;
 			}
 
-			if (e.type == SDL_EVENT_WINDOW_MINIMIZED) {
+			if (event.type == SDL_EVENT_WINDOW_MINIMIZED) {
 				_stopRendering = true;
 			}
-			if (e.type == SDL_EVENT_WINDOW_RESTORED) {
+			if (event.type == SDL_EVENT_WINDOW_RESTORED) {
 				_stopRendering = false;
 			}
 
-			ImGui_ImplSDL3_ProcessEvent(&e);
+			ImGui_ImplSDL3_ProcessEvent(&event);
 		}
 
 		// Do not draw if we are minimized
@@ -1220,7 +1221,7 @@ void PantomirEngine::UpdateScene() {
 	// Camera projection
 	glm::mat4 projection = glm::perspective(glm::radians(70.f), static_cast<float>(_windowExtent.width) / static_cast<float>(_windowExtent.height), 10000.f, 0.1f);
 
-	// invert the Y direction on projection matrix so that we are more similar
+	// Invert the Y direction on projection matrix so that we are more similar
 	// to opengl and gltf axis
 	projection[1][1] *= -1;
 
@@ -1280,11 +1281,10 @@ void GLTFMetallic_Roughness::BuildPipelines(PantomirEngine* engine) {
 	mesh_layout_info.pPushConstantRanges        = &matrixRange;
 	mesh_layout_info.pushConstantRangeCount     = 1;
 
-	VkPipelineLayout newLayout;
-	VK_CHECK(vkCreatePipelineLayout(engine->_device, &mesh_layout_info, nullptr, &newLayout));
+	VK_CHECK(vkCreatePipelineLayout(engine->_device, &mesh_layout_info, nullptr, &_pipelineLayout));
 
-	_opaquePipeline.layout      = newLayout;
-	_transparentPipeline.layout = newLayout;
+	_opaquePipeline.layout      = _pipelineLayout;
+	_transparentPipeline.layout = _pipelineLayout;
 
 	// Build the stage-create-info for both vertex and fragment stages. This lets
 	// the pipeline know the shader modules per stage
@@ -1302,7 +1302,7 @@ void GLTFMetallic_Roughness::BuildPipelines(PantomirEngine* engine) {
 	pipelineBuilder.SetDepthFormat(engine->_depthImage._imageFormat);
 
 	// Use the triangle layout we created
-	pipelineBuilder._pipelineLayout = newLayout;
+	pipelineBuilder._pipelineLayout = _pipelineLayout;
 
 	// Finally build the pipeline
 	_opaquePipeline.pipeline        = pipelineBuilder.BuildPipeline(engine->_device);
@@ -1319,8 +1319,7 @@ void GLTFMetallic_Roughness::BuildPipelines(PantomirEngine* engine) {
 }
 
 void GLTFMetallic_Roughness::ClearResources(VkDevice device) {
-	vkDestroyPipelineLayout(device, _opaquePipeline.layout, nullptr);
-	// vkDestroyPipelineLayout(device, _transparentPipeline.layout, nullptr);
+	vkDestroyPipelineLayout(device, _pipelineLayout, nullptr);
 	vkDestroyDescriptorSetLayout(device, _materialLayout, nullptr);
 	vkDestroyPipeline(device, _opaquePipeline.pipeline, nullptr);
 	vkDestroyPipeline(device, _transparentPipeline.pipeline, nullptr);

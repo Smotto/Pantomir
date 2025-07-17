@@ -3,6 +3,8 @@
 
 #include "VkTypes.h"
 
+#include <SDL3/SDL_video.h>
+
 union SDL_Event;
 
 class Camera {
@@ -17,7 +19,7 @@ public:
 	glm::mat4 GetViewMatrix();
 	glm::mat4 GetRotationMatrix();
 
-	void      ProcessSDLEvent(SDL_Event& e);
+	void      ProcessSDLEvent(SDL_Event& event, SDL_Window* window);
 	void      Update(const float deltaTime);
 
 private:
