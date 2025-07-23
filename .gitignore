@@ -62,4 +62,5 @@ pantomir_log.txt
 imgui.ini
 
 # Assets
-Assets/*
+Assets/Models/*
+Assets/Textures/*

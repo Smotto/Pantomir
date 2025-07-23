@@ -11,47 +11,51 @@ struct LoadedGLTF;
 struct MeshAsset;
 
 struct EngineStats {
-	float frametime;
-	int   triangle_count;
-	int   drawcall_count;
-	float scene_update_time;
-	float mesh_draw_time;
+	float _frameTime;
+	int   _triangleCount;
+	int   _drawcallCount;
+	float _sceneUpdateTime;
+	float _meshDrawTime;
 };
 
 struct DrawContext {
-	std::vector<RenderObject> OpaqueSurfaces;
-	std::vector<RenderObject> TransparentSurfaces;
+	std::vector<RenderObject> _opaqueSurfaces;
+	std::vector<RenderObject> _transparentSurfaces;
+	std::vector<RenderObject> _maskedSurfaces;
 };
 
 struct MeshNode : public Node {
-	std::shared_ptr<MeshAsset> mesh;
+	std::shared_ptr<MeshAsset> _mesh;
 
-	virtual void               Draw(const glm::mat4& topMatrix, DrawContext& ctx) override;
+	virtual void               Draw(const glm::mat4& topMatrix, DrawContext& drawContext) override;
 };
 
 struct GPUSceneData {
 	glm::mat4 view;
 	glm::mat4 proj;
-	glm::mat4 viewproj;
+	glm::mat4 viewProjection;
 	glm::vec4 ambientColor;
 	glm::vec4 sunlightDirection; // w for sun power
 	glm::vec4 sunlightColor;
 };
 
-struct ComputePushConstants {
+struct SkyPushConstants {
 	glm::vec4 data1;
 	glm::vec4 data2;
 	glm::vec4 data3;
 	glm::vec4 data4;
+	glm::vec3 cameraPosition;
+	float     padding;
+	glm::mat4 cameraRotation;
 };
 
 struct ComputeEffect {
-	const char*          name;
+	const char*      name;
 
-	VkPipeline           pipeline;
-	VkPipelineLayout     layout;
+	VkPipeline       pipeline;
+	VkPipelineLayout layout;
 
-	ComputePushConstants data;
+	SkyPushConstants pushConstants;
 };
 
 struct DeletionQueue {
@@ -96,15 +100,18 @@ class PantomirEngine;
 struct GLTFMetallic_Roughness {
 	MaterialPipeline      _opaquePipeline;
 	MaterialPipeline      _transparentPipeline;
+	MaterialPipeline      _maskedPipeline;
 
 	VkDescriptorSetLayout _materialLayout;
 	VkPipelineLayout      _pipelineLayout;
 
 	struct MaterialConstants {
 		glm::vec4 colorFactors;
-		glm::vec4 metal_rough_factors;
-		// Padding, we need it anyway for uniform buffers
-		glm::vec4 extra[14];
+		glm::vec4 metalRoughFactors;
+		float     alphaCutoff;
+		int       alphaMode;
+		glm::vec4 padding0;
+		double    padding1;
 	};
 
 	struct MaterialResources {
@@ -128,7 +135,7 @@ class PantomirEngine {
 public:
 	std::shared_ptr<InputSystem>                           _inputSystem;
 
-	bool                                                   bUseValidationLayers = true;
+	bool                                                   _bUseValidationLayers = true;
 
 	EngineStats                                            _stats;
 
@@ -160,7 +167,7 @@ public:
 	AllocatedImage                                         _depthImage {};
 	VkExtent2D                                             _drawExtent {};
 	VmaAllocator                                           _allocator {};
-	DeletionQueue                                          _mainDeletionQueue;
+	DeletionQueue                                          _shutdownDeletionQueue;
 
 	bool                                                   _isInitialized { false };
 	int                                                    _frameNumber { 0 };
@@ -175,7 +182,7 @@ public:
 	VkInstance                                             _instance {};       // Vulkan Library Handle
 	VkDebugUtilsMessengerEXT                               _debugMessenger {}; // Vulkan debug output handle
 	VkPhysicalDevice                                       _chosenGPU {};      // GPU chosen as the default device
-	VkDevice                                               _device {};         // Vulkan device for commands
+	VkDevice                                               _graphicsDevice {}; // Vulkan device for commands
 	VkSurfaceKHR                                           _surface {};        // Vulkan window surface
 
 	VkSwapchainKHR                                         _swapchain {};

@@ -67,22 +67,22 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, std:
 	}
 
 	// Move out the data buffer (as a value) from the Expected
-	fastgltf::GltfDataBuffer dataBuffer = std::move(dataBufferResult.get());
+	fastgltf::GltfDataBuffer dataBuffer  = std::move(dataBufferResult.get());
 
-	auto assetResult = parser.loadGltf(dataBuffer, path.parent_path(), gltfOptions);
+	auto                     assetResult = parser.loadGltf(dataBuffer, path.parent_path(), gltfOptions);
 	if (!assetResult) {
 		LOG(Engine, Error, "Failed to load GLTF: {}", getErrorMessage(assetResult.error()));
 		return std::nullopt;
 	}
 
-	fastgltf::Asset                                         gltfAsset  = std::move(assetResult.get());
+	fastgltf::Asset                                         gltfAsset = std::move(assetResult.get());
 
 	// We can estimate the descriptors we will need accurately
-	std::vector<DescriptorAllocatorGrowable::PoolSizeRatio> sizes = { { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 3 },
-		                                                              { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 3 },
-		                                                              { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1 } };
+	std::vector<DescriptorAllocatorGrowable::PoolSizeRatio> sizes     = { { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 3 },
+		                                                                  { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 3 },
+		                                                                  { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1 } };
 
-	file._descriptorPool.Init(engine->_device, gltfAsset.materials.size(), sizes);
+	file._descriptorPool.Init(engine->_graphicsDevice, gltfAsset.materials.size(), sizes);
 
 	// Load samplers
 	for (fastgltf::Sampler& sampler : gltfAsset.samplers) {
@@ -96,7 +96,7 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, std:
 		samplerCreateInfo.mipmapMode          = ExtractMipmapMode(sampler.minFilter.value_or(fastgltf::Filter::Nearest));
 
 		VkSampler newSampler;
-		vkCreateSampler(engine->_device, &samplerCreateInfo, nullptr, &newSampler);
+		vkCreateSampler(engine->_graphicsDevice, &samplerCreateInfo, nullptr, &newSampler);
 
 		file._samplers.push_back(newSampler);
 	}
@@ -131,20 +131,29 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, std:
 		file._materials[mat.name.c_str()] = newMat;
 
 		GLTFMetallic_Roughness::MaterialConstants constants;
-		constants.colorFactors.x           = mat.pbrData.baseColorFactor[0];
-		constants.colorFactors.y           = mat.pbrData.baseColorFactor[1];
-		constants.colorFactors.z           = mat.pbrData.baseColorFactor[2];
-		constants.colorFactors.w           = mat.pbrData.baseColorFactor[3];
+		constants.colorFactors.x      = mat.pbrData.baseColorFactor[0];
+		constants.colorFactors.y      = mat.pbrData.baseColorFactor[1];
+		constants.colorFactors.z      = mat.pbrData.baseColorFactor[2];
+		constants.colorFactors.w      = mat.pbrData.baseColorFactor[3];
 
-		constants.metal_rough_factors.x    = mat.pbrData.metallicFactor;
-		constants.metal_rough_factors.y    = mat.pbrData.roughnessFactor;
+		constants.metalRoughFactors.x = mat.pbrData.metallicFactor;
+		constants.metalRoughFactors.y = mat.pbrData.roughnessFactor;
+
+		if (mat.alphaMode == fastgltf::AlphaMode::Blend) {
+			constants.alphaMode = 2;
+		} else if (mat.alphaMode == fastgltf::AlphaMode::Mask) {
+			constants.alphaMode   = 1;
+			constants.alphaCutoff = mat.alphaCutoff;
+		} else {
+			constants.alphaMode = 0;
+		}
+
+		if (sizeof(constants) != 64) {
+			LOG(Engine, Debug, "Size of constants: {}", sizeof(constants));
+		}
+
 		// Write material parameters to buffer
 		sceneMaterialConstants[data_index] = constants;
-
-		MaterialPass passType              = MaterialPass::MainColor;
-		if (mat.alphaMode == fastgltf::AlphaMode::Blend) {
-			passType = MaterialPass::Transparent;
-		}
 
 		GLTFMetallic_Roughness::MaterialResources materialResources;
 		// Default the material textures
@@ -166,8 +175,16 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, std:
 			materialResources.colorSampler = file._samplers[sampler];
 		}
 
+		MaterialPass passType = MaterialPass::Opaque;
+		if (mat.alphaMode == fastgltf::AlphaMode::Blend) {
+			passType = MaterialPass::AlphaBlend;
+		}
+		if (mat.alphaMode == fastgltf::AlphaMode::Mask) {
+			passType = MaterialPass::AlphaMask;
+		}
+
 		// Build material
-		newMat->data = engine->_metalRoughMaterial.WriteMaterial(engine->_device, passType, materialResources, file._descriptorPool);
+		newMat->data = engine->_metalRoughMaterial.WriteMaterial(engine->_graphicsDevice, passType, materialResources, file._descriptorPool);
 
 		data_index++;
 	}
@@ -208,39 +225,39 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, std:
 				fastgltf::Accessor& posAccessor = gltfAsset.accessors[p.findAttribute("POSITION")->accessorIndex];
 				vertices.resize(vertices.size() + posAccessor.count);
 
-				fastgltf::iterateAccessorWithIndex<glm::vec3>(gltfAsset, posAccessor, [&](glm::vec3 v, size_t index) {
-					Vertex newvtx;
-					newvtx.position               = v;
-					newvtx.normal                 = { 1, 0, 0 };
-					newvtx.color                  = glm::vec4 { 1.f };
-					newvtx.uv_x                   = 0;
-					newvtx.uv_y                   = 0;
-					vertices[initial_vtx + index] = newvtx;
+				fastgltf::iterateAccessorWithIndex<glm::vec3>(gltfAsset, posAccessor, [&](glm::vec3 vertex, size_t index) {
+					Vertex newVertex;
+					newVertex.position            = vertex;
+					newVertex.normal              = { 1, 0, 0 };
+					newVertex.color               = glm::vec4 { 1.f };
+					newVertex.uv_x                = 0;
+					newVertex.uv_y                = 0;
+					vertices[initial_vtx + index] = newVertex;
 				});
 			}
 
 			// Load vertex normals
 			auto normals = p.findAttribute("NORMAL");
 			if (normals != p.attributes.end()) {
-				fastgltf::iterateAccessorWithIndex<glm::vec3>(gltfAsset, gltfAsset.accessors[(*normals).accessorIndex], [&](glm::vec3 v, size_t index) {
-					vertices[initial_vtx + index].normal = v;
+				fastgltf::iterateAccessorWithIndex<glm::vec3>(gltfAsset, gltfAsset.accessors[(*normals).accessorIndex], [&](glm::vec3 vertex, size_t index) {
+					vertices[initial_vtx + index].normal = vertex;
 				});
 			}
 
 			// Load UVs
 			auto uv = p.findAttribute("TEXCOORD_0");
 			if (uv != p.attributes.end()) {
-				fastgltf::iterateAccessorWithIndex<glm::vec2>(gltfAsset, gltfAsset.accessors[(*uv).accessorIndex], [&](glm::vec2 v, size_t index) {
-					vertices[initial_vtx + index].uv_x = v.x;
-					vertices[initial_vtx + index].uv_y = v.y;
+				fastgltf::iterateAccessorWithIndex<glm::vec2>(gltfAsset, gltfAsset.accessors[(*uv).accessorIndex], [&](glm::vec2 vertex, size_t index) {
+					vertices[initial_vtx + index].uv_x = vertex.x;
+					vertices[initial_vtx + index].uv_y = vertex.y;
 				});
 			}
 
 			// Load vertex colors
 			auto colors = p.findAttribute("COLOR_0");
 			if (colors != p.attributes.end()) {
-				fastgltf::iterateAccessorWithIndex<glm::vec4>(gltfAsset, gltfAsset.accessors[(*colors).accessorIndex], [&](glm::vec4 v, size_t index) {
-					vertices[initial_vtx + index].color = v;
+				fastgltf::iterateAccessorWithIndex<glm::vec4>(gltfAsset, gltfAsset.accessors[(*colors).accessorIndex], [&](glm::vec4 vertex, size_t index) {
+					vertices[initial_vtx + index].color = vertex;
 				});
 			}
 
@@ -275,8 +292,8 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, std:
 
 		// Find if the node has a mesh, and if it does hook it to the mesh pointer and allocate it with the meshnode class
 		if (node.meshIndex.has_value()) {
-			newNode                                     = std::make_shared<MeshNode>();
-			static_cast<MeshNode*>(newNode.get())->mesh = meshes[*node.meshIndex];
+			newNode                                      = std::make_shared<MeshNode>();
+			static_cast<MeshNode*>(newNode.get())->_mesh = meshes[*node.meshIndex];
 		} else {
 			newNode = std::make_shared<Node>();
 		}
@@ -436,7 +453,7 @@ std::optional<AllocatedImage> LoadImage(PantomirEngine* engine, fastgltf::Asset&
 }
 
 void LoadedGLTF::ClearAll() {
-	VkDevice dv = _creator->_device;
+	VkDevice dv = _creator->_graphicsDevice;
 
 	_descriptorPool.DestroyPools(dv);
 	_creator->DestroyBuffer(_materialDataBuffer);

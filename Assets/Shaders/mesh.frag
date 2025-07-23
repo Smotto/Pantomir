@@ -13,8 +13,14 @@ void main()
 {
     float lightValue = max(dot(inNormal, sceneData.sunlightDirection.xyz), 0.1f);
 
-    vec3 color = inColor * texture(colorTex,inUV).xyz;
+    vec4 texColor = texture(colorTex, inUV);
+
+    // Alpha masking (if enabled)
+    if (materialData.alphaMode == 1 && texColor.a < materialData.alphaCutoff)
+        discard;
+
+    vec3 color = inColor * texColor.rgb;
     vec3 ambient = color *  sceneData.ambientColor.xyz;
 
-    outFragColor = vec4(color * lightValue *  sceneData.sunlightColor.w + ambient ,1.0f);
+    outFragColor = vec4(color * lightValue *  sceneData.sunlightColor.w + ambient, texColor.a);
 }

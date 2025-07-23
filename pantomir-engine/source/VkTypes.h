@@ -19,8 +19,9 @@
 #include <glm/vec4.hpp>
 
 enum class MaterialPass :uint8_t {
-	MainColor,
-	Transparent,
+	Opaque,
+	AlphaMask,
+	AlphaBlend,
 	Other
 };
 
@@ -59,7 +60,7 @@ struct GPUMeshBuffers {
 // Push constants for our mesh object draws
 struct GPUDrawPushConstants {
 	glm::mat4 worldMatrix;
-	VkDeviceAddress vertexBuffer;
+	VkDeviceAddress vertexBufferAddress;
 };
 
 struct AllocatedImage {
