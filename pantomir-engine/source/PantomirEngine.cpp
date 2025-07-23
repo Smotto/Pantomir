@@ -180,7 +180,7 @@ void PantomirEngine::InitVulkan() {
 	vkb::DeviceBuilder logicalDeviceBuilder { selectedPhysicalDevice };
 	vkb::Device        builtLogicalDevice = logicalDeviceBuilder.build().value();
 
-	_graphicsDevice                               = builtLogicalDevice.device;
+	_graphicsDevice                       = builtLogicalDevice.device;
 	_chosenGPU                            = selectedPhysicalDevice.physical_device;
 
 	_graphicsQueue                        = builtLogicalDevice.get_queue(vkb::QueueType::graphics).value();
@@ -637,12 +637,12 @@ void PantomirEngine::InitDefaultData() {
 	// write the buffer
 	GLTFMetallic_Roughness::MaterialConstants* sceneUniformData  = static_cast<GLTFMetallic_Roughness::MaterialConstants*>(materialConstants.allocation->GetMappedData());
 	sceneUniformData->colorFactors                               = glm::vec4 { 1, 1, 1, 1 };
-	sceneUniformData->metalRoughFactors                        = glm::vec4 { 1, 0.5, 0, 0 };
+	sceneUniformData->metalRoughFactors                          = glm::vec4 { 1, 0.5, 0, 0 };
 
 	materialResources.dataBuffer                                 = materialConstants.buffer;
 	materialResources.dataBufferOffset                           = 0;
 
-	_defaultData                                                 = _metalRoughMaterial.WriteMaterial(_graphicsDevice, MaterialPass::Opaque, materialResources, globalDescriptorAllocator);
+	_defaultData                                                 = _metalRoughMaterial.WriteMaterial(_graphicsDevice, MaterialPass::Opaque, VK_CULL_MODE_NONE, materialResources, globalDescriptorAllocator);
 
 	std::string modelPath                                        = { "Assets/Models/Echidna1.glb" };
 	auto        modelFile                                        = LoadGltf(this, modelPath);
@@ -1106,10 +1106,10 @@ void PantomirEngine::MainLoop() {
 
 			ImGui::SliderInt("Effect Index", &_currentBackgroundEffect, 0, _backgroundEffects.size() - 1);
 
-			ImGui::InputFloat4("data1", (float*)&selected.pushConstants.data1);
-			ImGui::InputFloat4("data2", (float*)&selected.pushConstants.data2);
-			ImGui::InputFloat4("data3", (float*)&selected.pushConstants.data3);
-			ImGui::InputFloat4("data4", (float*)&selected.pushConstants.data4);
+			ImGui::InputFloat4("data1", reinterpret_cast<float*>(&selected.pushConstants.data1));
+			ImGui::InputFloat4("data2", reinterpret_cast<float*>(&selected.pushConstants.data2));
+			ImGui::InputFloat4("data3", reinterpret_cast<float*>(&selected.pushConstants.data3));
+			ImGui::InputFloat4("data4", reinterpret_cast<float*>(&selected.pushConstants.data4));
 		}
 
 		ImGui::End();
@@ -1259,10 +1259,6 @@ void PantomirEngine::UpdateScene() {
 	_deltaTime                                                          = std::clamp(deltaTimeSeconds, 0.0001f, 0.016f);
 }
 
-int main(int argc, char* argv[]) {
-	return PantomirEngine::GetInstance().Start();
-}
-
 void GLTFMetallic_Roughness::BuildPipelines(PantomirEngine* engine) {
 	VkShaderModule meshVertexShader;
 	if (!vkutil::LoadShaderModule("Assets/Shaders/mesh.vert.spv", engine->_graphicsDevice, &meshVertexShader)) {
@@ -1296,41 +1292,52 @@ void GLTFMetallic_Roughness::BuildPipelines(PantomirEngine* engine) {
 
 	VK_CHECK(vkCreatePipelineLayout(engine->_graphicsDevice, &meshLayoutInfo, nullptr, &_pipelineLayout));
 
-	_opaquePipeline.layout      = _pipelineLayout;
-	_transparentPipeline.layout = _pipelineLayout;
-	_maskedPipeline.layout      = _pipelineLayout;
-
 	// Build the stage-create-info for both vertex and fragment stages. This lets
 	// the pipeline know the shader modules per stage
 	PipelineBuilder pipelineBuilder;
-	pipelineBuilder.SetShaders(meshVertexShader, meshFragShader);
-	pipelineBuilder.SetInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-	pipelineBuilder.SetPolygonMode(VK_POLYGON_MODE_FILL);
-	pipelineBuilder.SetCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_CLOCKWISE);
-	pipelineBuilder.SetMultisamplingNone();
-	pipelineBuilder.DisableBlending();
-	pipelineBuilder.EnableDepthtest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
 
 	// Render format
 	pipelineBuilder.SetColorAttachmentFormat(engine->_drawImage._imageFormat);
 	pipelineBuilder.SetDepthFormat(engine->_depthImage._imageFormat);
 
-	// Use the triangle layout we created
-	pipelineBuilder._pipelineLayout = _pipelineLayout;
-
-	// Finally build the pipeline
-	_opaquePipeline.pipeline        = pipelineBuilder.BuildPipeline(engine->_graphicsDevice);
-
-	// Create the transparent variant
-	pipelineBuilder.EnableBlendingAdditive();
-	pipelineBuilder.EnableDepthtest(false, VK_COMPARE_OP_GREATER_OR_EQUAL);
-
-	_transparentPipeline.pipeline = pipelineBuilder.BuildPipeline(engine->_graphicsDevice);
-
+	pipelineBuilder.SetShaders(meshVertexShader, meshFragShader);
+	pipelineBuilder.SetInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+	pipelineBuilder.SetPolygonMode(VK_POLYGON_MODE_FILL);
+	pipelineBuilder.SetCullMode(VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_COUNTER_CLOCKWISE);
+	pipelineBuilder.SetMultisamplingNone();
 	pipelineBuilder.DisableBlending();
 	pipelineBuilder.EnableDepthtest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
 
+	// Use the triangle layout we created
+	pipelineBuilder._pipelineLayout        = _pipelineLayout;
+	_opaquePipeline.layout                 = _pipelineLayout;
+	_transparentPipeline.layout            = _pipelineLayout;
+	_maskedPipeline.layout                 = _pipelineLayout;
+	_opaqueDoubleSidedPipeline.layout      = _pipelineLayout;
+	_transparentDoubleSidedPipeline.layout = _pipelineLayout;
+	_maskedDoubleSidedPipeline.layout      = _pipelineLayout;
+
+	// Building Pipelines
+	_opaquePipeline.pipeline               = pipelineBuilder.BuildPipeline(engine->_graphicsDevice);
+
+	pipelineBuilder.SetCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE);
+	_opaqueDoubleSidedPipeline.pipeline = pipelineBuilder.BuildPipeline(engine->_graphicsDevice);
+
+	pipelineBuilder.SetCullMode(VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_COUNTER_CLOCKWISE);
+	pipelineBuilder.EnableBlendingAlphablend();
+	pipelineBuilder.EnableDepthtest(false, VK_COMPARE_OP_GREATER_OR_EQUAL);
+	_transparentPipeline.pipeline = pipelineBuilder.BuildPipeline(engine->_graphicsDevice);
+
+	pipelineBuilder.SetCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE);
+	_transparentDoubleSidedPipeline.pipeline = pipelineBuilder.BuildPipeline(engine->_graphicsDevice);
+
+	pipelineBuilder.SetCullMode(VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_COUNTER_CLOCKWISE);
+	pipelineBuilder.DisableBlending();
+	pipelineBuilder.EnableDepthtest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
 	_maskedPipeline.pipeline = pipelineBuilder.BuildPipeline(engine->_graphicsDevice);
+
+	pipelineBuilder.SetCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE);
+	_maskedDoubleSidedPipeline.pipeline = pipelineBuilder.BuildPipeline(engine->_graphicsDevice);
 
 	vkDestroyShaderModule(engine->_graphicsDevice, meshFragShader, nullptr);
 	vkDestroyShaderModule(engine->_graphicsDevice, meshVertexShader, nullptr);
@@ -1340,34 +1347,53 @@ void GLTFMetallic_Roughness::ClearResources(VkDevice device) {
 	vkDestroyPipeline(device, _maskedPipeline.pipeline, nullptr);
 	vkDestroyPipeline(device, _transparentPipeline.pipeline, nullptr);
 	vkDestroyPipeline(device, _opaquePipeline.pipeline, nullptr);
+	vkDestroyPipeline(device, _maskedDoubleSidedPipeline.pipeline, nullptr);
+	vkDestroyPipeline(device, _transparentDoubleSidedPipeline.pipeline, nullptr);
+	vkDestroyPipeline(device, _opaqueDoubleSidedPipeline.pipeline, nullptr);
+
 	vkDestroyPipelineLayout(device, _pipelineLayout, nullptr);
 	vkDestroyDescriptorSetLayout(device, _materialLayout, nullptr);
 }
 
-MaterialInstance GLTFMetallic_Roughness::WriteMaterial(VkDevice device, MaterialPass pass, const GLTFMetallic_Roughness::MaterialResources& resources, DescriptorAllocatorGrowable& descriptorAllocator) {
-	MaterialInstance matData {};
+MaterialInstance GLTFMetallic_Roughness::WriteMaterial(VkDevice device, MaterialPass pass, VkCullModeFlagBits cullMode, const GLTFMetallic_Roughness::MaterialResources& resources, DescriptorAllocatorGrowable& descriptorAllocator) {
+	MaterialInstance materialInstance {};
 
-	matData.passType = pass;
+	materialInstance.passType = pass;
+	materialInstance.cullMode = cullMode;
+
+	// Per material, we choose a pipeline based on its properties.
 	if (pass == MaterialPass::AlphaBlend) {
-		matData.pipeline = &_transparentPipeline;
+		if (cullMode == VK_CULL_MODE_NONE) {
+			materialInstance.pipeline = &_transparentDoubleSidedPipeline;
+		} else {
+			materialInstance.pipeline = &_transparentPipeline;
+		}
 	} else if (pass == MaterialPass::AlphaMask) {
-		matData.pipeline = &_maskedPipeline; // TODO: Alpha masked pipeline
+		if (cullMode == VK_CULL_MODE_NONE) {
+			materialInstance.pipeline = &_maskedDoubleSidedPipeline;
+		} else {
+			materialInstance.pipeline = &_maskedPipeline;
+		}
 	} else if (pass == MaterialPass::Opaque) {
-		matData.pipeline = &_opaquePipeline;
+		if (cullMode == VK_CULL_MODE_NONE) {
+			materialInstance.pipeline = &_opaqueDoubleSidedPipeline;
+		} else {
+			materialInstance.pipeline = &_opaquePipeline;
+		}
 	} else {
-		matData.pipeline = &_opaquePipeline;
+		materialInstance.pipeline = &_opaquePipeline;
 	}
 
-	matData.materialSet = descriptorAllocator.Allocate(device, _materialLayout);
+	materialInstance.materialSet = descriptorAllocator.Allocate(device, _materialLayout);
 
 	_writer.Clear();
 	_writer.WriteBuffer(0, resources.dataBuffer, sizeof(MaterialConstants), resources.dataBufferOffset, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 	_writer.WriteImage(1, resources.colorImage._imageView, resources.colorSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 	_writer.WriteImage(2, resources.metalRoughImage._imageView, resources.metalRoughSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 
-	_writer.UpdateSet(device, matData.materialSet);
+	_writer.UpdateSet(device, materialInstance.materialSet);
 
-	return matData;
+	return materialInstance;
 }
 
 void MeshNode::Draw(const glm::mat4& topMatrix, DrawContext& drawContext) {
@@ -1395,4 +1421,8 @@ void MeshNode::Draw(const glm::mat4& topMatrix, DrawContext& drawContext) {
 	}
 
 	Node::Draw(topMatrix, drawContext);
+}
+
+int main(int argc, char* argv[]) {
+	return PantomirEngine::GetInstance().Start();
 }

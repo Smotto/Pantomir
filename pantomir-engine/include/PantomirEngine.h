@@ -101,6 +101,10 @@ struct GLTFMetallic_Roughness {
 	MaterialPipeline      _opaquePipeline;
 	MaterialPipeline      _transparentPipeline;
 	MaterialPipeline      _maskedPipeline;
+	// TODO: Probably want to do some bindless approach to dynamically switch between single/double sided culling methods
+	MaterialPipeline      _opaqueDoubleSidedPipeline;
+	MaterialPipeline      _transparentDoubleSidedPipeline;
+	MaterialPipeline      _maskedDoubleSidedPipeline;
 
 	VkDescriptorSetLayout _materialLayout;
 	VkPipelineLayout      _pipelineLayout;
@@ -128,7 +132,7 @@ struct GLTFMetallic_Roughness {
 	void             BuildPipelines(PantomirEngine* engine);
 	void             ClearResources(VkDevice device);
 
-	MaterialInstance WriteMaterial(VkDevice device, MaterialPass pass, const MaterialResources& resources, DescriptorAllocatorGrowable& descriptorAllocator);
+	MaterialInstance WriteMaterial(VkDevice device, MaterialPass pass, VkCullModeFlagBits cullMode, const MaterialResources& resources, DescriptorAllocatorGrowable& descriptorAllocator);
 };
 
 class PantomirEngine {

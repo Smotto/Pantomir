@@ -34,6 +34,7 @@ struct MaterialInstance {
 	MaterialPipeline* pipeline;
 	VkDescriptorSet materialSet;
 	MaterialPass passType;
+	VkCullModeFlagBits cullMode;
 };
 
 struct Vertex {
