@@ -59,7 +59,7 @@ Thumbs.db
 pantomir_log.txt
 
 # Imgui
-imgui.ini
+/imgui.ini
 
 # Assets
 Assets/Models/*

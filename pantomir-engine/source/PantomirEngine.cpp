@@ -625,19 +625,22 @@ void PantomirEngine::InitDefaultData() {
 	});
 
 	GLTFMetallic_Roughness::MaterialResources materialResources;
-	// default the material textures
+	// Default the material textures
 	materialResources.colorImage                                 = _whiteImage;
 	materialResources.colorSampler                               = _defaultSamplerLinear;
 	materialResources.metalRoughImage                            = _whiteImage;
 	materialResources.metalRoughSampler                          = _defaultSamplerLinear;
+	materialResources.emissiveImage                              = _blackImage;
+	materialResources.emissiveSampler                            = _defaultSamplerLinear;
 
-	// set the uniform buffer for the material data
+	// Set the uniform buffer for the material data
 	AllocatedBuffer                            materialConstants = CreateBuffer(sizeof(GLTFMetallic_Roughness::MaterialConstants), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 
-	// write the buffer
+	// Write the buffer
 	GLTFMetallic_Roughness::MaterialConstants* sceneUniformData  = static_cast<GLTFMetallic_Roughness::MaterialConstants*>(materialConstants.allocation->GetMappedData());
 	sceneUniformData->colorFactors                               = glm::vec4 { 1, 1, 1, 1 };
 	sceneUniformData->metalRoughFactors                          = glm::vec4 { 1, 0.5, 0, 0 };
+	sceneUniformData->emissiveFactors                            = glm::vec3 { 0, 0, 0 };
 
 	materialResources.dataBuffer                                 = materialConstants.buffer;
 	materialResources.dataBufferOffset                           = 0;
@@ -1279,6 +1282,7 @@ void GLTFMetallic_Roughness::BuildPipelines(PantomirEngine* engine) {
 	layoutBuilder.AddBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 	layoutBuilder.AddBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 	layoutBuilder.AddBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+	layoutBuilder.AddBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 
 	_materialLayout                           = layoutBuilder.Build(engine->_graphicsDevice, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 
@@ -1390,6 +1394,7 @@ MaterialInstance GLTFMetallic_Roughness::WriteMaterial(VkDevice device, Material
 	_writer.WriteBuffer(0, resources.dataBuffer, sizeof(MaterialConstants), resources.dataBufferOffset, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 	_writer.WriteImage(1, resources.colorImage._imageView, resources.colorSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 	_writer.WriteImage(2, resources.metalRoughImage._imageView, resources.metalRoughSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+	_writer.WriteImage(3, resources.emissiveImage._imageView, resources.emissiveSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 
 	_writer.UpdateSet(device, materialInstance.materialSet);
 

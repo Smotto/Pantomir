@@ -112,9 +112,9 @@ struct GLTFMetallic_Roughness {
 	struct MaterialConstants {
 		glm::vec4 colorFactors;
 		glm::vec4 metalRoughFactors;
+		glm::vec3 emissiveFactors;
 		float     alphaCutoff;
 		int       alphaMode;
-		glm::vec4 padding0;
 		double    padding1;
 	};
 
@@ -123,6 +123,8 @@ struct GLTFMetallic_Roughness {
 		VkSampler      colorSampler;
 		AllocatedImage metalRoughImage;
 		VkSampler      metalRoughSampler;
+		AllocatedImage emissiveImage;
+		VkSampler      emissiveSampler;
 		VkBuffer       dataBuffer;
 		uint32_t       dataBufferOffset;
 	};

@@ -19,13 +19,13 @@
 /* Free Functions */
 VkFilter ExtractFilter(fastgltf::Filter filter) {
 	switch (filter) {
-		// nearest samplers
+		// Nearest samplers
 		case fastgltf::Filter::Nearest:
 		case fastgltf::Filter::NearestMipMapNearest:
 		case fastgltf::Filter::NearestMipMapLinear:
 			return VK_FILTER_NEAREST;
 
-		// linear samplers
+		// Linear samplers
 		case fastgltf::Filter::Linear:
 		case fastgltf::Filter::LinearMipMapNearest:
 		case fastgltf::Filter::LinearMipMapLinear:
@@ -139,6 +139,10 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, std:
 		constants.metalRoughFactors.x = material.pbrData.metallicFactor;
 		constants.metalRoughFactors.y = material.pbrData.roughnessFactor;
 
+		constants.emissiveFactors.x   = material.emissiveFactor[0];
+		constants.emissiveFactors.y   = material.emissiveFactor[1];
+		constants.emissiveFactors.z   = material.emissiveFactor[2];
+
 		if (material.alphaMode == fastgltf::AlphaMode::Blend) {
 			constants.alphaMode = 2;
 		} else if (material.alphaMode == fastgltf::AlphaMode::Mask) {
@@ -152,11 +156,14 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, std:
 		sceneMaterialConstants[data_index] = constants;
 
 		GLTFMetallic_Roughness::MaterialResources materialResources;
+
 		// Default the material textures
 		materialResources.colorImage        = engine->_whiteImage;
 		materialResources.colorSampler      = engine->_defaultSamplerLinear;
 		materialResources.metalRoughImage   = engine->_whiteImage;
 		materialResources.metalRoughSampler = engine->_defaultSamplerLinear;
+		materialResources.emissiveImage     = engine->_blackImage;
+		materialResources.emissiveSampler   = engine->_defaultSamplerLinear;
 
 		// Set the uniform buffer for the material data
 		materialResources.dataBuffer        = file._materialDataBuffer.buffer;
@@ -169,6 +176,15 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, std:
 
 			materialResources.colorImage   = images[image];
 			materialResources.colorSampler = file._samplers[sampler];
+		}
+
+		if (material.emissiveTexture.has_value()) {
+			size_t texIndex                   = material.emissiveTexture->textureIndex;
+			size_t imageIndex                 = gltfAsset.textures[texIndex].imageIndex.value();
+			size_t samplerIndex               = gltfAsset.textures[texIndex].samplerIndex.value();
+
+			materialResources.emissiveImage   = images[imageIndex];
+			materialResources.emissiveSampler = file._samplers[samplerIndex];
 		}
 
 		MaterialPass passType = MaterialPass::Opaque;
@@ -184,7 +200,6 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, std:
 			cullMode = VK_CULL_MODE_NONE;
 		}
 
-		// Build material
 		currentMaterial->data = engine->_metalRoughMaterial.WriteMaterial(engine->_graphicsDevice, passType, cullMode, materialResources, file._descriptorPool);
 
 		data_index++;

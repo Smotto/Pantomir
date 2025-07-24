@@ -14,13 +14,18 @@ void main()
     float lightValue = max(dot(inNormal, sceneData.sunlightDirection.xyz), 0.1f);
 
     vec4 texColor = texture(colorTex, inUV);
+    vec4 texEmissive = texture(emissiveTex, inUV);
 
     // Alpha masking (if enabled)
     if (materialData.alphaMode == 1 && texColor.a < materialData.alphaCutoff)
         discard;
 
+    // Emissive
+    vec3 emissive = texEmissive.rgb * materialData.emissiveFactors;
     vec3 color = inColor * texColor.rgb;
     vec3 ambient = color *  sceneData.ambientColor.xyz;
 
-    outFragColor = vec4(color * lightValue *  sceneData.sunlightColor.w + ambient, texColor.a);
+    vec3 litColor = color * lightValue * sceneData.sunlightColor.w + ambient + emissive;
+
+    outFragColor = vec4(litColor, texColor.a);
 }
