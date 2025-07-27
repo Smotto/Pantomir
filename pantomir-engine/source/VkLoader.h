@@ -16,7 +16,7 @@ struct GLTFMaterial {
 };
 
 struct Bounds {
-	glm::vec3 origin;
+	glm::vec3 originPoint;
 	float     sphereRadius;
 	glm::vec3 extents;
 };
@@ -48,7 +48,7 @@ struct MeshAsset {
 class PantomirEngine;
 
 struct LoadedGLTF : public IRenderable {
-	// storage for all the data on a given glTF file
+	// Storage for all the data on a given glTF file
 	std::unordered_map<std::string, std::shared_ptr<MeshAsset>>    _meshes;
 	std::unordered_map<std::string, std::shared_ptr<Node>>         _nodes;
 	std::unordered_map<std::string, AllocatedImage>                _images;
@@ -59,13 +59,13 @@ struct LoadedGLTF : public IRenderable {
 	std::vector<VkSampler>                                         _samplers;
 	DescriptorAllocatorGrowable                                    _descriptorPool;
 	AllocatedBuffer                                                _materialDataBuffer;
-	PantomirEngine*                                                _creator;
+	PantomirEngine*                                                _enginePtr;
 
 	~LoadedGLTF() {
 		ClearAll();
 	};
 
-	virtual void Draw(const glm::mat4& topMatrix, DrawContext& ctx);
+	virtual void Draw(const glm::mat4& topMatrix, DrawContext& drawContext);
 
 private:
 	void ClearAll();

@@ -72,6 +72,12 @@ void Camera::ProcessSDLEvent(SDL_Event& event, SDL_Window* window) {
 				case SDLK_D:
 					_velocity.x = _speedMultiplier;
 					break;
+				case SDLK_Q:
+					_velocity.y = _speedMultiplier;
+					break;
+				case SDLK_Z:
+					_velocity.y = -_speedMultiplier;
+					break;
 			}
 			break;
 
@@ -84,6 +90,10 @@ void Camera::ProcessSDLEvent(SDL_Event& event, SDL_Window* window) {
 				case SDLK_A:
 				case SDLK_D:
 					_velocity.x = 0;
+					break;
+				case SDLK_Q:
+				case SDLK_Z:
+					_velocity.y = 0;
 					break;
 			}
 			break;

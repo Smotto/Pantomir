@@ -57,44 +57,44 @@ void DescriptorWriter::WriteImage(int binding, VkImageView image, VkSampler samp
 void DescriptorAllocatorGrowable::Init(VkDevice device, uint32_t maxSets, std::span<DescriptorAllocatorGrowable::PoolSizeRatio> poolRatios) {
 	_ratios.clear();
 
-	for (auto r : poolRatios) {
-		_ratios.push_back(r);
+	for (auto ratio : poolRatios) {
+		_ratios.push_back(ratio);
 	}
 
 	VkDescriptorPool newPool = CreatePool(device, maxSets, poolRatios);
 
-	_setsPerPool             = maxSets * 1.5; // grow it next allocation
+	_setsPerPool             = maxSets * 1.5; // Grow it next allocation
 
 	_readyPools.push_back(newPool);
 }
 
 VkDescriptorSet DescriptorAllocatorGrowable::Allocate(VkDevice device, VkDescriptorSetLayout layout, void* pNext) {
 	// Get or create a pool to allocate from
-	VkDescriptorPool            poolToUse = GetPool(device);
+	VkDescriptorPool            poolToUse    = GetPool(device);
 
-	VkDescriptorSetAllocateInfo allocInfo = {};
-	allocInfo.pNext                       = pNext;
-	allocInfo.sType                       = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-	allocInfo.descriptorPool              = poolToUse;
-	allocInfo.descriptorSetCount          = 1;
-	allocInfo.pSetLayouts                 = &layout;
+	VkDescriptorSetAllocateInfo allocateInfo = {};
+	allocateInfo.pNext                       = pNext;
+	allocateInfo.sType                       = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+	allocateInfo.descriptorPool              = poolToUse;
+	allocateInfo.descriptorSetCount          = 1;
+	allocateInfo.pSetLayouts                 = &layout;
 
-	VkDescriptorSet ds;
-	VkResult        result = vkAllocateDescriptorSets(device, &allocInfo, &ds);
+	VkDescriptorSet descriptorSet;
+	VkResult        result = vkAllocateDescriptorSets(device, &allocateInfo, &descriptorSet);
 
 	// Allocation failed. Try again
 	if (result == VK_ERROR_OUT_OF_POOL_MEMORY || result == VK_ERROR_FRAGMENTED_POOL) {
 
 		_fullPools.push_back(poolToUse);
 
-		poolToUse                = GetPool(device);
-		allocInfo.descriptorPool = poolToUse;
+		poolToUse                   = GetPool(device);
+		allocateInfo.descriptorPool = poolToUse;
 
-		VK_CHECK(vkAllocateDescriptorSets(device, &allocInfo, &ds));
+		VK_CHECK(vkAllocateDescriptorSets(device, &allocateInfo, &descriptorSet));
 	}
 
 	_readyPools.push_back(poolToUse);
-	return ds;
+	return descriptorSet;
 }
 
 VkDescriptorPool DescriptorAllocatorGrowable::GetPool(VkDevice device) {

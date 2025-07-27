@@ -5,29 +5,28 @@
 #include "VkDescriptors.h"
 #include "VkTypes.h"
 
-class InputSystem;
 struct RenderObject;
 struct LoadedGLTF;
 struct MeshAsset;
 
 struct EngineStats {
-	float _frameTime;
-	int   _triangleCount;
-	int   _drawcallCount;
-	float _sceneUpdateTime;
-	float _meshDrawTime;
+	float frameTime;
+	int   triangleCount;
+	int   drawcallCount;
+	float sceneUpdateTime;
+	float meshDrawTime;
 };
 
 struct DrawContext {
-	std::vector<RenderObject> _opaqueSurfaces;
-	std::vector<RenderObject> _transparentSurfaces;
-	std::vector<RenderObject> _maskedSurfaces;
+	std::vector<RenderObject> opaqueSurfaces;
+	std::vector<RenderObject> transparentSurfaces;
+	std::vector<RenderObject> maskedSurfaces;
 };
 
-struct MeshNode : public Node {
+struct MeshNode : Node {
 	std::shared_ptr<MeshAsset> _mesh;
 
-	virtual void               Draw(const glm::mat4& topMatrix, DrawContext& drawContext) override;
+	void                       Draw(const glm::mat4& topMatrix, DrawContext& drawContext) override;
 };
 
 struct GPUSceneData {
@@ -59,43 +58,42 @@ struct ComputeEffect {
 };
 
 struct DeletionQueue {
-	// Stores a lambda pointer
-	std::deque<std::shared_ptr<std::function<void()>>> _deletors;
+	// Stores a lambda shared-pointer
+	std::deque<std::shared_ptr<std::function<void()>>> _deletionQueue;
 
 	void                                               PushFunction(std::function<void()>&& function) {
-        _deletors.push_back(MakeDeletionTask(std::forward<decltype(function)>(function)));
+        _deletionQueue.push_back(MakeDeletionTask(std::forward<decltype(function)>(function)));
 	}
 
 	void Flush() {
 		// Reverse iterate the deletion queue to execute all the functions
-		for (auto it = _deletors.rbegin(); it != _deletors.rend(); ++it) {
+		for (auto it = _deletionQueue.rbegin(); it != _deletionQueue.rend(); ++it) {
 			(**it)(); // Call functors
 		}
 
-		_deletors.clear();
+		_deletionQueue.clear();
 	}
 
 private:
-	inline std::shared_ptr<std::function<void()>> MakeDeletionTask(auto&& lambda) {
+	std::shared_ptr<std::function<void()>> MakeDeletionTask(auto&& lambda) {
 		return std::make_shared<std::function<void()>>(std::forward<decltype(lambda)>(lambda));
 	}
 };
 
 struct FrameData {
-	VkSemaphore                 _swapchainSemaphore {}, _renderSemaphore {};
-	VkFence                     _renderFence {};
+	VkSemaphore                 swapchainSemaphore {}, renderSemaphore {};
+	VkFence                     renderFence {};
 
-	VkCommandPool               _commandPool {};
-	VkCommandBuffer             _mainCommandBuffer {};
+	VkCommandPool               commandPool {};
+	VkCommandBuffer             mainCommandBuffer {};
 
-	DeletionQueue               _deletionQueue;
-	DescriptorAllocatorGrowable _frameDescriptors;
+	DeletionQueue               deletionQueue;
+	DescriptorAllocatorGrowable frameDescriptors;
 };
 
+class PantomirEngine;
 constexpr unsigned int             FRAME_OVERLAP = 2;
 inline DescriptorAllocatorGrowable globalDescriptorAllocator;
-
-class PantomirEngine;
 
 struct GLTFMetallic_Roughness {
 	MaterialPipeline      _opaquePipeline;
@@ -109,6 +107,7 @@ struct GLTFMetallic_Roughness {
 	VkDescriptorSetLayout _materialLayout;
 	VkPipelineLayout      _pipelineLayout;
 
+	// Nested Types
 	struct MaterialConstants {
 		glm::vec4 colorFactors;
 		glm::vec4 metalRoughFactors;
@@ -117,7 +116,6 @@ struct GLTFMetallic_Roughness {
 		int       alphaMode;
 		double    padding1;
 	};
-
 	struct MaterialResources {
 		AllocatedImage colorImage;
 		VkSampler      colorSampler;
@@ -125,6 +123,9 @@ struct GLTFMetallic_Roughness {
 		VkSampler      metalRoughSampler;
 		AllocatedImage emissiveImage;
 		VkSampler      emissiveSampler;
+		AllocatedImage normalImage;
+		VkSampler      normalSampler;
+
 		VkBuffer       dataBuffer;
 		uint32_t       dataBufferOffset;
 	};
@@ -139,8 +140,6 @@ struct GLTFMetallic_Roughness {
 
 class PantomirEngine {
 public:
-	std::shared_ptr<InputSystem>                           _inputSystem;
-
 	bool                                                   _bUseValidationLayers = true;
 
 	EngineStats                                            _stats;
@@ -187,8 +186,8 @@ public:
 
 	VkInstance                                             _instance {};       // Vulkan Library Handle
 	VkDebugUtilsMessengerEXT                               _debugMessenger {}; // Vulkan debug output handle
-	VkPhysicalDevice                                       _chosenGPU {};      // GPU chosen as the default device
-	VkDevice                                               _graphicsDevice {}; // Vulkan device for commands
+	VkPhysicalDevice                                       _physicalGPU {}; // GPU chosen as the default device
+	VkDevice                                               _logicalGPU {};  // Vulkan device for commands
 	VkSurfaceKHR                                           _surface {};        // Vulkan window surface
 
 	VkSwapchainKHR                                         _swapchain {};
@@ -233,13 +232,13 @@ public:
 	void              Draw();
 	void              DrawBackground(VkCommandBuffer commandBuffer);
 	void              DrawGeometry(VkCommandBuffer commandBuffer);
-	void              DrawImgui(VkCommandBuffer cmd, VkImageView targetImageView);
+	void              DrawImgui(VkCommandBuffer commandBuffer, VkImageView targetImageView) const;
 	void              ImmediateSubmit(std::function<void(VkCommandBuffer cmd)>&& anonymousFunction);
 
 	GPUMeshBuffers    UploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices);
-	AllocatedImage    CreateImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
+	AllocatedImage    CreateImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false) const;
 	AllocatedImage    CreateImage(void* data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
-	void              DestroyImage(const AllocatedImage& img);
+	void              DestroyImage(const AllocatedImage& img) const;
 
 	AllocatedBuffer   CreateBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
 	void              DestroyBuffer(const AllocatedBuffer& buffer);

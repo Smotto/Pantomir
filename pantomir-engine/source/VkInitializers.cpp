@@ -68,17 +68,17 @@ VkSemaphoreSubmitInfo vkinit::SemaphoreSubmitInfo(VkPipelineStageFlags2 stageMas
 	return submitInfo;
 }
 
-VkCommandBufferSubmitInfo vkinit::CommandBufferSubmitInfo(VkCommandBuffer cmd) {
+VkCommandBufferSubmitInfo vkinit::CommandBufferSubmitInfo(VkCommandBuffer commandBuffer) {
 	VkCommandBufferSubmitInfo info {};
 	info.sType         = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
 	info.pNext         = nullptr;
-	info.commandBuffer = cmd;
+	info.commandBuffer = commandBuffer;
 	info.deviceMask    = 0;
 
 	return info;
 }
 
-VkSubmitInfo2 vkinit::SubmitInfo(VkCommandBufferSubmitInfo* cmd, VkSemaphoreSubmitInfo* signalSemaphoreInfo, VkSemaphoreSubmitInfo* waitSemaphoreInfo) {
+VkSubmitInfo2 vkinit::SubmitInfo(VkCommandBufferSubmitInfo* commandBufferSubmitInfo, VkSemaphoreSubmitInfo* signalSemaphoreInfo, VkSemaphoreSubmitInfo* waitSemaphoreInfo) {
 	VkSubmitInfo2 info            = {};
 	info.sType                    = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
 	info.pNext                    = nullptr;
@@ -90,7 +90,7 @@ VkSubmitInfo2 vkinit::SubmitInfo(VkCommandBufferSubmitInfo* cmd, VkSemaphoreSubm
 	info.pSignalSemaphoreInfos    = signalSemaphoreInfo;
 
 	info.commandBufferInfoCount   = 1;
-	info.pCommandBufferInfos      = cmd;
+	info.pCommandBufferInfos      = commandBufferSubmitInfo;
 
 	return info;
 }
@@ -172,7 +172,7 @@ VkImageSubresourceRange vkinit::ImageSubresourceRange(VkImageAspectFlags aspectM
 }
 //< subresource
 
-VkDescriptorSetLayoutBinding vkinit::DescriptorsetLayoutBinding(VkDescriptorType type, VkShaderStageFlags stageFlags, uint32_t binding) {
+VkDescriptorSetLayoutBinding vkinit::DescriptorSetLayoutBinding(VkDescriptorType type, VkShaderStageFlags stageFlags, uint32_t binding) {
 	VkDescriptorSetLayoutBinding setbind = {};
 	setbind.binding                      = binding;
 	setbind.descriptorCount              = 1;
@@ -183,7 +183,7 @@ VkDescriptorSetLayoutBinding vkinit::DescriptorsetLayoutBinding(VkDescriptorType
 	return setbind;
 }
 
-VkDescriptorSetLayoutCreateInfo vkinit::DescriptorsetLayoutCreateInfo(VkDescriptorSetLayoutBinding* bindings,
+VkDescriptorSetLayoutCreateInfo vkinit::DescriptorSetLayoutCreateInfo(VkDescriptorSetLayoutBinding* bindings,
                                                                       uint32_t                      bindingCount) {
 	VkDescriptorSetLayoutCreateInfo info = {};
 	info.sType                           = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;

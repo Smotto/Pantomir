@@ -6,8 +6,8 @@ layout(rgba16f, set = 0, binding = 0) uniform image2D image;
 
 layout(push_constant) uniform constants
 {
-    vec4 data1;
-    vec4 data2;
+    vec4 topColor;
+    vec4 bottomColor;
     vec4 data3;
     vec4 data4;
 } PushConstants;
@@ -18,13 +18,10 @@ void main()
 
     ivec2 size = imageSize(image);
 
-    vec4 topColor = PushConstants.data1;
-    vec4 bottomColor = PushConstants.data2;
-
     if (texelCoord.x < size.x && texelCoord.y < size.y)
     {
         float blend = float(texelCoord.y)/(size.y);
 
-        imageStore(image, texelCoord, mix(topColor, bottomColor, blend));
+        imageStore(image, texelCoord, mix(PushConstants.topColor, PushConstants.bottomColor, blend));
     }
 }

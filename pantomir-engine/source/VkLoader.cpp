@@ -49,13 +49,13 @@ VkSamplerMipmapMode ExtractMipmapMode(fastgltf::Filter filter) {
 std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, std::string_view filePath) {
 	LOG(Engine, Info, "Loading GLTF: {}", filePath);
 
-	std::shared_ptr<LoadedGLTF> scene = std::make_shared<LoadedGLTF>();
-	scene->_creator                   = engine;
-	LoadedGLTF&      file             = *scene;
+	std::shared_ptr<LoadedGLTF> currentGLTFPointer = std::make_shared<LoadedGLTF>();
+	currentGLTFPointer->_enginePtr                 = engine;
+	LoadedGLTF&      currentGLTF                   = *currentGLTFPointer;
 
 	fastgltf::Parser parser {};
 
-	constexpr auto   gltfOptions = fastgltf::Options::DontRequireValidAssetMember |
+	constexpr auto   gltfParserOptions = fastgltf::Options::DontRequireValidAssetMember |
 	                             fastgltf::Options::AllowDouble |
 	                             fastgltf::Options::LoadExternalBuffers;
 
@@ -69,7 +69,7 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, std:
 	// Move out the data buffer (as a value) from the Expected
 	fastgltf::GltfDataBuffer dataBuffer  = std::move(dataBufferResult.get());
 
-	auto                     assetResult = parser.loadGltf(dataBuffer, path.parent_path(), gltfOptions);
+	auto                     assetResult = parser.loadGltf(dataBuffer, path.parent_path(), gltfParserOptions);
 	if (!assetResult) {
 		LOG(Engine, Error, "Failed to load GLTF: {}", getErrorMessage(assetResult.error()));
 		return std::nullopt;
@@ -82,7 +82,7 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, std:
 		                                                                  { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 3 },
 		                                                                  { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1 } };
 
-	file._descriptorPool.Init(engine->_graphicsDevice, gltfAsset.materials.size(), sizes);
+	currentGLTF._descriptorPool.Init(engine->_logicalGPU, gltfAsset.materials.size(), sizes);
 
 	// Load samplers
 	for (fastgltf::Sampler& sampler : gltfAsset.samplers) {
@@ -96,9 +96,9 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, std:
 		samplerCreateInfo.mipmapMode          = ExtractMipmapMode(sampler.minFilter.value_or(fastgltf::Filter::Nearest));
 
 		VkSampler newSampler;
-		vkCreateSampler(engine->_graphicsDevice, &samplerCreateInfo, nullptr, &newSampler);
+		vkCreateSampler(engine->_logicalGPU, &samplerCreateInfo, nullptr, &newSampler);
 
-		file._samplers.push_back(newSampler);
+		currentGLTF._samplers.push_back(newSampler);
 	}
 
 	std::vector<std::shared_ptr<MeshAsset>>    meshes;
@@ -108,11 +108,11 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, std:
 
 	// Load all textures
 	for (fastgltf::Image& image : gltfAsset.images) {
-		std::optional<AllocatedImage> img = LoadImage(engine, gltfAsset, image);
+		std::optional<AllocatedImage> optionalAllocatedImage = LoadImage(engine, gltfAsset, image);
 
-		if (img.has_value()) {
-			images.push_back(*img);
-			file._images[image.name.c_str()] = *img;
+		if (optionalAllocatedImage.has_value()) {
+			images.push_back(*optionalAllocatedImage);
+			currentGLTF._images[image.name.c_str()] = *optionalAllocatedImage;
 		} else {
 			// We failed to load, so lets give the slot a default white texture to not completely break loading
 			images.push_back(engine->_errorCheckerboardImage);
@@ -121,14 +121,14 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, std:
 	}
 
 	// Create buffer to hold the material data
-	file._materialDataBuffer                                          = engine->CreateBuffer(sizeof(GLTFMetallic_Roughness::MaterialConstants) * gltfAsset.materials.size(), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	currentGLTF._materialDataBuffer                                   = engine->CreateBuffer(sizeof(GLTFMetallic_Roughness::MaterialConstants) * gltfAsset.materials.size(), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 	int                                        data_index             = 0;
-	GLTFMetallic_Roughness::MaterialConstants* sceneMaterialConstants = static_cast<GLTFMetallic_Roughness::MaterialConstants*>(file._materialDataBuffer.info.pMappedData);
+	GLTFMetallic_Roughness::MaterialConstants* sceneMaterialConstants = static_cast<GLTFMetallic_Roughness::MaterialConstants*>(currentGLTF._materialDataBuffer.info.pMappedData);
 
 	for (fastgltf::Material& material : gltfAsset.materials) {
 		std::shared_ptr<GLTFMaterial> currentMaterial = std::make_shared<GLTFMaterial>();
 		materials.push_back(currentMaterial);
-		file._materials[material.name.c_str()] = currentMaterial;
+		currentGLTF._materials[material.name.c_str()] = currentMaterial;
 
 		GLTFMetallic_Roughness::MaterialConstants constants;
 		constants.colorFactors.x      = material.pbrData.baseColorFactor[0];
@@ -162,20 +162,32 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, std:
 		materialResources.colorSampler      = engine->_defaultSamplerLinear;
 		materialResources.metalRoughImage   = engine->_whiteImage;
 		materialResources.metalRoughSampler = engine->_defaultSamplerLinear;
-		materialResources.emissiveImage     = engine->_blackImage;
+		materialResources.emissiveImage     = engine->_whiteImage;
 		materialResources.emissiveSampler   = engine->_defaultSamplerLinear;
+		materialResources.normalImage       = engine->_whiteImage;
+		materialResources.normalSampler     = engine->_defaultSamplerLinear;
 
 		// Set the uniform buffer for the material data
-		materialResources.dataBuffer        = file._materialDataBuffer.buffer;
+		materialResources.dataBuffer        = currentGLTF._materialDataBuffer.buffer;
 		materialResources.dataBufferOffset  = data_index * sizeof(GLTFMetallic_Roughness::MaterialConstants);
 
 		// Grab textures from gltf file
 		if (material.pbrData.baseColorTexture.has_value()) {
-			size_t image                   = gltfAsset.textures[material.pbrData.baseColorTexture.value().textureIndex].imageIndex.value();
-			size_t sampler                 = gltfAsset.textures[material.pbrData.baseColorTexture.value().textureIndex].samplerIndex.value();
+			size_t texIndex                = material.pbrData.baseColorTexture->textureIndex;
+			size_t image                   = gltfAsset.textures[texIndex].imageIndex.value();
+			size_t sampler                 = gltfAsset.textures[texIndex].samplerIndex.value();
 
 			materialResources.colorImage   = images[image];
-			materialResources.colorSampler = file._samplers[sampler];
+			materialResources.colorSampler = currentGLTF._samplers[sampler];
+		}
+
+		if (material.pbrData.metallicRoughnessTexture.has_value()) {
+			size_t texIndex                     = material.pbrData.metallicRoughnessTexture->textureIndex;
+			size_t image                        = gltfAsset.textures[texIndex].imageIndex.value();
+			size_t sampler                      = gltfAsset.textures[texIndex].samplerIndex.value();
+
+			materialResources.metalRoughImage   = images[image];
+			materialResources.metalRoughSampler = currentGLTF._samplers[sampler];
 		}
 
 		if (material.emissiveTexture.has_value()) {
@@ -184,7 +196,16 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, std:
 			size_t samplerIndex               = gltfAsset.textures[texIndex].samplerIndex.value();
 
 			materialResources.emissiveImage   = images[imageIndex];
-			materialResources.emissiveSampler = file._samplers[samplerIndex];
+			materialResources.emissiveSampler = currentGLTF._samplers[samplerIndex];
+		}
+
+		if (material.normalTexture.has_value()) {
+			size_t texIndex                 = material.normalTexture->textureIndex;
+			size_t imageIndex               = gltfAsset.textures[texIndex].imageIndex.value();
+			size_t samplerIndex             = gltfAsset.textures[texIndex].samplerIndex.value();
+
+			materialResources.normalImage   = images[imageIndex];
+			materialResources.normalSampler = currentGLTF._samplers[samplerIndex];
 		}
 
 		MaterialPass passType = MaterialPass::Opaque;
@@ -200,7 +221,7 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, std:
 			cullMode = VK_CULL_MODE_NONE;
 		}
 
-		currentMaterial->data = engine->_metalRoughMaterial.WriteMaterial(engine->_graphicsDevice, passType, cullMode, materialResources, file._descriptorPool);
+		currentMaterial->data = engine->_metalRoughMaterial.WriteMaterial(engine->_logicalGPU, passType, cullMode, materialResources, currentGLTF._descriptorPool);
 
 		data_index++;
 	}
@@ -212,8 +233,8 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, std:
 	for (fastgltf::Mesh& mesh : gltfAsset.meshes) {
 		std::shared_ptr<MeshAsset> newMesh = std::make_shared<MeshAsset>();
 		meshes.push_back(newMesh);
-		file._meshes[mesh.name.c_str()] = newMesh;
-		newMesh->name                   = mesh.name;
+		currentGLTF._meshes[mesh.name.c_str()] = newMesh;
+		newMesh->name                          = mesh.name;
 
 		// Clear the mesh arrays each mesh, we don't want to merge them by error
 		indices.clear();
@@ -260,6 +281,14 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, std:
 				});
 			}
 
+			// Load vertex tangents
+			auto tangents = p.findAttribute("TANGENT");
+			if (tangents != p.attributes.end()) {
+				fastgltf::iterateAccessorWithIndex<glm::vec4>(gltfAsset, gltfAsset.accessors[(*tangents).accessorIndex], [&](glm::vec4 tangent, size_t index) {
+					vertices[initialVertex + index].tangent = tangent;
+				});
+			}
+
 			// Load UVs
 			auto uv = p.findAttribute("TEXCOORD_0");
 			if (uv != p.attributes.end()) {
@@ -292,7 +321,7 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, std:
 			}
 
 			// Calculate origin and extents from the min/max, use extent length for radius
-			newSurface.bounds.origin       = (maxpos + minpos) / 2.f;
+			newSurface.bounds.originPoint  = (maxpos + minpos) / 2.f;
 			newSurface.bounds.extents      = (maxpos - minpos) / 2.f;
 			newSurface.bounds.sphereRadius = glm::length(newSurface.bounds.extents);
 
@@ -315,7 +344,7 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, std:
 		}
 
 		nodes.push_back(newNode);
-		file._nodes[node.name.c_str()];
+		currentGLTF._nodes[node.name.c_str()];
 
 		std::visit(fastgltf::visitor {
 		               [&](const fastgltf::math::fmat4x4& matrix) {
@@ -349,18 +378,18 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, std:
 	// Find the top nodes, with no parents
 	for (auto& node : nodes) {
 		if (node->_parent.lock() == nullptr) {
-			file._topNodes.push_back(node);
+			currentGLTF._topNodes.push_back(node);
 			node->RefreshTransform(glm::mat4 { 1.f });
 		}
 	}
 
-	return scene;
+	return currentGLTFPointer;
 }
 
-void LoadedGLTF::Draw(const glm::mat4& topMatrix, DrawContext& ctx) {
-	// create renderables from the scenenodes
+void LoadedGLTF::Draw(const glm::mat4& topMatrix, DrawContext& drawContext) {
+	// Create renderables from the scenenodes
 	for (auto& n : _topNodes) {
-		n->Draw(topMatrix, ctx);
+		n->Draw(topMatrix, drawContext);
 	}
 }
 
@@ -461,7 +490,7 @@ std::optional<AllocatedImage> LoadImage(PantomirEngine* engine, fastgltf::Asset&
 
 	// If any of the attempts to load the data failed, we haven't written the image
 	// so handle is null
-	if (newImage._image == VK_NULL_HANDLE) {
+	if (newImage.image == VK_NULL_HANDLE) {
 		return {};
 	} else {
 		return newImage;
@@ -469,22 +498,22 @@ std::optional<AllocatedImage> LoadImage(PantomirEngine* engine, fastgltf::Asset&
 }
 
 void LoadedGLTF::ClearAll() {
-	VkDevice dv = _creator->_graphicsDevice;
+	VkDevice dv = _enginePtr->_logicalGPU;
 
 	_descriptorPool.DestroyPools(dv);
-	_creator->DestroyBuffer(_materialDataBuffer);
+	_enginePtr->DestroyBuffer(_materialDataBuffer);
 
 	for (auto& [k, v] : _meshes) {
-		_creator->DestroyBuffer(v->meshBuffers.indexBuffer);
-		_creator->DestroyBuffer(v->meshBuffers.vertexBuffer);
+		_enginePtr->DestroyBuffer(v->meshBuffers.indexBuffer);
+		_enginePtr->DestroyBuffer(v->meshBuffers.vertexBuffer);
 	}
 
 	for (auto& [k, v] : _images) {
-		if (v._image == _creator->_errorCheckerboardImage._image) {
+		if (v.image == _enginePtr->_errorCheckerboardImage.image) {
 			// Dont destroy the default images
 			continue;
 		}
-		_creator->DestroyImage(v);
+		_enginePtr->DestroyImage(v);
 	}
 
 	for (auto& sampler : _samplers) {

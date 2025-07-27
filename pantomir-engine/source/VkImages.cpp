@@ -1,7 +1,7 @@
 #include "VkImages.h"
 #include "VkInitializers.h"
 
-void vkutil::TransitionImage(VkCommandBuffer cmd, VkImage image, VkImageLayout currentLayout, VkImageLayout newLayout) {
+void vkutil::TransitionImage(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout currentLayout, VkImageLayout newLayout) {
 	VkImageMemoryBarrier2 imageBarrier { .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2 };
 	imageBarrier.pNext            = nullptr;
 
@@ -27,10 +27,10 @@ void vkutil::TransitionImage(VkCommandBuffer cmd, VkImage image, VkImageLayout c
 	depInfo.imageMemoryBarrierCount = 1;
 	depInfo.pImageMemoryBarriers    = &imageBarrier;
 
-	vkCmdPipelineBarrier2(cmd, &depInfo);
+	vkCmdPipelineBarrier2(commandBuffer, &depInfo);
 }
 
-void vkutil::CopyImageToImage(VkCommandBuffer cmd, VkImage source, VkImage destination, VkExtent2D srcSize, VkExtent2D dstSize) {
+void vkutil::CopyImageToImage(VkCommandBuffer commandBuffer, VkImage source, VkImage destination, VkExtent2D srcSize, VkExtent2D dstSize) {
 	VkImageBlit2 blitRegion { .sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2, .pNext = nullptr };
 
 	blitRegion.srcOffsets[1].x               = srcSize.width;
@@ -61,10 +61,10 @@ void vkutil::CopyImageToImage(VkCommandBuffer cmd, VkImage source, VkImage desti
 	blitInfo.pRegions       = &blitRegion;
 
 	// We can use cmdcopyimage, or cmdblitimage. 2 main ways to copy in vulkan for images.
-	vkCmdBlitImage2(cmd, &blitInfo);
+	vkCmdBlitImage2(commandBuffer, &blitInfo);
 }
 
-void vkutil::GenerateMipmaps(VkCommandBuffer cmd, VkImage image, VkExtent2D imageSize) {
+void vkutil::GenerateMipmaps(VkCommandBuffer commandBuffer, VkImage image, VkExtent2D imageSize) {
 	int mipLevels = int(std::floor(std::log2(std::max(imageSize.width, imageSize.height)))) + 1;
     for (int mip = 0; mip < mipLevels; mip++) {
 
@@ -92,7 +92,7 @@ void vkutil::GenerateMipmaps(VkCommandBuffer cmd, VkImage image, VkExtent2D imag
         depInfo.imageMemoryBarrierCount = 1;
         depInfo.pImageMemoryBarriers = &imageBarrier;
 
-        vkCmdPipelineBarrier2(cmd, &depInfo);
+        vkCmdPipelineBarrier2(commandBuffer, &depInfo);
 
         if (mip < mipLevels - 1) {
             VkImageBlit2 blitRegion { .sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2, .pNext = nullptr };
@@ -124,12 +124,12 @@ void vkutil::GenerateMipmaps(VkCommandBuffer cmd, VkImage image, VkExtent2D imag
             blitInfo.regionCount = 1;
             blitInfo.pRegions = &blitRegion;
 
-            vkCmdBlitImage2(cmd, &blitInfo);
+            vkCmdBlitImage2(commandBuffer, &blitInfo);
 
             imageSize = halfSize;
         }
     }
 
     // transition all mip levels into the final read_only layout
-    TransitionImage(cmd, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    TransitionImage(commandBuffer, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 }
