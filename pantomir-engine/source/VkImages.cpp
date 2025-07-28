@@ -130,6 +130,6 @@ void vkutil::GenerateMipmaps(VkCommandBuffer commandBuffer, VkImage image, VkExt
         }
     }
 
-    // transition all mip levels into the final read_only layout
+    // Transition all mip levels into the final read_only layout
     TransitionImage(commandBuffer, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 }

@@ -28,7 +28,7 @@
 #include <glm/gtx/transform.hpp>
 
 bool IsVisible(const RenderObject& renderObject, const glm::mat4& viewProjection) {
-	const std::array<glm::vec3, 8> unitCubeCorners {
+	constexpr std::array<glm::vec3, 8> unitCubeCorners {
 		glm::vec3 { 1, 1, 1 },
 		glm::vec3 { 1, 1, -1 },
 		glm::vec3 { 1, -1, 1 },
@@ -171,6 +171,7 @@ void PantomirEngine::InitVulkan() {
 	vkb::PhysicalDevice         selectedPhysicalDevice = physicalDeviceSelector.set_minimum_version(1, 3)
 	                                                 .set_required_features_13(features_13)
 	                                                 .set_required_features_12(features_12)
+	                                                 .add_required_extension(VK_KHR_SHADER_RELAXED_EXTENDED_INSTRUCTION_EXTENSION_NAME)
 	                                                 .set_surface(_surface)
 	                                                 .select()
 	                                                 .value();
@@ -190,7 +191,6 @@ void PantomirEngine::InitVulkan() {
 	allocatorInfo.instance                = _instance;
 	allocatorInfo.flags                   = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
 	vmaCreateAllocator(&allocatorInfo, &_allocator);
-
 	_shutdownDeletionQueue.PushFunction([&]() {
 		vmaDestroyAllocator(_allocator);
 	});
@@ -199,15 +199,10 @@ void PantomirEngine::InitVulkan() {
 void PantomirEngine::InitSwapchain() {
 	CreateSwapchain(_windowExtent.width, _windowExtent.height);
 
-	// Draw image size will match the window
-	VkExtent3D drawImageExtent = {
-		_windowExtent.width,
-		_windowExtent.height,
-		1
-	};
+	VkExtent3D drawImageExtent = { _windowExtent.width, _windowExtent.height, 1 };
 
-	_drawImage.imageFormat = VK_FORMAT_R16G16B16A16_SFLOAT;
-	_drawImage.imageExtent = drawImageExtent;
+	_drawImage.imageFormat     = VK_FORMAT_R16G16B16A16_SFLOAT;
+	_drawImage.imageExtent     = drawImageExtent;
 
 	VkImageUsageFlags drawImageUsages {};
 	drawImageUsages |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
@@ -226,7 +221,7 @@ void PantomirEngine::InitSwapchain() {
 	vmaCreateImage(_allocator, &drawImageInfo, &drawImageAllocInfo, &_drawImage.image, &_drawImage.allocation, nullptr);
 
 	// For the draw image to use for rendering
-	VkImageViewCreateInfo drawViewInfo = vkinit::ImageviewCreateInfo(_drawImage.imageFormat, _drawImage.image, VK_IMAGE_ASPECT_COLOR_BIT);
+	VkImageViewCreateInfo drawViewInfo = vkinit::ImageViewCreateInfo(_drawImage.imageFormat, _drawImage.image, VK_IMAGE_ASPECT_COLOR_BIT);
 
 	VK_CHECK(vkCreateImageView(_logicalGPU, &drawViewInfo, nullptr, &_drawImage.imageView));
 
@@ -242,8 +237,7 @@ void PantomirEngine::InitSwapchain() {
 	depthImageAllocInfo.requiredFlags = static_cast<VkMemoryPropertyFlags>(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 	vmaCreateImage(_allocator, &depthImageInfo, &depthImageAllocInfo, &_depthImage.image, &_depthImage.allocation, nullptr);
 
-	// For the draw image to use for rendering
-	VkImageViewCreateInfo depthViewInfo = vkinit::ImageviewCreateInfo(_depthImage.imageFormat, _depthImage.image, VK_IMAGE_ASPECT_DEPTH_BIT);
+	VkImageViewCreateInfo depthViewInfo = vkinit::ImageViewCreateInfo(_depthImage.imageFormat, _depthImage.image, VK_IMAGE_ASPECT_DEPTH_BIT);
 
 	VK_CHECK(vkCreateImageView(_logicalGPU, &depthViewInfo, nullptr, &_depthImage.imageView));
 
@@ -254,30 +248,22 @@ void PantomirEngine::InitSwapchain() {
 }
 
 void PantomirEngine::InitCommands() {
-	// Create a command pool for commands submitted to the graphics queue.
-	// We also want the pool to allow for resetting of individual command buffers.
+	// Allow for resetting of individual command buffers, instead of only resetting the entire pool at once.
 	VkCommandPoolCreateInfo commandPoolInfo = vkinit::CommandPoolCreateInfo(_graphicsQueueFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
 
-	// Commands for ImGUI
+	/* ImGUI */
 	VK_CHECK(vkCreateCommandPool(_logicalGPU, &commandPoolInfo, nullptr, &_immediateCommandPool));
-
-	// Allocate the command buffer for immediate submits.
 	VkCommandBufferAllocateInfo commandBufferAllocInfoImmediate = vkinit::CommandBufferAllocateInfo(_immediateCommandPool, 1);
-
-	VK_CHECK(vkAllocateCommandBuffers(_logicalGPU, &commandBufferAllocInfoImmediate, &_immediateCommandBuffer));
-
+	VK_CHECK(vkAllocateCommandBuffers(_logicalGPU, &commandBufferAllocInfoImmediate, &_immediateCommandBuffer)); /* Initial State */
 	_shutdownDeletionQueue.PushFunction([=]() {
 		vkDestroyCommandPool(_logicalGPU, _immediateCommandPool, nullptr);
 	});
 
-	for (auto& frame : _frames) {
+	/* Render Frames */
+	for (FrameData& frame : _frames) {
 		VK_CHECK(vkCreateCommandPool(_logicalGPU, &commandPoolInfo, nullptr, &frame.commandPool));
-
-		// Allocate the default command buffer that we will use for rendering.
 		VkCommandBufferAllocateInfo commandBufferAllocInfo = vkinit::CommandBufferAllocateInfo(frame.commandPool, 1);
-
-		/* Initial State */
-		VK_CHECK(vkAllocateCommandBuffers(_logicalGPU, &commandBufferAllocInfo, &frame.mainCommandBuffer));
+		VK_CHECK(vkAllocateCommandBuffers(_logicalGPU, &commandBufferAllocInfo, &frame.mainCommandBuffer)); /* Initial State */
 	}
 }
 
@@ -600,18 +586,18 @@ void PantomirEngine::InitDefaultData() {
 			pixels[y * 16 + x] = ((x % 2) ^ (y % 2)) ? magenta : black;
 		}
 	}
-	_errorCheckerboardImage   = CreateImage(pixels.data(), VkExtent3D { 16, 16, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+	_errorCheckerboardImage               = CreateImage(pixels.data(), VkExtent3D { 16, 16, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
 
-	VkSamplerCreateInfo sampl = { .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
+	VkSamplerCreateInfo samplerCreateInfo = { .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
 
-	sampl.magFilter           = VK_FILTER_NEAREST;
-	sampl.minFilter           = VK_FILTER_NEAREST;
+	samplerCreateInfo.magFilter           = VK_FILTER_NEAREST;
+	samplerCreateInfo.minFilter           = VK_FILTER_NEAREST;
 
-	vkCreateSampler(_logicalGPU, &sampl, nullptr, &_defaultSamplerNearest);
+	vkCreateSampler(_logicalGPU, &samplerCreateInfo, nullptr, &_defaultSamplerNearest);
 
-	sampl.magFilter = VK_FILTER_LINEAR;
-	sampl.minFilter = VK_FILTER_LINEAR;
-	vkCreateSampler(_logicalGPU, &sampl, nullptr, &_defaultSamplerLinear);
+	samplerCreateInfo.magFilter = VK_FILTER_LINEAR;
+	samplerCreateInfo.minFilter = VK_FILTER_LINEAR;
+	vkCreateSampler(_logicalGPU, &samplerCreateInfo, nullptr, &_defaultSamplerLinear);
 
 	_shutdownDeletionQueue.PushFunction([this, device = _logicalGPU, defaultSamplerNearest = _defaultSamplerNearest, defaultSamplerLinear = _defaultSamplerLinear, whiteImage = _whiteImage, greyImage = _greyImage, blackImage = _blackImage, errorCheckerboardImage = _errorCheckerboardImage]() {
 		vkDestroySampler(device, defaultSamplerNearest, nullptr);
@@ -684,20 +670,20 @@ GPUMeshBuffers PantomirEngine::UploadMesh(std::span<uint32_t> indices, std::span
 	// Copy index buffer
 	memcpy(static_cast<char*>(data) + vertexBufferSize, indices.data(), indexBufferSize);
 
-	ImmediateSubmit([&](VkCommandBuffer cmd) {
+	ImmediateSubmit([&](VkCommandBuffer commandBuffer) {
 		VkBufferCopy vertexCopy { 0 };
 		vertexCopy.dstOffset = 0;
 		vertexCopy.srcOffset = 0;
 		vertexCopy.size      = vertexBufferSize;
 
-		vkCmdCopyBuffer(cmd, staging.buffer, newSurface.vertexBuffer.buffer, 1, &vertexCopy);
+		vkCmdCopyBuffer(commandBuffer, staging.buffer, newSurface.vertexBuffer.buffer, 1, &vertexCopy);
 
 		VkBufferCopy indexCopy { 0 };
 		indexCopy.dstOffset = 0;
 		indexCopy.srcOffset = vertexBufferSize;
 		indexCopy.size      = indexBufferSize;
 
-		vkCmdCopyBuffer(cmd, staging.buffer, newSurface.indexBuffer.buffer, 1, &indexCopy);
+		vkCmdCopyBuffer(commandBuffer, staging.buffer, newSurface.indexBuffer.buffer, 1, &indexCopy);
 	});
 
 	DestroyBuffer(staging);
@@ -707,18 +693,18 @@ GPUMeshBuffers PantomirEngine::UploadMesh(std::span<uint32_t> indices, std::span
 
 AllocatedBuffer PantomirEngine::CreateBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage) {
 	// Allocate Buffer
-	VkBufferCreateInfo bufferInfo        = { .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
-	bufferInfo.pNext                     = nullptr;
-	bufferInfo.size                      = allocSize;
+	VkBufferCreateInfo bufferInfo = { .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
+	bufferInfo.pNext              = nullptr;
+	bufferInfo.size               = allocSize;
+	bufferInfo.usage              = usage;
 
-	bufferInfo.usage                     = usage;
-	VmaAllocationCreateInfo vmaallocInfo = {};
-	vmaallocInfo.usage                   = memoryUsage;
-	vmaallocInfo.flags                   = VMA_ALLOCATION_CREATE_MAPPED_BIT;
+	VmaAllocationCreateInfo vmaAllocInfo {};
+	vmaAllocInfo.usage = memoryUsage;
+	vmaAllocInfo.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
 	AllocatedBuffer newBuffer;
 
 	// Allocate the buffer
-	VK_CHECK(vmaCreateBuffer(_allocator, &bufferInfo, &vmaallocInfo, &newBuffer.buffer, &newBuffer.allocation, &newBuffer.info));
+	VK_CHECK(vmaCreateBuffer(_allocator, &bufferInfo, &vmaAllocInfo, &newBuffer.buffer, &newBuffer.allocation, &newBuffer.info));
 
 	return newBuffer;
 }
@@ -726,23 +712,21 @@ AllocatedBuffer PantomirEngine::CreateBuffer(size_t allocSize, VkBufferUsageFlag
 void PantomirEngine::CreateSwapchain(uint32_t width, uint32_t height) {
 	vkb::SwapchainBuilder swapchainBuilder { _physicalGPU, _logicalGPU, _surface };
 
-	_swapchainImageFormat = VK_FORMAT_B8G8R8A8_UNORM;
+	_swapchainImageFormat         = VK_FORMAT_B8G8R8A8_UNORM;
 
-	vkb::Swapchain builtSwapchain =
-	    swapchainBuilder
-	        //.use_default_format_selection()
-	        .set_desired_format(VkSurfaceFormatKHR {
-	            .format     = _swapchainImageFormat,
-	            .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR })
-	        // use vsync present mode
-	        .set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
-	        .set_desired_extent(width, height)
-	        .add_image_usage_flags(VK_IMAGE_USAGE_TRANSFER_DST_BIT)
-	        .build()
-	        .value();
+	vkb::Swapchain builtSwapchain = swapchainBuilder
+	                                    //.use_default_format_selection()
+	                                    .set_desired_format(VkSurfaceFormatKHR {
+	                                        .format     = _swapchainImageFormat,
+	                                        .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR })
+	                                    // use vsync present mode
+	                                    .set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
+	                                    .set_desired_extent(width, height)
+	                                    .add_image_usage_flags(VK_IMAGE_USAGE_TRANSFER_DST_BIT)
+	                                    .build()
+	                                    .value();
 
 	_swapchainExtent     = builtSwapchain.extent;
-	// Store swapchain and its related images
 	_swapchain           = builtSwapchain.swapchain;
 	_swapchainImages     = builtSwapchain.get_images().value();
 	_swapchainImageViews = builtSwapchain.get_image_views().value();
@@ -929,7 +913,7 @@ void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
 	VkRenderingInfo           renderInfo      = vkinit::RenderingInfo(_drawExtent, &colorAttachment, &depthAttachment);
 	vkCmdBeginRendering(commandBuffer, &renderInfo);
 
-	// Defined outside of the draw function, this is the state we will try to skip
+	// Defined outside the draw function, this is the state we will try to skip
 	MaterialPipeline* lastPipeline    = nullptr;
 	MaterialInstance* lastMaterial    = nullptr;
 	VkBuffer          lastIndexBuffer = VK_NULL_HANDLE;
@@ -964,11 +948,13 @@ void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
 
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderObject.material->pipeline->layout, 1, 1, &renderObject.material->materialSet, 0, nullptr);
         }
+
         // Rebind index buffer if needed
         if (renderObject.indexBuffer != lastIndexBuffer) {
             lastIndexBuffer = renderObject.indexBuffer;
             vkCmdBindIndexBuffer(commandBuffer, renderObject.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
         }
+
         // Calculate final mesh matrix
         GPUDrawPushConstants push_constants;
         push_constants.worldMatrix         = renderObject.transform;
@@ -977,7 +963,7 @@ void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
         vkCmdPushConstants(commandBuffer, renderObject.material->pipeline->layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &push_constants);
 
         vkCmdDrawIndexed(commandBuffer, renderObject.indexCount, 1, renderObject.firstIndex, 0, 0);
-        // Stats
+
         _stats.drawcallCount++;
         _stats.triangleCount += renderObject.indexCount / 3;
 	};
@@ -1020,11 +1006,11 @@ void PantomirEngine::ImmediateSubmit(std::function<void(VkCommandBuffer cmd)>&& 
 	VK_CHECK(vkResetFences(_logicalGPU, 1, &_immediateFence));
 	VK_CHECK(vkResetCommandBuffer(_immediateCommandBuffer, 0));
 
-	VkCommandBuffer          commandBuffer = _immediateCommandBuffer;
+	VkCommandBuffer          commandBuffer          = _immediateCommandBuffer;
 
-	VkCommandBufferBeginInfo cmdBeginInfo  = vkinit::CommandBufferBeginInfo(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+	VkCommandBufferBeginInfo commandBufferBeginInfo = vkinit::CommandBufferBeginInfo(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
-	VK_CHECK(vkBeginCommandBuffer(commandBuffer, &cmdBeginInfo));
+	VK_CHECK(vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo));
 
 	anonymousFunction(commandBuffer);
 
@@ -1062,12 +1048,12 @@ AllocatedImage PantomirEngine::CreateImage(VkExtent3D size, VkFormat format, VkI
 	}
 
 	// always allocate images on dedicated GPU memory
-	VmaAllocationCreateInfo allocinfo = {};
-	allocinfo.usage                   = VMA_MEMORY_USAGE_GPU_ONLY;
-	allocinfo.requiredFlags           = VkMemoryPropertyFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	VmaAllocationCreateInfo vmaAllocationCreateInfo = {};
+	vmaAllocationCreateInfo.usage                   = VMA_MEMORY_USAGE_GPU_ONLY;
+	vmaAllocationCreateInfo.requiredFlags           = VkMemoryPropertyFlags(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
 	// allocate and create the image
-	VK_CHECK(vmaCreateImage(_allocator, &img_info, &allocinfo, &newImage.image, &newImage.allocation, nullptr));
+	VK_CHECK(vmaCreateImage(_allocator, &img_info, &vmaAllocationCreateInfo, &newImage.image, &newImage.allocation, nullptr));
 
 	// If the format is a depth format, we will need to have it use the correct
 	// aspect flag
@@ -1077,7 +1063,7 @@ AllocatedImage PantomirEngine::CreateImage(VkExtent3D size, VkFormat format, VkI
 	}
 
 	// build an image-view for the image
-	VkImageViewCreateInfo view_info       = vkinit::ImageviewCreateInfo(format, newImage.image, aspectFlag);
+	VkImageViewCreateInfo view_info       = vkinit::ImageViewCreateInfo(format, newImage.image, aspectFlag);
 	view_info.subresourceRange.levelCount = img_info.mipLevels;
 
 	VK_CHECK(vkCreateImageView(_logicalGPU, &view_info, nullptr, &newImage.imageView));
