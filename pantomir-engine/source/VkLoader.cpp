@@ -51,25 +51,22 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, std:
 
 	std::shared_ptr<LoadedGLTF> currentGLTFPointer = std::make_shared<LoadedGLTF>();
 	currentGLTFPointer->_enginePtr                 = engine;
-	LoadedGLTF&      currentGLTF                   = *currentGLTFPointer;
+	LoadedGLTF&                 currentGLTF        = *currentGLTFPointer;
 
-	fastgltf::Parser parser {};
+	fastgltf::Parser            parser {};
 
-	constexpr auto   gltfParserOptions = fastgltf::Options::DontRequireValidAssetMember |
-	                             fastgltf::Options::AllowDouble |
-	                             fastgltf::Options::LoadExternalBuffers;
+	constexpr fastgltf::Options gltfParserOptions = fastgltf::Options::DontRequireValidAssetMember |
+	                                                fastgltf::Options::AllowDouble |
+	                                                fastgltf::Options::LoadExternalBuffers;
 
-	std::filesystem::path path(filePath);
-	auto                  dataBufferResult = fastgltf::GltfDataBuffer::FromPath(path);
+	std::filesystem::path                        path(filePath);
+	fastgltf::Expected<fastgltf::GltfDataBuffer> dataBufferResult = fastgltf::GltfDataBuffer::FromPath(path);
 	if (!dataBufferResult) {
 		LOG(Engine, Error, "Failed to read GLTF file: {}", getErrorMessage(dataBufferResult.error()));
 		return std::nullopt;
 	}
-
-	// Move out the data buffer (as a value) from the Expected
-	fastgltf::GltfDataBuffer dataBuffer  = std::move(dataBufferResult.get());
-
-	auto                     assetResult = parser.loadGltf(dataBuffer, path.parent_path(), gltfParserOptions);
+	fastgltf::GltfDataBuffer            dataBuffer  = std::move(dataBufferResult.get());
+	fastgltf::Expected<fastgltf::Asset> assetResult = parser.loadGltf(dataBuffer, path.parent_path(), gltfParserOptions);
 	if (!assetResult) {
 		LOG(Engine, Error, "Failed to load GLTF: {}", getErrorMessage(assetResult.error()));
 		return std::nullopt;
@@ -77,7 +74,6 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, std:
 
 	fastgltf::Asset                                         gltfAsset = std::move(assetResult.get());
 
-	// We can estimate the descriptors we will need accurately
 	std::vector<DescriptorAllocatorGrowable::PoolSizeRatio> sizes     = { { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 3 },
 		                                                                  { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 3 },
 		                                                                  { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1 } };

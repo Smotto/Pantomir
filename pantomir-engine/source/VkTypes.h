@@ -80,8 +80,7 @@ class IRenderable {
 };
 
 // Implementation of a drawable scene node.
-// the scene node can hold children and will also keep a transform to propagate
-// to them
+// The scene node can hold children and keeps a transform for propagating to them.
 struct Node : IRenderable {
 	// Parent pointer must be a weak pointer to avoid circular dependencies
 	std::weak_ptr<Node>                _parent;

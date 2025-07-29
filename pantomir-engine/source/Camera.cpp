@@ -58,47 +58,38 @@ void Camera::ProcessSDLEvent(SDL_Event& event, SDL_Window* window) {
 			}
 			break;
 
-		case SDL_EVENT_KEY_DOWN:
-			switch (event.key.key) {
-				case SDLK_W:
-					_velocity.z = -_speedMultiplier;
-					break;
-				case SDLK_S:
-					_velocity.z = _speedMultiplier;
-					break;
-				case SDLK_A:
-					_velocity.x = -_speedMultiplier;
-					break;
-				case SDLK_D:
-					_velocity.x = _speedMultiplier;
-					break;
-				case SDLK_Q:
-					_velocity.y = _speedMultiplier;
-					break;
-				case SDLK_Z:
-					_velocity.y = -_speedMultiplier;
-					break;
-			}
-			break;
-
-		case SDL_EVENT_KEY_UP:
-			switch (event.key.key) {
-				case SDLK_W:
-				case SDLK_S:
-					_velocity.z = 0;
-					break;
-				case SDLK_A:
-				case SDLK_D:
-					_velocity.x = 0;
-					break;
-				case SDLK_Q:
-				case SDLK_Z:
-					_velocity.y = 0;
-					break;
-			}
-			break;
-
 		default:
 			break;
+	}
+}
+
+void Camera::UpdateMovement() {
+	const bool* keyState     = SDL_GetKeyboardState(nullptr);
+
+	// Check if shift is held for speed multiplier
+	bool        shiftHeld    = keyState[SDL_SCANCODE_LSHIFT] || keyState[SDL_SCANCODE_RSHIFT];
+	float       currentSpeed = shiftHeld ? _speedMultiplier * _shiftSpeedMultiplier : _speedMultiplier;
+
+	// Reset velocity
+	_velocity                = glm::vec3(0.0f);
+
+	// Check movement keys
+	if (keyState[SDL_SCANCODE_W]) {
+		_velocity.z = -currentSpeed;
+	}
+	if (keyState[SDL_SCANCODE_S]) {
+		_velocity.z = currentSpeed;
+	}
+	if (keyState[SDL_SCANCODE_A]) {
+		_velocity.x = -currentSpeed;
+	}
+	if (keyState[SDL_SCANCODE_D]) {
+		_velocity.x = currentSpeed;
+	}
+	if (keyState[SDL_SCANCODE_Q]) {
+		_velocity.y = currentSpeed;
+	}
+	if (keyState[SDL_SCANCODE_Z]) {
+		_velocity.y = -currentSpeed;
 	}
 }

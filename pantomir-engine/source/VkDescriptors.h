@@ -3,18 +3,6 @@
 
 #include "VkTypes.h"
 
-struct DescriptorWriter {
-	std::deque<VkDescriptorImageInfo>  _imageInfos;
-	std::deque<VkDescriptorBufferInfo> _bufferInfos;
-	std::vector<VkWriteDescriptorSet>  _writes;
-
-	void                               WriteImage(int binding, VkImageView image, VkSampler sampler, VkImageLayout layout, VkDescriptorType type);
-	void                               WriteBuffer(int binding, VkBuffer buffer, size_t size, size_t offset, VkDescriptorType type);
-
-	void                               Clear();
-	void                               UpdateSet(VkDevice device, VkDescriptorSet set);
-};
-
 struct DescriptorAllocatorGrowable {
 	struct PoolSizeRatio {
 		VkDescriptorType _type;
@@ -37,21 +25,6 @@ private:
 	uint32_t                                                _setsPerPool;
 };
 
-struct DescriptorAllocator {
-	struct PoolSizeRatio {
-		VkDescriptorType _type;
-		float            _ratio;
-	};
-
-	VkDescriptorPool _pool;
-
-	void             InitPool(VkDevice device, uint32_t maxSets, std::span<PoolSizeRatio> poolRatios);
-	void             ClearDescriptors(VkDevice device);
-	void             DestroyPool(VkDevice device);
-
-	VkDescriptorSet  Allocate(VkDevice device, VkDescriptorSetLayout layout);
-};
-
 struct DescriptorLayoutBuilder {
 	std::vector<VkDescriptorSetLayoutBinding> _bindings;
 
@@ -59,6 +32,18 @@ struct DescriptorLayoutBuilder {
 	VkDescriptorSetLayout                     Build(VkDevice device, VkShaderStageFlags shaderStages, void* pNext = nullptr, VkDescriptorSetLayoutCreateFlags flags = 0);
 
 	void                                      Clear();
+};
+
+struct DescriptorWriter {
+	std::deque<VkDescriptorImageInfo>  _imageInfos;
+	std::deque<VkDescriptorBufferInfo> _bufferInfos;
+	std::vector<VkWriteDescriptorSet>  _writes;
+
+	void                               WriteImage(int binding, VkImageView image, VkSampler sampler, VkImageLayout layout, VkDescriptorType type);
+	void                               WriteBuffer(int binding, VkBuffer buffer, size_t size, size_t offset, VkDescriptorType type);
+
+	void                               Clear();
+	void                               UpdateSet(VkDevice device, VkDescriptorSet set);
 };
 
 #endif /*! VKDESCRIPTORS_H_ */

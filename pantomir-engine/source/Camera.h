@@ -11,7 +11,8 @@ class Camera {
 public:
 	glm::vec3 _velocity;
 	glm::vec3 _position;
-	float       _speedMultiplier = 3.0f;
+	float     _speedMultiplier      = 3.0f;
+	float     _shiftSpeedMultiplier = 2.0f;
 
 	float     _pitch { 0.f }; // Vertical rotation
 	float     _yaw { 0.f };   // Horizontal rotation
@@ -20,6 +21,8 @@ public:
 	glm::mat4 GetRotationMatrix() const;
 
 	void      ProcessSDLEvent(SDL_Event& event, SDL_Window* window);
+	float     GetCurrentSpeedMultiplier() const;
+	void      UpdateMovement();
 	void      Update(const float deltaTime);
 
 private:

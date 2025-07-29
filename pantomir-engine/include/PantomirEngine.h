@@ -152,7 +152,7 @@ public:
 	std::vector<ComputeEffect>                             _backgroundEffects;
 	int                                                    _currentBackgroundEffect { 0 };
 
-	// immediate submit structures
+	// Immediate submit structures
 	VkFence                                                _immediateFence {};
 	VkCommandBuffer                                        _immediateCommandBuffer {};
 	VkCommandPool                                          _immediateCommandPool {};
