@@ -11,82 +11,53 @@ layout (location = 0) out vec4 outFragColor;
 
 void main()
 {
-    vec3 normal = normalize(inNormal);
-    vec3 lightDir = normalize(-sceneData.sunlightDirection.xyz); // Note the negative sign - light direction should point FROM light TO surface
+    vec4 texColor       = texture(colorTex, inUV);
+    vec4 texMetalRough  = texture(metalRoughTex, inUV);
+    vec3 texEmissive    = texture(emissiveTex, inUV).rgb;
+    vec3 texSpecular    = texture(specularTex, inUV).rgb;
 
-    // More forgiving lighting calculation
-    float NdotL = max(dot(normal, lightDir), 0.0);
-    float lightValue = NdotL * 0.5 + 0.5; // Remap for half-lambert
-    lightValue = max(lightValue, 0.3); // Ensure minimum lighting
+    if (texColor.a < 0.1)
+    discard;
 
-    vec4 texColor = texture(colorTex, inUV);
-    vec4 texMetalRoughness = texture(metalRoughTex, inUV);
-    vec4 texEmissive = texture(emissiveTex, inUV);
-    vec4 texNormal = texture(normalTex, inUV);
+    float roughness     = texMetalRough.g;
+    float metallic      = texMetalRough.b;
 
-    // Alpha masking (if enabled)
-    if (materialData.alphaMode == 1 && texColor.a < materialData.alphaCutoff)
-        discard;
+    vec3 baseColor      = texColor.rgb;
+    vec3 baseReflectivity = mix(vec3(0.04), baseColor, metallic);
+    vec3 diffuseColor   = baseColor * (1.0 - metallic);
 
-    vec3 albedo = inColor * texColor.rgb;
-    float roughness = texMetalRoughness.g;
-    float metallic = texMetalRoughness.b;
-    vec3 emissive = texEmissive.rgb * materialData.emissiveFactors;
+    vec3 normal         = normalize(inNormal);
+    vec3 lightDir       = normalize(-sceneData.sunlightDirection.xyz);// FROM light to surface
+    vec3 viewDir        = normalize(vec3(0.0, 0.0, 1.0));// camera facing forward (approx)
+    vec3 halfwayDir     = normalize(lightDir + viewDir);
 
-    // Simple metallic workflow
-    vec3 baseReflectivity = mix(vec3(0.04), albedo, metallic);
-    vec3 diffuseColor = albedo * (1.0 - metallic);
+    float NdotL         = max(dot(normal, lightDir), 0.0);
+    float NdotH         = max(dot(normal, halfwayDir), 0.0);
+    float NdotV         = max(dot(normal, viewDir), 0.01);
+    float VdotH         = max(dot(viewDir, halfwayDir), 0.0);
 
-    // Basic lighting with proper energy conservation
-    vec3 ambient = diffuseColor * sceneData.ambientColor.xyz * 0.3; // Boost ambient
-    vec3 diffuse = diffuseColor * lightValue * sceneData.sunlightColor.xyz * sceneData.sunlightColor.w;
+    float alpha         = roughness * roughness;
+    float alpha2        = alpha * alpha;
 
-    // More robust specular calculation
-    vec3 viewDir = normalize(vec3(0.0, 0.0, 1.0)); // Simple view direction approximation
-    vec3 halfwayDir = normalize(lightDir + viewDir);
-    float NdotH = max(dot(normal, halfwayDir), 0.0);
-    float NdotV = max(dot(normal, viewDir), 0.01); // Prevent division by zero
+    float denom         = NdotH * NdotH * (alpha2 - 1.0) + 1.0;
+    float D             = alpha2 / (3.14159265 * denom * denom);
 
-    // Clamp roughness to prevent artifacts
-    float clampedRoughness = max(roughness, 0.04);
-    float alpha = clampedRoughness * clampedRoughness;
-    float alpha2 = alpha * alpha;
+    float k             = (roughness + 1.0) * (roughness + 1.0) / 8.0;
+    float G1L           = NdotL / (NdotL * (1.0 - k) + k);
+    float G1V           = NdotV / (NdotV * (1.0 - k) + k);
+    float G             = G1L * G1V;
 
-    // Simplified GGX distribution
-    float denom = NdotH * NdotH * (alpha2 - 1.0) + 1.0;
-    float D = alpha2 / (3.14159265 * denom * denom);
+    vec3 F                = baseReflectivity + (1.0 - baseReflectivity) * pow(1.0 - VdotH, 5.0);
+    vec3 specularStrength = texSpecular * materialData.specularFactor;
+    vec3 specular         = D * G * F / (4.0 * NdotV * NdotL + 0.001);
+    specular *= specularStrength;
 
-    // Simple geometry function
-    float k = (clampedRoughness + 1.0) * (clampedRoughness + 1.0) / 8.0;
-    float G1L = NdotL / (NdotL * (1.0 - k) + k);
-    float G1V = NdotV / (NdotV * (1.0 - k) + k);
-    float G = G1L * G1V;
+    vec3 ambient        = diffuseColor * sceneData.ambientColor.rgb;
+    vec3 diffuse        = diffuseColor * NdotL * sceneData.sunlightColor.rgb;
+    vec3 finalSpecular  = specular * NdotL * sceneData.sunlightColor.rgb;
+    vec3 emissive       = texEmissive * materialData.emissiveFactors * materialData.emissiveStrength;
 
-    // Fresnel
-    float VdotH = max(dot(viewDir, halfwayDir), 0.0);
-    vec3 F = baseReflectivity + (1.0 - baseReflectivity) * pow(clamp(1.0 - VdotH, 0.0, 1.0), 5.0);
-
-    // Final specular term with proper normalization and brightness boost
-    vec3 numerator = D * G * F;
-    float denominator = 4.0 * NdotV * NdotL + 0.001; // Prevent division by zero
-    vec3 specular = numerator / denominator * 0.5; // Scale down specular to prevent over-brightness
-
-    vec3 finalColor = ambient + diffuse + specular * NdotL * sceneData.sunlightColor.xyz * sceneData.sunlightColor.w * 2.0 + emissive;
-
-    // Ensure minimum brightness to prevent pure black
-    finalColor = max(finalColor, albedo * 0.1);
-
-    // DEBUG: Uncomment these lines one at a time to debug
-    // outFragColor = vec4(albedo, texColor.a); return; // Show base color
-    // outFragColor = vec4(normal * 0.5 + 0.5, 1.0); return; // Show normals
-    // outFragColor = vec4(vec3(lightValue), 1.0); return; // Show lighting
-    // outFragColor = vec4(vec3(metallic), 1.0); return; // Show metallic values
-    // outFragColor = vec4(vec3(roughness), 1.0); return; // Show roughness values
-
-    // TEMPORARY: Much simpler lighting for debugging
-    vec3 simpleColor = albedo * (lightValue * 0.8 + 0.4); // Simple shading
-    outFragColor = vec4(simpleColor + emissive, texColor.a);
-    return;
+    vec3 finalColor     = ambient + diffuse + emissive;
 
     outFragColor = vec4(finalColor, texColor.a);
 }

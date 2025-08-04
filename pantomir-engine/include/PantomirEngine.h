@@ -38,7 +38,7 @@ struct GPUSceneData {
 	glm::vec4 sunlightColor;
 };
 
-struct SkyPushConstants {
+struct ComputePushConstants {
 	glm::vec4 data1;
 	glm::vec4 data2;
 	glm::vec4 data3;
@@ -49,12 +49,12 @@ struct SkyPushConstants {
 };
 
 struct ComputeEffect {
-	const char*      name;
+	const char*          name;
 
-	VkPipeline       pipeline;
-	VkPipelineLayout layout;
+	VkPipeline           pipeline;
+	VkPipelineLayout     layout;
 
-	SkyPushConstants pushConstants;
+	ComputePushConstants pushConstants;
 };
 
 struct DeletionQueue {
@@ -107,15 +107,19 @@ struct GLTFMetallic_Roughness {
 	VkDescriptorSetLayout _materialLayout;
 	VkPipelineLayout      _pipelineLayout;
 
-	// Nested Types
+	// Make sure this is aligned properly.
 	struct MaterialConstants {
 		glm::vec4 colorFactors;
 		glm::vec4 metalRoughFactors;
 		glm::vec3 emissiveFactors;
+		float     emissiveStrength;
+		float     specularFactor;
 		float     alphaCutoff;
 		int       alphaMode;
-		double    padding1;
+		float     padding1;
 	};
+	static_assert(sizeof(MaterialConstants) % 16 == 0, "UBO struct must be aligned to 16 bytes.");
+
 	struct MaterialResources {
 		AllocatedImage colorImage;
 		VkSampler      colorSampler;
@@ -125,6 +129,8 @@ struct GLTFMetallic_Roughness {
 		VkSampler      emissiveSampler;
 		AllocatedImage normalImage;
 		VkSampler      normalSampler;
+		AllocatedImage specularImage;
+		VkSampler      specularSampler;
 
 		VkBuffer       dataBuffer;
 		uint32_t       dataBufferOffset;
@@ -159,7 +165,7 @@ public:
 
 	VkPipeline                                             _gradientPipeline {};
 	VkPipelineLayout                                       _gradientPipelineLayout {};
-	VkDescriptorSet                                        _drawImageDescriptors {};
+	VkDescriptorSet                                        _drawImageDescriptorSet {};
 	VkDescriptorSetLayout                                  _drawImageDescriptorLayout {};
 
 	GPUSceneData                                           _sceneData {};
@@ -168,10 +174,10 @@ public:
 	DrawContext                                            _mainDrawContext;
 	std::unordered_map<std::string, std::shared_ptr<Node>> _loadedNodes;
 
-	AllocatedImage                                         _drawImage {};
+	AllocatedImage                                         _colorImage {};
 	AllocatedImage                                         _depthImage {};
 	VkExtent2D                                             _drawExtent {};
-	VmaAllocator                                           _allocator {};
+	VmaAllocator                                           _vmaAllocator {};
 	DeletionQueue                                          _shutdownDeletionQueue;
 
 	bool                                                   _isInitialized { false };
@@ -186,8 +192,8 @@ public:
 
 	VkInstance                                             _instance {};       // Vulkan Library Handle
 	VkDebugUtilsMessengerEXT                               _debugMessenger {}; // Vulkan debug output handle
-	VkPhysicalDevice                                       _physicalGPU {}; // GPU chosen as the default device
-	VkDevice                                               _logicalGPU {};  // Vulkan device for commands
+	VkPhysicalDevice                                       _physicalGPU {};    // GPU chosen as the default device
+	VkDevice                                               _logicalGPU {};     // Vulkan device for commands
 	VkSurfaceKHR                                           _surface {};        // Vulkan window surface
 
 	VkSwapchainKHR                                         _swapchain {};
@@ -203,7 +209,7 @@ public:
 	};
 
 	VkQueue                                                      _graphicsQueue {};
-	uint32_t                                                     _graphicsQueueFamily {};
+	uint32_t                                                     _graphicsQueueFamilyIndex {};
 
 	std::unordered_map<std::string, std::shared_ptr<LoadedGLTF>> _loadedScenes;
 	MaterialInstance                                             _defaultData {};

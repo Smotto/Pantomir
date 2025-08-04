@@ -2,6 +2,9 @@
 #include "LoggerMacros.h"
 #include "VkTypes.h"
 
+// ============================================================
+// DescriptorAllocatorGrowable
+// ============================================================
 void DescriptorAllocatorGrowable::Init(VkDevice device, uint32_t maxSets, std::span<DescriptorAllocatorGrowable::PoolSizeRatio> poolRatios) {
 	_ratios.clear();
 
@@ -16,9 +19,31 @@ void DescriptorAllocatorGrowable::Init(VkDevice device, uint32_t maxSets, std::s
 	_readyPools.push_back(newPool);
 }
 
+void DescriptorAllocatorGrowable::ClearPools(VkDevice device) {
+	for (VkDescriptorPool readyPool : _readyPools) {
+		vkResetDescriptorPool(device, readyPool, 0);
+	}
+	for (VkDescriptorPool fullPool : _fullPools) {
+		vkResetDescriptorPool(device, fullPool, 0);
+		_readyPools.push_back(fullPool);
+	}
+	_fullPools.clear();
+}
+
+void DescriptorAllocatorGrowable::DestroyPools(VkDevice device) {
+	for (VkDescriptorPool readyPool : _readyPools) {
+		vkDestroyDescriptorPool(device, readyPool, nullptr);
+	}
+	_readyPools.clear();
+	for (VkDescriptorPool fullPool : _fullPools) {
+		vkDestroyDescriptorPool(device, fullPool, nullptr);
+	}
+	_fullPools.clear();
+}
+
 VkDescriptorSet DescriptorAllocatorGrowable::Allocate(VkDevice device, VkDescriptorSetLayout layout, void* pNext) {
 	// Get or create a pool to allocate from
-	VkDescriptorPool            poolToUse    = GetPool(device);
+	VkDescriptorPool            poolToUse    = GetOrCreatePool(device);
 
 	VkDescriptorSetAllocateInfo allocateInfo = {};
 	allocateInfo.pNext                       = pNext;
@@ -35,7 +60,7 @@ VkDescriptorSet DescriptorAllocatorGrowable::Allocate(VkDevice device, VkDescrip
 
 		_fullPools.push_back(poolToUse);
 
-		poolToUse                   = GetPool(device);
+		poolToUse                   = GetOrCreatePool(device);
 		allocateInfo.descriptorPool = poolToUse;
 
 		VK_CHECK(vkAllocateDescriptorSets(device, &allocateInfo, &descriptorSet));
@@ -45,7 +70,7 @@ VkDescriptorSet DescriptorAllocatorGrowable::Allocate(VkDevice device, VkDescrip
 	return descriptorSet;
 }
 
-VkDescriptorPool DescriptorAllocatorGrowable::GetPool(VkDevice device) {
+VkDescriptorPool DescriptorAllocatorGrowable::GetOrCreatePool(VkDevice device) {
 	VkDescriptorPool newPool;
 	if (_readyPools.size() != 0) {
 		newPool = _readyPools.back();
@@ -75,39 +100,21 @@ VkDescriptorPool DescriptorAllocatorGrowable::CreatePool(VkDevice device, uint32
 	pool_info.sType                      = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 	pool_info.flags                      = 0;
 	pool_info.maxSets                    = setCount;
-	pool_info.poolSizeCount              = (uint32_t)poolSizes.size();
+	pool_info.poolSizeCount              = static_cast<uint32_t>(poolSizes.size());
 	pool_info.pPoolSizes                 = poolSizes.data();
 
 	VkDescriptorPool newPool;
 	vkCreateDescriptorPool(device, &pool_info, nullptr, &newPool);
+
 	return newPool;
 }
 
-void DescriptorAllocatorGrowable::ClearPools(VkDevice device) {
-	for (auto p : _readyPools) {
-		vkResetDescriptorPool(device, p, 0);
-	}
-	for (auto p : _fullPools) {
-		vkResetDescriptorPool(device, p, 0);
-		_readyPools.push_back(p);
-	}
-	_fullPools.clear();
-}
-
-void DescriptorAllocatorGrowable::DestroyPools(VkDevice device) {
-	for (auto p : _readyPools) {
-		vkDestroyDescriptorPool(device, p, nullptr);
-	}
-	_readyPools.clear();
-	for (auto p : _fullPools) {
-		vkDestroyDescriptorPool(device, p, nullptr);
-	}
-	_fullPools.clear();
-}
-
+// ============================================================
+// DescriptorLayoutBuilder
+// ============================================================
 VkDescriptorSetLayout DescriptorLayoutBuilder::Build(VkDevice device, VkShaderStageFlags shaderStages, void* pNext, VkDescriptorSetLayoutCreateFlags flags) {
-	for (auto& b : _bindings) {
-		b.stageFlags |= shaderStages;
+	for (VkDescriptorSetLayoutBinding& binding : _bindings) {
+		binding.stageFlags |= shaderStages;
 	}
 
 	VkDescriptorSetLayoutCreateInfo info = { .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO };
@@ -136,6 +143,9 @@ void DescriptorLayoutBuilder::Clear() {
 	_bindings.clear();
 }
 
+// ============================================================
+// DescriptorWriter
+// ============================================================
 void DescriptorWriter::Clear() {
 	_imageInfos.clear();
 	_writes.clear();

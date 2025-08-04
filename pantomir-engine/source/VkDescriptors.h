@@ -3,6 +3,9 @@
 
 #include "VkTypes.h"
 
+// ============================================================
+// DescriptorAllocatorGrowable
+// ============================================================
 struct DescriptorAllocatorGrowable {
 	struct PoolSizeRatio {
 		VkDescriptorType _type;
@@ -16,15 +19,18 @@ struct DescriptorAllocatorGrowable {
 	VkDescriptorSet Allocate(VkDevice device, VkDescriptorSetLayout layout, void* pNext = nullptr);
 
 private:
-	VkDescriptorPool                                        GetPool(VkDevice device);
+	VkDescriptorPool                                        GetOrCreatePool(VkDevice device);
 	VkDescriptorPool                                        CreatePool(VkDevice device, uint32_t setCount, std::span<DescriptorAllocatorGrowable::PoolSizeRatio> poolRatios);
 
 	std::vector<DescriptorAllocatorGrowable::PoolSizeRatio> _ratios;
 	std::vector<VkDescriptorPool>                           _fullPools;
-	std::vector<VkDescriptorPool>                           _readyPools;
+	std::deque<VkDescriptorPool>                            _readyPools;
 	uint32_t                                                _setsPerPool;
 };
 
+// ------------------------------------------------------------
+// DescriptorLayoutBuilder
+// ------------------------------------------------------------
 struct DescriptorLayoutBuilder {
 	std::vector<VkDescriptorSetLayoutBinding> _bindings;
 
@@ -34,6 +40,9 @@ struct DescriptorLayoutBuilder {
 	void                                      Clear();
 };
 
+// ------------------------------------------------------------
+// DescriptorWriter
+// ------------------------------------------------------------
 struct DescriptorWriter {
 	std::deque<VkDescriptorImageInfo>  _imageInfos;
 	std::deque<VkDescriptorBufferInfo> _bufferInfos;

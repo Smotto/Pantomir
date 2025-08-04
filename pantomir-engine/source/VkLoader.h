@@ -73,6 +73,6 @@ private:
 
 // Free functions
 std::optional<AllocatedImage>              LoadImage(PantomirEngine* engine, fastgltf::Asset& asset, fastgltf::Image& image);
-std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, std::string_view filePath);
+std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, const std::string_view& filePath);
 
 #endif /*! VKLOADER_H_ */

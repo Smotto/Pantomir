@@ -20,7 +20,7 @@ find_package(Vulkan REQUIRED) # Vulkan INSTALLED ON YOUR OS
 find_package(SDL3 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 find_package(Stb REQUIRED) # TODO: Might want to use just the image part for Stb
-find_package(fastgltf CONFIG REQUIRED)
+find_package(fastgltf REQUIRED)
 find_package(xxHash CONFIG REQUIRED)
 find_package(VulkanMemoryAllocator CONFIG REQUIRED)
 

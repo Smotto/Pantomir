@@ -176,16 +176,18 @@ void PantomirEngine::InitVulkan() {
 	_physicalGPU                          = selectedPhysicalDevice.physical_device;
 
 	_graphicsQueue                        = builtLogicalDevice.get_queue(vkb::QueueType::graphics).value();
-	_graphicsQueueFamily                  = builtLogicalDevice.get_queue_index(vkb::QueueType::graphics).value(); // ID Tag for GPU logical units; Useful for command pools, buffers, images.
+	_graphicsQueueFamilyIndex             = builtLogicalDevice.get_queue_index(vkb::QueueType::graphics).value(); // ID Tag for GPU logical units; Useful for command pools, buffers, images.
 
 	VmaAllocatorCreateInfo allocatorInfo  = {};
 	allocatorInfo.physicalDevice          = _physicalGPU;
 	allocatorInfo.device                  = _logicalGPU;
 	allocatorInfo.instance                = _instance;
 	allocatorInfo.flags                   = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
-	vmaCreateAllocator(&allocatorInfo, &_allocator);
+
+	vmaCreateAllocator(&allocatorInfo, &_vmaAllocator);
+
 	_shutdownDeletionQueue.PushFunction([&]() {
-		vmaDestroyAllocator(_allocator);
+		vmaDestroyAllocator(_vmaAllocator);
 	});
 }
 
@@ -194,8 +196,8 @@ void PantomirEngine::InitSwapchain() {
 
 	VkExtent3D drawImageExtent = { _windowExtent.width, _windowExtent.height, 1 };
 
-	_drawImage.imageFormat     = VK_FORMAT_R16G16B16A16_SFLOAT;
-	_drawImage.imageExtent     = drawImageExtent;
+	_colorImage.imageFormat    = VK_FORMAT_R16G16B16A16_SFLOAT;
+	_colorImage.imageExtent    = drawImageExtent;
 
 	VkImageUsageFlags drawImageUsages {};
 	drawImageUsages |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
@@ -203,7 +205,7 @@ void PantomirEngine::InitSwapchain() {
 	drawImageUsages |= VK_IMAGE_USAGE_STORAGE_BIT;
 	drawImageUsages |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
-	VkImageCreateInfo       drawImageInfo = vkinit::ImageCreateInfo(_drawImage.imageFormat, drawImageUsages, drawImageExtent);
+	VkImageCreateInfo       drawImageInfo = vkinit::ImageCreateInfo(_colorImage.imageFormat, drawImageUsages, drawImageExtent);
 
 	// For the draw image, we want to allocate it from gpu local memory
 	VmaAllocationCreateInfo drawImageAllocInfo {};
@@ -211,12 +213,12 @@ void PantomirEngine::InitSwapchain() {
 	drawImageAllocInfo.requiredFlags = static_cast<VkMemoryPropertyFlags>(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
 	// Allocate and create the image
-	vmaCreateImage(_allocator, &drawImageInfo, &drawImageAllocInfo, &_drawImage.image, &_drawImage.allocation, nullptr);
+	vmaCreateImage(_vmaAllocator, &drawImageInfo, &drawImageAllocInfo, &_colorImage.image, &_colorImage.allocation, nullptr);
 
 	// For the draw image to use for rendering
-	VkImageViewCreateInfo drawViewInfo = vkinit::ImageViewCreateInfo(_drawImage.imageFormat, _drawImage.image, VK_IMAGE_ASPECT_COLOR_BIT);
+	VkImageViewCreateInfo drawViewInfo = vkinit::ImageViewCreateInfo(_colorImage.imageFormat, _colorImage.image, VK_IMAGE_ASPECT_COLOR_BIT);
 
-	VK_CHECK(vkCreateImageView(_logicalGPU, &drawViewInfo, nullptr, &_drawImage.imageView));
+	VK_CHECK(vkCreateImageView(_logicalGPU, &drawViewInfo, nullptr, &_colorImage.imageView));
 
 	_depthImage.imageFormat = VK_FORMAT_D32_SFLOAT;
 	_depthImage.imageExtent = drawImageExtent;
@@ -228,21 +230,21 @@ void PantomirEngine::InitSwapchain() {
 	VmaAllocationCreateInfo depthImageAllocInfo {};
 	depthImageAllocInfo.usage         = VMA_MEMORY_USAGE_GPU_ONLY;
 	depthImageAllocInfo.requiredFlags = static_cast<VkMemoryPropertyFlags>(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-	vmaCreateImage(_allocator, &depthImageInfo, &depthImageAllocInfo, &_depthImage.image, &_depthImage.allocation, nullptr);
+	vmaCreateImage(_vmaAllocator, &depthImageInfo, &depthImageAllocInfo, &_depthImage.image, &_depthImage.allocation, nullptr);
 
 	VkImageViewCreateInfo depthViewInfo = vkinit::ImageViewCreateInfo(_depthImage.imageFormat, _depthImage.image, VK_IMAGE_ASPECT_DEPTH_BIT);
 
 	VK_CHECK(vkCreateImageView(_logicalGPU, &depthViewInfo, nullptr, &_depthImage.imageView));
 
 	_shutdownDeletionQueue.PushFunction([=]() {
-		DestroyImage(_drawImage);
+		DestroyImage(_colorImage);
 		DestroyImage(_depthImage);
 	});
 }
 
 void PantomirEngine::InitCommands() {
 	// Allow for resetting of individual command buffers, instead of only resetting the entire pool at once.
-	VkCommandPoolCreateInfo commandPoolInfo = vkinit::CommandPoolCreateInfo(_graphicsQueueFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+	VkCommandPoolCreateInfo commandPoolInfo = vkinit::CommandPoolCreateInfo(_graphicsQueueFamilyIndex, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
 
 	/* ImGUI */
 	VK_CHECK(vkCreateCommandPool(_logicalGPU, &commandPoolInfo, nullptr, &_immediateCommandPool));
@@ -317,11 +319,10 @@ void PantomirEngine::InitDescriptors() {
 	}
 
 	// Allocate a descriptor set for our draw image
-	_drawImageDescriptors = globalDescriptorAllocator.Allocate(_logicalGPU, _drawImageDescriptorLayout);
-
+	_drawImageDescriptorSet = globalDescriptorAllocator.Allocate(_logicalGPU, _drawImageDescriptorLayout);
 	DescriptorWriter writer;
-	writer.WriteImage(0, _drawImage.imageView, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-	writer.UpdateSet(_logicalGPU, _drawImageDescriptors);
+	writer.WriteImage(0, _colorImage.imageView, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+	writer.UpdateSet(_logicalGPU, _drawImageDescriptorSet);
 
 	_shutdownDeletionQueue.PushFunction([&]() {
 		globalDescriptorAllocator.DestroyPools(_logicalGPU);
@@ -332,7 +333,7 @@ void PantomirEngine::InitDescriptors() {
 	});
 
 	for (int i = 0; i < FRAME_OVERLAP; ++i) {
-		std::vector<DescriptorAllocatorGrowable::PoolSizeRatio> frame_sizes = {
+		std::vector<DescriptorAllocatorGrowable::PoolSizeRatio> frameSizes = {
 			{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 3 },
 			{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3 },
 			{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 3 },
@@ -340,7 +341,7 @@ void PantomirEngine::InitDescriptors() {
 		};
 
 		_frames[i].frameDescriptors = DescriptorAllocatorGrowable {};
-		_frames[i].frameDescriptors.Init(_logicalGPU, 1000, frame_sizes);
+		_frames[i].frameDescriptors.Init(_logicalGPU, 1000, frameSizes);
 
 		_shutdownDeletionQueue.PushFunction([&, i]() {
 			_frames[i].frameDescriptors.DestroyPools(_logicalGPU);
@@ -365,7 +366,7 @@ void PantomirEngine::InitBackgroundPipelines() {
 
 	VkPushConstantRange pushConstant {};
 	pushConstant.offset                  = 0;
-	pushConstant.size                    = sizeof(SkyPushConstants);
+	pushConstant.size                    = sizeof(ComputePushConstants);
 	pushConstant.stageFlags              = VK_SHADER_STAGE_COMPUTE_BIT;
 
 	computeLayout.pPushConstantRanges    = &pushConstant;
@@ -407,7 +408,6 @@ void PantomirEngine::InitBackgroundPipelines() {
 
 	VK_CHECK(vkCreateComputePipelines(_logicalGPU, VK_NULL_HANDLE, 1, &computePipelineCreateInfo, nullptr, &backgroundGradient.pipeline));
 
-	// Change the shader module only to create the sky shader
 	computePipelineCreateInfo.stage.module = skyShader;
 
 	ComputeEffect backgroundSky {};
@@ -437,24 +437,24 @@ void PantomirEngine::InitBackgroundPipelines() {
 
 void PantomirEngine::InitImgui() {
 	// 1: Create descriptor pool for IMGUI the size of the pool is very oversized, but it's copied from imgui demo itself.
-	VkDescriptorPoolSize       pool_sizes[] = { { VK_DESCRIPTOR_TYPE_SAMPLER, 1000 },
-		                                        { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 },
-		                                        { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000 },
-		                                        { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000 },
-		                                        { VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000 },
-		                                        { VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000 },
-		                                        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000 },
-		                                        { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000 },
-		                                        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000 },
-		                                        { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000 },
-		                                        { VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000 } };
+	VkDescriptorPoolSize       poolSizes[] = { { VK_DESCRIPTOR_TYPE_SAMPLER, 1000 },
+		                                       { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 },
+		                                       { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000 },
+		                                       { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000 },
+		                                       { VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000 },
+		                                       { VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000 },
+		                                       { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000 },
+		                                       { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000 },
+		                                       { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000 },
+		                                       { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000 },
+		                                       { VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000 } };
 
-	VkDescriptorPoolCreateInfo pool_info    = {};
-	pool_info.sType                         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-	pool_info.flags                         = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-	pool_info.maxSets                       = 1000;
-	pool_info.poolSizeCount                 = static_cast<uint32_t>(std::size(pool_sizes));
-	pool_info.pPoolSizes                    = pool_sizes;
+	VkDescriptorPoolCreateInfo pool_info   = {};
+	pool_info.sType                        = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+	pool_info.flags                        = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+	pool_info.maxSets                      = 1000;
+	pool_info.poolSizeCount                = static_cast<uint32_t>(std::size(poolSizes));
+	pool_info.pPoolSizes                   = poolSizes;
 
 	VkDescriptorPool imguiPool;
 	VK_CHECK(vkCreateDescriptorPool(_logicalGPU, &pool_info, nullptr, &imguiPool));
@@ -525,7 +525,6 @@ void PantomirEngine::InitMeshPipeline() {
 
 	PipelineBuilder pipelineBuilder;
 
-	// Use the triangle layout we created
 	pipelineBuilder._pipelineLayout = _meshPipelineLayout;
 	// Connecting the vertex and pixel shaders to the pipeline
 	pipelineBuilder.SetShaders(triangleMeshVertexShader, triangleFragShader);
@@ -542,8 +541,8 @@ void PantomirEngine::InitMeshPipeline() {
 	// pipelineBuilder.DisableBlending();
 	pipelineBuilder.EnableDepthtest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
 
-	// connect the image format we will draw into, from draw image
-	pipelineBuilder.SetColorAttachmentFormat(_drawImage.imageFormat);
+	// Connect the image format we will draw into, from draw image
+	pipelineBuilder.SetColorAttachmentFormat(_colorImage.imageFormat);
 	pipelineBuilder.SetDepthFormat(_depthImage.imageFormat);
 
 	// Finally build the pipeline
@@ -570,7 +569,7 @@ void PantomirEngine::InitDefaultData() {
 	uint32_t white                        = glm::packUnorm4x8(glm::vec4(1, 1, 1, 1));
 	_whiteImage                           = CreateImage((void*)&white, VkExtent3D { 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
 
-	uint32_t grey                         = glm::packUnorm4x8(glm::vec4(0.66f, 0.66f, 0.66f, 1));
+	uint32_t grey                         = glm::packUnorm4x8(glm::vec4(1.0f, 0.5f, 0.0f, 1));
 	_greyImage                            = CreateImage((void*)&grey, VkExtent3D { 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
 
 	uint32_t black                        = glm::packUnorm4x8(glm::vec4(0, 0, 0, 0));
@@ -611,12 +610,14 @@ void PantomirEngine::InitDefaultData() {
 	// Default the material textures
 	materialResources.colorImage                                 = _whiteImage;
 	materialResources.colorSampler                               = _defaultSamplerLinear;
-	materialResources.metalRoughImage                            = _whiteImage;
+	materialResources.metalRoughImage                            = _greyImage;
 	materialResources.metalRoughSampler                          = _defaultSamplerLinear;
 	materialResources.emissiveImage                              = _whiteImage;
 	materialResources.emissiveSampler                            = _defaultSamplerLinear;
 	materialResources.normalImage                                = _whiteImage;
 	materialResources.normalSampler                              = _defaultSamplerLinear;
+	materialResources.specularImage                              = _whiteImage;
+	materialResources.specularSampler                            = _defaultSamplerLinear;
 
 	// Set the uniform buffer for the material data
 	AllocatedBuffer                            materialConstants = CreateBuffer(sizeof(GLTFMetallic_Roughness::MaterialConstants), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
@@ -626,14 +627,15 @@ void PantomirEngine::InitDefaultData() {
 	sceneUniformData->colorFactors                               = glm::vec4 { 1, 1, 1, 1 };
 	sceneUniformData->metalRoughFactors                          = glm::vec4 { 1, 1, 1, 0 };
 	sceneUniformData->emissiveFactors                            = glm::vec3 { 0, 0, 0 };
+	sceneUniformData->specularFactor                             = 0.f;
 
 	materialResources.dataBuffer                                 = materialConstants.buffer;
 	materialResources.dataBufferOffset                           = 0;
 
 	_defaultData                                                 = _metalRoughMaterial.WriteMaterial(_logicalGPU, MaterialPass::Opaque, VK_CULL_MODE_NONE, materialResources, globalDescriptorAllocator);
 
-	std::string modelPath                                        = { "Assets/Models/Echidna1.glb" };
-	auto        modelFile                                        = LoadGltf(this, modelPath);
+	std::string                                modelPath         = { "Assets/Models/Echidna1.glb" };
+	std::optional<std::shared_ptr<LoadedGLTF>> modelFile         = LoadGltf(this, modelPath);
 
 	assert(modelFile.has_value());
 
@@ -653,7 +655,7 @@ GPUMeshBuffers PantomirEngine::UploadMesh(std::span<uint32_t> indices, std::span
 	// Create vertex buffer
 	newSurface.vertexBuffer = CreateBuffer(vertexBufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
 
-	// Find the address of the vertex buffer
+	// Find the address of the vertex buffer on the GPU
 	VkBufferDeviceAddressInfo deviceAddressInfo { .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, .buffer = newSurface.vertexBuffer.buffer };
 	newSurface.vertexBufferAddress = vkGetBufferDeviceAddress(_logicalGPU, &deviceAddressInfo);
 
@@ -690,7 +692,6 @@ GPUMeshBuffers PantomirEngine::UploadMesh(std::span<uint32_t> indices, std::span
 }
 
 AllocatedBuffer PantomirEngine::CreateBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage) {
-	// Allocate Buffer
 	VkBufferCreateInfo bufferInfo = { .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
 	bufferInfo.pNext              = nullptr;
 	bufferInfo.size               = allocSize;
@@ -701,8 +702,7 @@ AllocatedBuffer PantomirEngine::CreateBuffer(size_t allocSize, VkBufferUsageFlag
 	vmaAllocInfo.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
 	AllocatedBuffer newBuffer;
 
-	// Allocate the buffer
-	VK_CHECK(vmaCreateBuffer(_allocator, &bufferInfo, &vmaAllocInfo, &newBuffer.buffer, &newBuffer.allocation, &newBuffer.info));
+	VK_CHECK(vmaCreateBuffer(_vmaAllocator, &bufferInfo, &vmaAllocInfo, &newBuffer.buffer, &newBuffer.allocation, &newBuffer.info));
 
 	return newBuffer;
 }
@@ -737,7 +737,7 @@ void PantomirEngine::DestroySwapchain() {
 }
 
 void PantomirEngine::DestroyBuffer(const AllocatedBuffer& buffer) {
-	vmaDestroyBuffer(_allocator, buffer.buffer, buffer.allocation);
+	vmaDestroyBuffer(_vmaAllocator, buffer.buffer, buffer.allocation);
 }
 
 void PantomirEngine::Draw() {
@@ -764,35 +764,34 @@ void PantomirEngine::Draw() {
 	// Begin the command buffer recording. We will use this command buffer exactly once, so we want to let vulkan know that
 	VkCommandBufferBeginInfo commandBufferBeginInfo = vkinit::CommandBufferBeginInfo(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
-	_drawExtent.height                              = _renderScale * std::min(_swapchainExtent.height, _drawImage.imageExtent.height);
-	_drawExtent.width                               = _renderScale * std::min(_swapchainExtent.width, _drawImage.imageExtent.width);
+	_drawExtent.height                              = _renderScale * std::min(_swapchainExtent.height, _colorImage.imageExtent.height);
+	_drawExtent.width                               = _renderScale * std::min(_swapchainExtent.width, _colorImage.imageExtent.width);
 
 	/* Recording State */
 	VK_CHECK(vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo));
 
 	// Transition our main draw image into general layout so we can write into it.
 	// We will overwrite it all so we don't care about what was the older layout.
-	vkutil::TransitionImage(commandBuffer, _drawImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+	vkutil::TransitionImage(commandBuffer, _colorImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
 
 	DrawBackground(commandBuffer);
 
-	vkutil::TransitionImage(commandBuffer, _drawImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+	vkutil::TransitionImage(commandBuffer, _colorImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 	vkutil::TransitionImage(commandBuffer, _depthImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 
 	DrawGeometry(commandBuffer);
 
 	// Transition the draw image and the swapchain image into their correct transfer layouts
-	vkutil::TransitionImage(commandBuffer, _drawImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+	vkutil::TransitionImage(commandBuffer, _colorImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
 	vkutil::TransitionImage(commandBuffer, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL); // Make the swapchain optimal for transfer
 
 	// Execute a copy from the draw image into the swapchain
-	vkutil::CopyImageToImage(commandBuffer, _drawImage.image, _swapchainImages[swapchainImageIndex], _drawExtent, _swapchainExtent);
-
-	// Set swapchain image layout to Present so we can show it on the screen
+	vkutil::CopyImageToImage(commandBuffer, _colorImage.image, _swapchainImages[swapchainImageIndex], _drawExtent, _swapchainExtent);
 	vkutil::TransitionImage(commandBuffer, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL); // Set the swapchain layout back, now presenting.
 
 	DrawImgui(commandBuffer, _swapchainImageViews[swapchainImageIndex]);
 
+	// Set Swapchain Image Layout to Present so we can show it on the screen
 	vkutil::TransitionImage(commandBuffer, _swapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
 	/* Executable State */
@@ -803,12 +802,12 @@ void PantomirEngine::Draw() {
 	// We will signal the _renderSemaphore, to signal that rendering has finished
 
 	VkCommandBufferSubmitInfo commandBufferSubmitInfo = vkinit::CommandBufferSubmitInfo(commandBuffer);
-	VkSemaphoreSubmitInfo     waitInfo                = vkinit::SemaphoreSubmitInfo(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR, GetCurrentFrame().swapchainSemaphore);
 	VkSemaphoreSubmitInfo     signalInfo              = vkinit::SemaphoreSubmitInfo(VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, GetCurrentFrame().renderSemaphore);
+	VkSemaphoreSubmitInfo     waitInfo                = vkinit::SemaphoreSubmitInfo(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR, GetCurrentFrame().swapchainSemaphore);
 	VkSubmitInfo2             submitInfo              = vkinit::SubmitInfo(&commandBufferSubmitInfo, &signalInfo, &waitInfo);
 
 	// Submit command buffer to the queue and execute it.
-	//  _renderFence will now block until the graphic commands finish execution
+	//  _renderFence will now block until the graphic commands finish execution.
 	/* Pending State */
 	VK_CHECK(vkQueueSubmit2(_graphicsQueue, 1, &submitInfo, GetCurrentFrame().renderFence));
 
@@ -847,13 +846,18 @@ void PantomirEngine::DrawBackground(VkCommandBuffer commandBuffer) {
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, effect.pipeline);
 
 	// Bind the descriptor set containing the draw image for the compute pipeline
-	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, _gradientPipelineLayout, 0, 1, &_drawImageDescriptors, 0, nullptr);
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, _gradientPipelineLayout, 0, 1, &_drawImageDescriptorSet, 0, nullptr);
 
-	// Update push constants (based on camera now)
-	vkCmdPushConstants(commandBuffer, _gradientPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(SkyPushConstants), &effect.pushConstants);
+	// Update push constants (using camera transform)
+	vkCmdPushConstants(commandBuffer, _gradientPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ComputePushConstants), &effect.pushConstants);
 
-	// Dispatch the compute pipeline dispatch. We are using 16x16 workgroup size so we need to divide by it
-	vkCmdDispatch(commandBuffer, std::ceil(_drawExtent.width / 16.0), std::ceil(_drawExtent.height / 16.0), 1);
+	constexpr uint32_t WORKGROUP_SIZE_X = 16;
+	constexpr uint32_t WORKGROUP_SIZE_Y = 16;
+
+	uint32_t           dispatchX        = (_drawExtent.width + WORKGROUP_SIZE_X - 1) / WORKGROUP_SIZE_X;
+	uint32_t           dispatchY        = (_drawExtent.height + WORKGROUP_SIZE_Y - 1) / WORKGROUP_SIZE_Y;
+
+	vkCmdDispatch(commandBuffer, dispatchX, dispatchY, 1);
 }
 
 void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
@@ -902,7 +906,7 @@ void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
 	uniformWriter.UpdateSet(_logicalGPU, globalDescriptor);
 
 	// Begin a render pass connected to our draw image
-	VkRenderingAttachmentInfo colorAttachment = vkinit::AttachmentInfo(_drawImage.imageView, nullptr, VK_IMAGE_LAYOUT_GENERAL);
+	VkRenderingAttachmentInfo colorAttachment = vkinit::AttachmentInfo(_colorImage.imageView, nullptr, VK_IMAGE_LAYOUT_GENERAL);
 	VkRenderingAttachmentInfo depthAttachment = vkinit::DepthAttachmentInfo(_depthImage.imageView, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 	VkRenderingInfo           renderInfo      = vkinit::RenderingInfo(_drawExtent, &colorAttachment, &depthAttachment);
 	vkCmdBeginRendering(commandBuffer, &renderInfo);
@@ -1030,12 +1034,12 @@ void PantomirEngine::ResizeSwapchain() {
 
 AllocatedImage PantomirEngine::CreateImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped) const {
 	AllocatedImage newImage;
-	newImage.imageFormat       = format;
-	newImage.imageExtent       = size;
+	newImage.imageFormat              = format;
+	newImage.imageExtent              = size;
 
-	VkImageCreateInfo img_info = vkinit::ImageCreateInfo(format, usage, size);
+	VkImageCreateInfo imageCreateInfo = vkinit::ImageCreateInfo(format, usage, size);
 	if (mipmapped) {
-		img_info.mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(size.width, size.height)))) + 1;
+		imageCreateInfo.mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(size.width, size.height)))) + 1;
 	}
 
 	// Always allocate images on dedicated GPU memory
@@ -1044,7 +1048,7 @@ AllocatedImage PantomirEngine::CreateImage(VkExtent3D size, VkFormat format, VkI
 	vmaAllocationCreateInfo.requiredFlags           = static_cast<VkMemoryPropertyFlags>(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
 	// Allocate and create the image
-	VK_CHECK(vmaCreateImage(_allocator, &img_info, &vmaAllocationCreateInfo, &newImage.image, &newImage.allocation, nullptr));
+	VK_CHECK(vmaCreateImage(_vmaAllocator, &imageCreateInfo, &vmaAllocationCreateInfo, &newImage.image, &newImage.allocation, nullptr));
 
 	// If the format is a depth format, we will need to have it use the correct
 	// aspect flag
@@ -1055,7 +1059,7 @@ AllocatedImage PantomirEngine::CreateImage(VkExtent3D size, VkFormat format, VkI
 
 	// Build an image-view for the image
 	VkImageViewCreateInfo view_info       = vkinit::ImageViewCreateInfo(format, newImage.image, aspectFlag);
-	view_info.subresourceRange.levelCount = img_info.mipLevels;
+	view_info.subresourceRange.levelCount = imageCreateInfo.mipLevels;
 
 	VK_CHECK(vkCreateImageView(_logicalGPU, &view_info, nullptr, &newImage.imageView));
 
@@ -1101,7 +1105,7 @@ AllocatedImage PantomirEngine::CreateImage(void* data, VkExtent3D size, VkFormat
 
 void PantomirEngine::DestroyImage(const AllocatedImage& img) const {
 	vkDestroyImageView(_logicalGPU, img.imageView, nullptr);
-	vmaDestroyImage(_allocator, img.image, img.allocation);
+	vmaDestroyImage(_vmaAllocator, img.image, img.allocation);
 }
 
 void PantomirEngine::UpdateScene() {
@@ -1126,16 +1130,16 @@ void PantomirEngine::UpdateScene() {
 	_loadedScenes["Echidna1"]->Draw(glm::mat4 { 1.f }, _mainDrawContext);
 
 	// Some default lighting parameters
-	_sceneData.ambientColor                                             = glm::vec4(.1f);
-	_sceneData.sunlightColor                                            = glm::vec4(1.f);
-	_sceneData.sunlightDirection                                        = glm::vec4(0, -1.0, -1.0, 1.f);
+	_sceneData.ambientColor                                                   = glm::vec4(.1f);
+	_sceneData.sunlightColor                                                  = glm::vec4(1.f);
+	_sceneData.sunlightDirection                                              = glm::vec4(0, 0, -1.0, 10.f);
 
-	std::chrono::time_point<std::chrono::steady_clock> end              = std::chrono::steady_clock::now();
-	auto                                               elapsed          = end - start;
-	float                                              deltaTimeSeconds = std::chrono::duration<float>(elapsed).count();
+	const std::chrono::time_point<std::chrono::steady_clock> end              = std::chrono::steady_clock::now();
+	const auto                                               elapsed          = end - start;
+	const float                                              deltaTimeSeconds = std::chrono::duration<float>(elapsed).count();
 
-	_stats.sceneUpdateTime                                              = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
-	_deltaTime                                                          = std::clamp(deltaTimeSeconds, 0.0001f, 0.016f);
+	_stats.sceneUpdateTime                                                    = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
+	_deltaTime                                                                = std::clamp(deltaTimeSeconds, 0.0001f, 0.016f);
 }
 
 void GLTFMetallic_Roughness::BuildPipelines(PantomirEngine* engine) {
@@ -1160,14 +1164,15 @@ void GLTFMetallic_Roughness::BuildPipelines(PantomirEngine* engine) {
 	descriptorLayoutBuilder.AddBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 	descriptorLayoutBuilder.AddBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 	descriptorLayoutBuilder.AddBinding(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+	descriptorLayoutBuilder.AddBinding(5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 
-	_materialLayout                           = descriptorLayoutBuilder.Build(engine->_logicalGPU, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
+	_materialLayout                           = descriptorLayoutBuilder.Build(engine->_logicalGPU, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT); // Every binding will use these flags
 
 	VkDescriptorSetLayout      layouts[]      = { engine->_gpuSceneDataDescriptorLayout, _materialLayout };
 
 	VkPipelineLayoutCreateInfo meshLayoutInfo = vkinit::PipelineLayoutCreateInfo();
 	meshLayoutInfo.setLayoutCount             = 2;
-	meshLayoutInfo.pSetLayouts                = layouts;
+	meshLayoutInfo.pSetLayouts                = layouts; // Decays into pointer.
 	meshLayoutInfo.pPushConstantRanges        = &matrixRange;
 	meshLayoutInfo.pushConstantRangeCount     = 1;
 
@@ -1178,7 +1183,7 @@ void GLTFMetallic_Roughness::BuildPipelines(PantomirEngine* engine) {
 	PipelineBuilder pipelineBuilder;
 
 	// Render format
-	pipelineBuilder.SetColorAttachmentFormat(engine->_drawImage.imageFormat);
+	pipelineBuilder.SetColorAttachmentFormat(engine->_colorImage.imageFormat);
 	pipelineBuilder.SetDepthFormat(engine->_depthImage.imageFormat);
 
 	pipelineBuilder.SetShaders(meshVertexShader, meshFragShader);
@@ -1273,6 +1278,7 @@ MaterialInstance GLTFMetallic_Roughness::WriteMaterial(VkDevice device, Material
 	_writer.WriteImage(2, resources.metalRoughImage.imageView, resources.metalRoughSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 	_writer.WriteImage(3, resources.emissiveImage.imageView, resources.emissiveSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 	_writer.WriteImage(4, resources.normalImage.imageView, resources.normalSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+	_writer.WriteImage(5, resources.specularImage.imageView, resources.specularSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 
 	_writer.UpdateSet(device, materialInstance.materialSet);
 
