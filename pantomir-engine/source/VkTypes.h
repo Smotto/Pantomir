@@ -74,15 +74,15 @@ struct AllocatedImage {
 };
 
 struct DrawContext;
-
 class IRenderable {
-	virtual void Draw(const glm::mat4& topMatrix, DrawContext& ctx) = 0;
+	virtual void Draw(const glm::mat4& topMatrix, DrawContext& drawContext) = 0;
 };
 
 // Implementation of a drawable scene node.
 // The scene node can hold children and keeps a transform for propagating to them.
 struct Node : IRenderable {
 	// Parent pointer must be a weak pointer to avoid circular dependencies
+	// TODO: If the _parent is nullptr, then this is the root, therefore we are moving the root transform if we wish to.
 	std::weak_ptr<Node>                _parent;
 	std::vector<std::shared_ptr<Node>> _children;
 
@@ -91,14 +91,13 @@ struct Node : IRenderable {
 
 	void                               RefreshTransform(const glm::mat4& parentMatrix) {
         _worldTransform = parentMatrix * _localTransform;
-        for (auto c : _children) {
-            c->RefreshTransform(_worldTransform);
+        for (const std::shared_ptr<Node>& child : _children) {
+            child->RefreshTransform(_worldTransform);
         }
 	}
 
-	virtual void Draw(const glm::mat4& topMatrix, DrawContext& drawContext) {
-		// Draw children
-		for (auto& child : _children) {
+	void Draw(const glm::mat4& topMatrix, DrawContext& drawContext) override {
+		for (const std::shared_ptr<Node>& child : _children) {
 			child->Draw(topMatrix, drawContext);
 		}
 	}

@@ -50,14 +50,14 @@ void main()
     vec3 F                = baseReflectivity + (1.0 - baseReflectivity) * pow(1.0 - VdotH, 5.0);
     vec3 specularStrength = texSpecular * materialData.specularFactor;
     vec3 specular         = D * G * F / (4.0 * NdotV * NdotL + 0.001);
-    specular *= specularStrength;
+//    specular *= specularStrength; // Not useful, pretty much destroys the values
 
     vec3 ambient        = diffuseColor * sceneData.ambientColor.rgb;
     vec3 diffuse        = diffuseColor * NdotL * sceneData.sunlightColor.rgb;
     vec3 finalSpecular  = specular * NdotL * sceneData.sunlightColor.rgb;
     vec3 emissive       = texEmissive * materialData.emissiveFactors * materialData.emissiveStrength;
 
-    vec3 finalColor     = ambient + diffuse + emissive;
+    vec3 finalColor     = ambient + diffuse + finalSpecular + emissive;
 
     outFragColor = vec4(finalColor, texColor.a);
 }

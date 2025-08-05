@@ -47,6 +47,7 @@ VkSamplerMipmapMode ExtractMipmapMode(fastgltf::Filter filter) {
 	}
 }
 
+// TODO: Only usage is here, maybe don't make this a free function available to everywhere.
 std::optional<AllocatedImage> LoadImage(PantomirEngine* engine, fastgltf::Asset& asset, fastgltf::Image& image) {
 	AllocatedImage newImage {};
 	int            width                 = 0;
@@ -154,6 +155,7 @@ std::optional<AllocatedImage> LoadImage(PantomirEngine* engine, fastgltf::Asset&
 	return newImage;
 }
 
+// We use fastgltf to parse the json, then we use STBI to load the images from either memory or a filepath.
 std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, const std::string_view& filePath) {
 	LOG(Engine, Info, "Loading GLTF: {}", filePath);
 	fastgltf::Parser                             parser { fastgltf::Extensions::KHR_materials_emissive_strength | fastgltf::Extensions::KHR_materials_specular };
@@ -441,52 +443,59 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, cons
 		newMesh->meshBuffers = engine->UploadMesh(indices, vertices);
 	}
 
-	// Load all nodes and their meshes
-	for (fastgltf::Node& node : gltfAsset.nodes) {
+	// Load all nodes and their attached meshes
+	for (fastgltf::Node& gltfNode : gltfAsset.nodes) {
 		std::shared_ptr<Node> newNode;
 
-		// Find if the node has a mesh, and if it does hook it to the mesh pointer and allocate it with the meshnode class
-		if (node.meshIndex.has_value()) {
-			newNode                                      = std::make_shared<MeshNode>();
-			static_cast<MeshNode*>(newNode.get())->_mesh = meshes[*node.meshIndex];
+		// If the node has a mesh, create a MeshNode and assign the corresponding mesh
+		if (gltfNode.meshIndex.has_value()) {
+			auto meshNode   = std::make_shared<MeshNode>();
+			meshNode->_mesh = meshes[*gltfNode.meshIndex];
+			newNode         = meshNode;
 		} else {
 			newNode = std::make_shared<Node>();
 		}
 
+		// Store the new node in our local collection
 		nodes.push_back(newNode);
-		currentGLTF._nodes[node.name.c_str()];
 
+		// Insert into the named node map
+		currentGLTF._nodes[gltfNode.name.c_str()] = newNode;
+
+		// Convert the node transform from glTF (TRS or matrix) into a local matrix
 		std::visit(fastgltf::visitor {
+		               // Handle matrix transform
 		               [&](const fastgltf::math::fmat4x4& matrix) {
 			               memcpy(&newNode->_localTransform, matrix.data(), sizeof(matrix));
 		               },
+		               // Handle TRS (Translation-Rotation-Scale) transform
 		               [&](const fastgltf::TRS& transform) {
-			               glm::vec3 tl(transform.translation[0], transform.translation[1], transform.translation[2]);
-			               glm::quat rot(transform.rotation[3], transform.rotation[0], transform.rotation[1], transform.rotation[2]);
-			               glm::vec3 sc(transform.scale[0], transform.scale[1], transform.scale[2]);
+			               const glm::vec3 translation(transform.translation[0], transform.translation[1], transform.translation[2]);
+			               const glm::quat rotation(transform.rotation[3], transform.rotation[0], transform.rotation[1], transform.rotation[2]); // Note: glTF uses (x, y, z, w)
+			               const glm::vec3 scale(transform.scale[0], transform.scale[1], transform.scale[2]);
 
-			               glm::mat4 tm             = glm::translate(glm::mat4(1.f), tl);
-			               glm::mat4 rm             = glm::toMat4(rot);
-			               glm::mat4 sm             = glm::scale(glm::mat4(1.f), sc);
+			               const glm::mat4 T        = glm::translate(glm::mat4(1.0f), translation);
+			               const glm::mat4 R        = glm::toMat4(rotation);
+			               const glm::mat4 S        = glm::scale(glm::mat4(1.0f), scale);
 
-			               newNode->_localTransform = tm * rm * sm;
+			               newNode->_localTransform = T * R * S;
 		               } },
-		           node.transform);
+		           gltfNode.transform);
 	}
 
-	// Run loop again to setup transform hierarchy
-	for (int i = 0; i < gltfAsset.nodes.size(); i++) {
-		fastgltf::Node&        node      = gltfAsset.nodes[i];
-		std::shared_ptr<Node>& sceneNode = nodes[i];
+	// Build the node graph for hierarchal transforms later on.
+	for (int index = 0; index < gltfAsset.nodes.size(); index++) {
+		fastgltf::Node&        node      = gltfAsset.nodes[index];
+		std::shared_ptr<Node>& sceneNode = nodes[index];
 
-		for (auto& c : node.children) {
-			sceneNode->_children.push_back(nodes[c]);
-			nodes[c]->_parent = sceneNode;
+		for (size_t& child : node.children) {
+			sceneNode->_children.push_back(nodes[child]);
+			nodes[child]->_parent = sceneNode;
 		}
 	}
 
 	// Find the top nodes, with no parents
-	for (auto& node : nodes) {
+	for (std::shared_ptr<Node>& node : nodes) {
 		if (node->_parent.lock() == nullptr) {
 			currentGLTF._topNodes.push_back(node);
 			node->RefreshTransform(glm::mat4 { 1.f });
@@ -498,8 +507,8 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, cons
 
 void LoadedGLTF::Draw(const glm::mat4& topMatrix, DrawContext& drawContext) {
 	// Create renderables from the sceneNodes
-	for (auto& n : _topNodes) {
-		n->Draw(topMatrix, drawContext);
+	for (auto& node : _topNodes) {
+		node->Draw(topMatrix, drawContext);
 	}
 }
 
@@ -525,4 +534,73 @@ void LoadedGLTF::ClearAll() {
 	for (auto& sampler : _samplers) {
 		vkDestroySampler(device, sampler, nullptr);
 	}
+}
+
+/*
+    // Load HDRI using STBI
+    // Then allocate it on the GPU
+ */
+std::optional<std::shared_ptr<LoadedHDRI>> LoadHDRI(PantomirEngine* engine, const std::string_view& filePath) {
+	LOG(Engine, Info, "Loading HDRI: {}", filePath);
+
+	std::shared_ptr<LoadedHDRI> loadedHDRI = std::make_shared<LoadedHDRI>();
+
+	AllocatedImage              newImage {};
+	int                         width               = 0;
+	int                         height              = 0;
+	int                         channelCount        = 0;
+	constexpr int               desiredChannelCount = 4;                                                                                // RGBE
+	float*                      imageData           = stbi_loadf(filePath.data(), &width, &height, &channelCount, desiredChannelCount); // HDR's have float format
+
+	if (imageData == nullptr) {
+		LOG(Engine, Error, "stbi_load_from_memory failed: {}", stbi_failure_reason());
+		return std::nullopt;
+	}
+
+	loadedHDRI->_enginePtr = engine;
+
+	// Step 1: Initialize 1 descriptor pool for this HDRI
+	std::vector<DescriptorAllocatorGrowable::PoolSizeRatio> poolSizeRatios { { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4 },
+		                                                                     { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 2 },
+		                                                                     { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1 } };
+	loadedHDRI->_descriptorPool.Init(engine->_logicalGPU, 1, poolSizeRatios);
+
+	// Step 2: Load sampler and create them on the device
+	VkSamplerCreateInfo samplerCreateInfo = { .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO, .pNext = nullptr };
+	samplerCreateInfo.maxLod              = VK_LOD_CLAMP_NONE; // Vulkan will use all mips down to the lowest
+	samplerCreateInfo.minLod              = 0;                 // Only allow LODs >= 0 (highest quality level)
+	samplerCreateInfo.magFilter           = VK_FILTER_LINEAR;
+	samplerCreateInfo.minFilter           = VK_FILTER_LINEAR;
+	samplerCreateInfo.mipmapMode          = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+
+	VkSampler newSampler;
+	vkCreateSampler(engine->_logicalGPU, &samplerCreateInfo, nullptr, &newSampler);
+	loadedHDRI->_sampler = newSampler;
+
+	// Step 3: Load image and create them on the device
+	VkExtent3D imageExtent;
+	imageExtent.width  = static_cast<uint32_t>(width);
+	imageExtent.height = static_cast<uint32_t>(height);
+	imageExtent.depth  = 1; // Only going to be 1, we aren't making smokes or CT/MRI scans.
+
+	newImage           = engine->CreateImage(imageData, imageExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, true, sizeof(float));
+	stbi_image_free(imageData);
+
+	loadedHDRI->_allocatedImage = newImage;
+
+	return loadedHDRI;
+}
+
+void LoadedHDRI::DrawSkybox(const glm::mat4& viewProjMatrix) {
+	// Bind skybox cubemap
+	// Render unit cube with depth 1 and no lighting.
+}
+
+void LoadedHDRI::ClearAll() {
+	VkDevice device = _enginePtr->_logicalGPU;
+
+	_descriptorPool.DestroyPools(device);
+	// TODO: Destroy buffers? Does HDRI need buffers?
+	_enginePtr->DestroyImage(_allocatedImage);
+	vkDestroySampler(device, _sampler, nullptr);
 }

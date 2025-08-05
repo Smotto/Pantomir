@@ -5,6 +5,7 @@
 #include "VkDescriptors.h"
 #include "VkTypes.h"
 
+struct LoadedHDRI;
 struct RenderObject;
 struct LoadedGLTF;
 struct MeshAsset;
@@ -172,7 +173,6 @@ public:
 	VkDescriptorSetLayout                                  _gpuSceneDataDescriptorLayout {};
 
 	DrawContext                                            _mainDrawContext;
-	std::unordered_map<std::string, std::shared_ptr<Node>> _loadedNodes;
 
 	AllocatedImage                                         _colorImage {};
 	AllocatedImage                                         _depthImage {};
@@ -212,6 +212,8 @@ public:
 	uint32_t                                                     _graphicsQueueFamilyIndex {};
 
 	std::unordered_map<std::string, std::shared_ptr<LoadedGLTF>> _loadedScenes;
+	std::unordered_map<std::string, std::shared_ptr<LoadedHDRI>> _loadedHDRIs;
+
 	MaterialInstance                                             _defaultData {};
 	GLTFMetallic_Roughness                                       _metalRoughMaterial;
 
@@ -243,7 +245,7 @@ public:
 
 	GPUMeshBuffers    UploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices);
 	AllocatedImage    CreateImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false) const;
-	AllocatedImage    CreateImage(void* data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false);
+	AllocatedImage    CreateImage(void* dataSource, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false, size_t bytesPerChannel = 1);
 	void              DestroyImage(const AllocatedImage& img) const;
 
 	AllocatedBuffer   CreateBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);

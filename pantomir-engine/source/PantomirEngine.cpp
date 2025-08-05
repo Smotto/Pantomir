@@ -88,6 +88,7 @@ PantomirEngine::~PantomirEngine() {
 	vkDeviceWaitIdle(_logicalGPU);
 
 	_loadedScenes.clear();
+	_loadedHDRIs.clear();
 
 	for (auto& frame : _frames) {
 		frame.deletionQueue.Flush();
@@ -567,7 +568,7 @@ void PantomirEngine::InitDefaultData() {
 
 	// 3 default textures, white, grey, black. 1 pixel each
 	uint32_t white                        = glm::packUnorm4x8(glm::vec4(1, 1, 1, 1));
-	_whiteImage                           = CreateImage((void*)&white, VkExtent3D { 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+	_whiteImage                           = CreateImage((void*)&white, VkExtent3D { 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, 1);
 
 	uint32_t grey                         = glm::packUnorm4x8(glm::vec4(1.0f, 0.5f, 0.0f, 1));
 	_greyImage                            = CreateImage((void*)&grey, VkExtent3D { 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
@@ -636,10 +637,14 @@ void PantomirEngine::InitDefaultData() {
 
 	std::string                                modelPath         = { "Assets/Models/Echidna1.glb" };
 	std::optional<std::shared_ptr<LoadedGLTF>> modelFile         = LoadGltf(this, modelPath);
+	std::string                                hdriPath          = { "Assets/Textures/citrus_orchard_road_puresky_4k.hdr" };
+	std::optional<std::shared_ptr<LoadedHDRI>> hdriFile          = LoadHDRI(this, hdriPath);
 
 	assert(modelFile.has_value());
+	assert(hdriFile.has_value());
 
-	_loadedScenes["Echidna1"] = *modelFile;
+	_loadedScenes["Echidna1"]                      = *modelFile;
+	_loadedHDRIs["citrus_orchard_road_puresky_4k"] = *hdriFile;
 
 	_shutdownDeletionQueue.PushFunction([=, this]() {
 		DestroyBuffer(materialConstants);
@@ -861,18 +866,33 @@ void PantomirEngine::DrawBackground(VkCommandBuffer commandBuffer) {
 }
 
 void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
+	// Visibility Culling
 	std::vector<uint32_t> opaqueDraws;
 	opaqueDraws.reserve(_mainDrawContext.opaqueSurfaces.size());
+	for (uint32_t index = 0; index < _mainDrawContext.opaqueSurfaces.size(); ++index) {
+		if (IsVisible(_mainDrawContext.opaqueSurfaces[index], _sceneData.viewProjection)) {
+			opaqueDraws.push_back(index);
+		}
+	}
 
-	// Visibility Culling
-	for (uint32_t i = 0; i < _mainDrawContext.opaqueSurfaces.size(); i++) {
-		if (IsVisible(_mainDrawContext.opaqueSurfaces[i], _sceneData.viewProjection)) {
-			opaqueDraws.push_back(i);
+	std::vector<uint32_t> maskedDraws;
+	maskedDraws.reserve(_mainDrawContext.maskedSurfaces.size());
+	for (uint32_t index = 0; index < _mainDrawContext.maskedSurfaces.size(); ++index) {
+		if (IsVisible(_mainDrawContext.maskedSurfaces[index], _sceneData.viewProjection)) {
+			maskedDraws.push_back(index);
+		}
+	}
+
+	std::vector<uint32_t> transparentDraws;
+	transparentDraws.reserve(_mainDrawContext.transparentSurfaces.size());
+	for (uint32_t index = 0; index < _mainDrawContext.transparentSurfaces.size(); ++index) {
+		if (IsVisible(_mainDrawContext.transparentSurfaces[index], _sceneData.viewProjection)) {
+			transparentDraws.push_back(index);
 		}
 	}
 
 	// Sorting the opaque surfaces by material and mesh
-	std::sort(opaqueDraws.begin(), opaqueDraws.end(), [&](const auto& iA, const auto& iB) {
+	std::sort(opaqueDraws.begin(), opaqueDraws.end(), [&](const uint32_t& iA, const uint32_t& iB) {
 		const RenderObject& A = _mainDrawContext.opaqueSurfaces[iA];
 		const RenderObject& B = _mainDrawContext.opaqueSurfaces[iB];
 		if (A.material == B.material) {
@@ -880,6 +900,22 @@ void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
 		}
 
 		return A.material < B.material;
+	});
+
+	std::sort(maskedDraws.begin(), maskedDraws.end(), [&](const uint32_t& iA, const uint32_t& iB) {
+		const RenderObject& A = _mainDrawContext.maskedSurfaces[iA];
+		const RenderObject& B = _mainDrawContext.maskedSurfaces[iB];
+		if (A.material == B.material) {
+			return A.indexBuffer < B.indexBuffer;
+		}
+
+		return A.material < B.material;
+	});
+
+	std::sort(transparentDraws.begin(), transparentDraws.end(), [&](const uint32_t& iA, const uint32_t& iB) {
+		const float distanceA = glm::length(_mainCamera._position - glm::vec3(_mainDrawContext.transparentSurfaces[iA].transform[3])); // Using squared distance is fine for sorting
+		const float distanceB = glm::length(_mainCamera._position - glm::vec3(_mainDrawContext.transparentSurfaces[iB].transform[3]));
+		return distanceA > distanceB; // Draw farthest first
 	});
 
 	_stats.drawcallCount               = 0;
@@ -966,21 +1002,19 @@ void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
         _stats.triangleCount += renderObject.indexCount / 3;
 	};
 
-	for (auto& renderIndex : opaqueDraws) {
+	for (const uint32_t& renderIndex : opaqueDraws) {
 		draw(_mainDrawContext.opaqueSurfaces[renderIndex]);
 	}
-
-	for (auto& renderObject : _mainDrawContext.transparentSurfaces) {
-		draw(renderObject);
+	for (const uint32_t& renderIndex : maskedDraws) {
+		draw(_mainDrawContext.maskedSurfaces[renderIndex]);
 	}
-
-	for (auto& renderObject : _mainDrawContext.maskedSurfaces) {
-		draw(renderObject);
+	for (const uint32_t& renderIndex : transparentDraws) {
+		draw(_mainDrawContext.transparentSurfaces[renderIndex]);
 	}
 
 	_mainDrawContext.opaqueSurfaces.clear();
-	_mainDrawContext.transparentSurfaces.clear();
 	_mainDrawContext.maskedSurfaces.clear();
+	_mainDrawContext.transparentSurfaces.clear();
 
 	auto end            = std::chrono::steady_clock::now();
 	auto elapsed        = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
@@ -1066,11 +1100,14 @@ AllocatedImage PantomirEngine::CreateImage(VkExtent3D size, VkFormat format, VkI
 	return newImage;
 }
 
-AllocatedImage PantomirEngine::CreateImage(void* data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped) {
-	size_t          dataSize     = size.depth * size.width * size.height * 4;
-	AllocatedBuffer uploadBuffer = CreateBuffer(dataSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+AllocatedImage PantomirEngine::CreateImage(void* dataSource, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped, size_t bytesPerChannel) {
+	// Vulkan doesn't allow us to send pixel data straight to an image, it has to be sent to a buffer first.
+	size_t          channelCount    = 4;
+	size_t          dataSize        = size.width * size.height * size.depth * channelCount * bytesPerChannel;
+	AllocatedBuffer uploadBuffer    = CreateBuffer(dataSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU); // Transfer src bit means it's usable by GPU for copying.
 
-	memcpy(uploadBuffer.info.pMappedData, data, dataSize);
+	void*           dataDestination = uploadBuffer.info.pMappedData;
+	memcpy(dataDestination, dataSource, dataSize);
 
 	AllocatedImage allocatedImage = CreateImage(size, format, usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, mipmapped);
 
@@ -1128,11 +1165,12 @@ void PantomirEngine::UpdateScene() {
 	_mainDrawContext.opaqueSurfaces.clear();
 
 	_loadedScenes["Echidna1"]->Draw(glm::mat4 { 1.f }, _mainDrawContext);
+	_loadedHDRIs["citrus_orchard_road_puresky_4k"]->DrawSkybox(_mainCamera.GetViewMatrix());
 
 	// Some default lighting parameters
 	_sceneData.ambientColor                                                   = glm::vec4(.1f);
 	_sceneData.sunlightColor                                                  = glm::vec4(1.f);
-	_sceneData.sunlightDirection                                              = glm::vec4(0, 0, -1.0, 10.f);
+	_sceneData.sunlightDirection                                              = glm::vec4(0, 0, -1.0, 1.f);
 
 	const std::chrono::time_point<std::chrono::steady_clock> end              = std::chrono::steady_clock::now();
 	const auto                                               elapsed          = end - start;
@@ -1288,7 +1326,7 @@ MaterialInstance GLTFMetallic_Roughness::WriteMaterial(VkDevice device, Material
 void MeshNode::Draw(const glm::mat4& topMatrix, DrawContext& drawContext) {
 	glm::mat4 nodeMatrix = topMatrix * _worldTransform;
 
-	for (auto& geoSurface : _mesh->surfaces) {
+	for (const GeoSurface& geoSurface : _mesh->surfaces) {
 		RenderObject renderObject;
 		renderObject.indexCount          = geoSurface.count;
 		renderObject.firstIndex          = geoSurface.startIndex;

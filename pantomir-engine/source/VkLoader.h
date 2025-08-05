@@ -65,7 +65,24 @@ struct LoadedGLTF : public IRenderable {
 		ClearAll();
 	};
 
-	virtual void Draw(const glm::mat4& topMatrix, DrawContext& drawContext);
+	void Draw(const glm::mat4& topMatrix, DrawContext& drawContext) override;
+
+private:
+	void ClearAll();
+};
+
+struct LoadedHDRI {
+	AllocatedImage              _allocatedImage;
+
+	VkSampler                   _sampler;
+	DescriptorAllocatorGrowable _descriptorPool;
+	PantomirEngine*             _enginePtr;
+
+	~LoadedHDRI() {
+		ClearAll();
+	}
+
+	void DrawSkybox(const glm::mat4& viewProjMatrix);
 
 private:
 	void ClearAll();
@@ -74,5 +91,6 @@ private:
 // Free functions
 std::optional<AllocatedImage>              LoadImage(PantomirEngine* engine, fastgltf::Asset& asset, fastgltf::Image& image);
 std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, const std::string_view& filePath);
+std::optional<std::shared_ptr<LoadedHDRI>> LoadHDRI(PantomirEngine* engine, const std::string_view& filePath);
 
 #endif /*! VKLOADER_H_ */
