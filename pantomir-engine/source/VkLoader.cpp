@@ -588,7 +588,7 @@ std::optional<std::shared_ptr<LoadedHDRI>> LoadHDRI(PantomirEngine* engine, cons
 	imageExtent.height = static_cast<uint32_t>(height);
 	imageExtent.depth  = 1; // Only going to be 1, we aren't making smokes or CT/MRI scans.
 
-	newImage           = engine->CreateImage(imageData, imageExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, true);
+	newImage           = engine->CreateImage(imageData, imageExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, false);
 	stbi_image_free(imageData);
 
 	loadedHDRI->_allocatedImage = newImage;

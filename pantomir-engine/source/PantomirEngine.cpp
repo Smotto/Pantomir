@@ -414,78 +414,6 @@ GPUMeshBuffers PantomirEngine::UploadMesh(const std::span<uint32_t> indices, con
 	return newSurface;
 }
 
-AllocatedImage PantomirEngine::CreateHDRIImage(void* dataSource, const VkExtent3D size, const VkFormat format, const VkImageUsageFlags usage, const bool mipmapped) const {
-	const size_t          dataSize        = static_cast<size_t>(size.width * size.height * size.depth) * PantomirFunctionLibrary::BytesPerPixelFromFormat(format);
-	const AllocatedBuffer uploadBuffer    = CreateBuffer(dataSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU); // Transfer src bit means it's usable by GPU for copying.
-
-	void*                 dataDestination = uploadBuffer.info.pMappedData;
-	memcpy(dataDestination, dataSource, dataSize);
-
-	AllocatedImage newImage {};
-	newImage.imageFormat              = format;
-	newImage.imageExtent              = size;
-
-	VkImageCreateInfo imageCreateInfo = vkinit::ImageCreateInfo(format, usage, size);
-	if (mipmapped) {
-		imageCreateInfo.mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(size.width, size.height)))) + 1;
-	}
-	// imageCreateInfo.flags |= VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
-	// imageCreateInfo.arrayLayers = 6;
-
-	// TODO: Implement the 6 layers properly
-
-	// Always allocate images on dedicated GPU memory
-	VmaAllocationCreateInfo vmaAllocationCreateInfo = {};
-	vmaAllocationCreateInfo.usage                   = VMA_MEMORY_USAGE_GPU_ONLY;
-	vmaAllocationCreateInfo.requiredFlags           = static_cast<VkMemoryPropertyFlags>(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-	// Allocate and create the image
-	VK_CHECK(vmaCreateImage(_vmaAllocator, &imageCreateInfo, &vmaAllocationCreateInfo, &newImage.image, &newImage.allocation, nullptr));
-
-	// If the format is a depth format, we will need to have it use the correct
-	// aspect flag
-	VkImageAspectFlags aspectFlag = VK_IMAGE_ASPECT_COLOR_BIT;
-	if (format == VK_FORMAT_D32_SFLOAT) {
-		aspectFlag = VK_IMAGE_ASPECT_DEPTH_BIT;
-	}
-
-	// Build an image-view for the image
-	VkImageViewCreateInfo viewInfo       = vkinit::ImageViewCreateInfo(format, newImage.image, aspectFlag);
-	viewInfo.subresourceRange.levelCount = imageCreateInfo.mipLevels;
-	// viewInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
-	// viewInfo.subresourceRange.layerCount = 6;
-
-	VK_CHECK(vkCreateImageView(_logicalGPU, &viewInfo, nullptr, &newImage.imageView));
-
-	ImmediateSubmit([&](VkCommandBuffer commandBuffer) {
-		vkutil::TransitionImage(commandBuffer, newImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-
-		VkBufferImageCopy copyRegion               = {};
-		copyRegion.bufferOffset                    = 0;
-		copyRegion.bufferRowLength                 = 0;
-		copyRegion.bufferImageHeight               = 0;
-
-		copyRegion.imageSubresource.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
-		copyRegion.imageSubresource.mipLevel       = 0;
-		copyRegion.imageSubresource.baseArrayLayer = 0;
-		copyRegion.imageSubresource.layerCount     = 1;
-		copyRegion.imageExtent                     = size;
-
-		// Copy the buffer into the image
-		vkCmdCopyBufferToImage(commandBuffer, uploadBuffer.buffer, newImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
-
-		if (mipmapped) {
-			vkutil::GenerateMipmaps(commandBuffer, newImage.image, VkExtent2D { newImage.imageExtent.width, newImage.imageExtent.height });
-		} else {
-			vkutil::TransitionImage(commandBuffer, newImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-		}
-	});
-
-	DestroyBuffer(uploadBuffer);
-
-	return newImage;
-}
-
 glm::mat4 PantomirEngine::GetProjectionMatrix() const {
 	glm::mat4 projection = glm::perspective(glm::radians(70.f), static_cast<float>(_windowExtent.width) / static_cast<float>(_windowExtent.height), 10000.f, 0.1f);
 	projection[1][1] *= -1;
@@ -546,7 +474,7 @@ AllocatedBuffer PantomirEngine::CreateBuffer(const size_t allocSize, const VkBuf
 	VmaAllocationCreateInfo vmaAllocInfo {};
 	vmaAllocInfo.usage = memoryUsage;
 	vmaAllocInfo.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
-	AllocatedBuffer newBuffer;
+	AllocatedBuffer newBuffer {};
 
 	VK_CHECK(vmaCreateBuffer(_vmaAllocator, &bufferInfo, &vmaAllocInfo, &newBuffer.buffer, &newBuffer.allocation, &newBuffer.info));
 
@@ -1109,7 +1037,7 @@ void PantomirEngine::InitDefaultData() {
 	assert(modelFile.has_value());
 	assert(hdriFile.has_value());
 
-	_loadedScenes["Echidna1"]                      = *modelFile;
+	_loadedScenes["Echidna1"]               = *modelFile;
 	_loadedHDRIs["brown_photostudio_02_4k"] = *hdriFile;
 
 	WriteHDRIDescriptorSet();

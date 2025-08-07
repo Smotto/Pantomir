@@ -223,11 +223,10 @@ public:
 	void                          MainLoop();
 	void                          ImmediateSubmit(std::function<void(VkCommandBuffer cmd)>&& anonymousFunction) const;
 
-	GPUMeshBuffers                UploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices) const;
-	AllocatedImage                CreateHDRIImage(void* dataSource, const VkExtent3D size, const VkFormat format, const VkImageUsageFlags usage, const bool mipmapped = false) const;
+	[[nodiscard]] GPUMeshBuffers  UploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices) const;
 	void                          WriteHDRIDescriptorSet();
 
-	glm::mat4                     GetProjectionMatrix() const;
+	[[nodiscard]] glm::mat4       GetProjectionMatrix() const;
 
 	AllocatedImage                CreateImage(void* dataSource, const VkExtent3D size, const VkFormat format, const VkImageUsageFlags usage, const bool mipmapped = false) const;
 	void                          DestroyImage(const AllocatedImage& img) const;
@@ -250,7 +249,6 @@ private:
 	void                         InitPipelines();
 	void                         InitBackgroundPipelines();
 	void                         InitImgui();
-	void                         InitMeshPipeline();
 	void                         InitHDRIPipeline();
 	void                         InitDefaultData();
 
