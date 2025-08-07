@@ -3,11 +3,12 @@
 
 #include "Camera.h"
 #include "VkDescriptors.h"
+#include "VkLoader.h"
 #include "VkTypes.h"
 
+struct RenderObject;
 struct ComputeEffect;
 struct LoadedHDRI;
-struct RenderObject;
 struct LoadedGLTF;
 
 struct EngineStats {
@@ -124,7 +125,7 @@ struct MeshAsset;
 struct MeshNode final : Node {
 	std::shared_ptr<MeshAsset> _mesh;
 
-	void                       Draw(const glm::mat4& topMatrix, DrawContext& drawContext) override;
+	void                       FillDrawContext(const glm::mat4& topMatrix, DrawContext& drawContext) override;
 };
 
 class PantomirEngine {
@@ -135,10 +136,8 @@ public:
 
 	Camera                     _mainCamera {};
 
-	VkPipelineLayout           _HDRIPipelineLayout {};
-	VkPipeline                 _HDRIPipeline {};
-	VkPipelineLayout           _meshPipelineLayout {};
-	VkPipeline                 _meshPipeline {};
+	VkPipelineLayout           _hdriPipelineLayout {};
+	VkPipeline                 _hdriPipeline {};
 
 	std::vector<ComputeEffect> _backgroundEffects {};
 	int                        _currentBackgroundEffect { 0 };
@@ -209,6 +208,7 @@ public:
 	VkSampler                                                    _defaultSamplerLinear {};
 	VkSampler                                                    _defaultSamplerNearest {};
 
+	VkDescriptorSet                                              _singleImageDescriptorSet {};
 	VkDescriptorSetLayout                                        _singleImageDescriptorLayout {};
 
 	PantomirEngine(const PantomirEngine&)                   = delete;
@@ -224,7 +224,11 @@ public:
 	void                          ImmediateSubmit(std::function<void(VkCommandBuffer cmd)>&& anonymousFunction) const;
 
 	GPUMeshBuffers                UploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices) const;
-	AllocatedImage                CreateCubemapImage(void* dataSource, const VkExtent3D size, const VkFormat format, const VkImageUsageFlags usage, const bool mipmapped = false) const;
+	AllocatedImage                CreateHDRIImage(void* dataSource, const VkExtent3D size, const VkFormat format, const VkImageUsageFlags usage, const bool mipmapped = false) const;
+	void                          WriteHDRIDescriptorSet();
+
+	glm::mat4                     GetProjectionMatrix() const;
+
 	AllocatedImage                CreateImage(void* dataSource, const VkExtent3D size, const VkFormat format, const VkImageUsageFlags usage, const bool mipmapped = false) const;
 	void                          DestroyImage(const AllocatedImage& img) const;
 
@@ -258,6 +262,7 @@ private:
 
 	void                         Draw();
 	void                         DrawBackground(VkCommandBuffer commandBuffer);
+	void                         DrawSkybox(VkCommandBuffer commandBuffer) const;
 	void                         DrawGeometry(VkCommandBuffer commandBuffer);
 	void                         DrawImgui(VkCommandBuffer commandBuffer, VkImageView targetImageView) const;
 

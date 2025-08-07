@@ -1,6 +1,7 @@
 #include <PantomirEngine.h>
 
 #include <chrono>
+#include <cstddef>
 #include <thread>
 
 #include <VkBootstrap.h>
@@ -201,7 +202,7 @@ MaterialInstance GLTFMetallic_Roughness::WriteMaterial(VkDevice device, Material
 		materialInstance.pipeline = &_opaquePipeline;
 	}
 
-	materialInstance.materialSet = descriptorAllocator.Allocate(device, _materialLayout);
+	materialInstance.descriptorSet = descriptorAllocator.Allocate(device, _materialLayout);
 
 	_writer.Clear();
 	_writer.WriteBuffer(0, resources.dataBuffer, sizeof(MaterialConstants), resources.dataBufferOffset, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
@@ -211,12 +212,19 @@ MaterialInstance GLTFMetallic_Roughness::WriteMaterial(VkDevice device, Material
 	_writer.WriteImage(4, resources.normalImage.imageView, resources.normalSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 	_writer.WriteImage(5, resources.specularImage.imageView, resources.specularSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 
-	_writer.UpdateSet(device, materialInstance.materialSet);
+	_writer.UpdateSet(device, materialInstance.descriptorSet);
 
 	return materialInstance;
 }
 
-void MeshNode::Draw(const glm::mat4& topMatrix, DrawContext& drawContext) {
+void PantomirEngine::WriteHDRIDescriptorSet() {
+	_singleImageDescriptorSet = globalDescriptorAllocator.Allocate(_logicalGPU, _singleImageDescriptorLayout);
+	DescriptorWriter singleImageDescriptorWriter;
+	singleImageDescriptorWriter.WriteImage(0, _loadedHDRIs["citrus_orchard_road_puresky_4k"]->_allocatedImage.imageView, _loadedHDRIs["citrus_orchard_road_puresky_4k"]->_sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+	singleImageDescriptorWriter.UpdateSet(_logicalGPU, _singleImageDescriptorSet);
+}
+
+void MeshNode::FillDrawContext(const glm::mat4& topMatrix, DrawContext& drawContext) {
 	const glm::mat4 nodeMatrix = topMatrix * _worldTransform;
 
 	for (const GeoSurface& geoSurface : _mesh->surfaces) {
@@ -240,7 +248,7 @@ void MeshNode::Draw(const glm::mat4& topMatrix, DrawContext& drawContext) {
 		}
 	}
 
-	Node::Draw(topMatrix, drawContext);
+	Node::FillDrawContext(topMatrix, drawContext);
 }
 
 int PantomirEngine::Start() {
@@ -406,9 +414,8 @@ GPUMeshBuffers PantomirEngine::UploadMesh(const std::span<uint32_t> indices, con
 	return newSurface;
 }
 
-AllocatedImage PantomirEngine::CreateCubemapImage(void* dataSource, const VkExtent3D size, const VkFormat format, const VkImageUsageFlags usage, const bool mipmapped) const {
-	// TODO: Implement everything.
-	const size_t          dataSize        = size.width * size.height * size.depth * PantomirFunctionLibrary::BytesPerPixelFromFormat(format);
+AllocatedImage PantomirEngine::CreateHDRIImage(void* dataSource, const VkExtent3D size, const VkFormat format, const VkImageUsageFlags usage, const bool mipmapped) const {
+	const size_t          dataSize        = static_cast<size_t>(size.width * size.height * size.depth) * PantomirFunctionLibrary::BytesPerPixelFromFormat(format);
 	const AllocatedBuffer uploadBuffer    = CreateBuffer(dataSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU); // Transfer src bit means it's usable by GPU for copying.
 
 	void*                 dataDestination = uploadBuffer.info.pMappedData;
@@ -424,6 +431,8 @@ AllocatedImage PantomirEngine::CreateCubemapImage(void* dataSource, const VkExte
 	}
 	// imageCreateInfo.flags |= VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
 	// imageCreateInfo.arrayLayers = 6;
+
+	// TODO: Implement the 6 layers properly
 
 	// Always allocate images on dedicated GPU memory
 	VmaAllocationCreateInfo vmaAllocationCreateInfo = {};
@@ -475,6 +484,10 @@ AllocatedImage PantomirEngine::CreateCubemapImage(void* dataSource, const VkExte
 	DestroyBuffer(uploadBuffer);
 
 	return newImage;
+}
+
+glm::mat4 PantomirEngine::GetProjectionMatrix() const {
+	return glm::perspective(glm::radians(70.f), static_cast<float>(_windowExtent.width) / static_cast<float>(_windowExtent.height), 10000.f, 0.1f);
 }
 
 AllocatedImage PantomirEngine::CreateImage(void* dataSource, const VkExtent3D size, const VkFormat format, const VkImageUsageFlags usage, const bool mipmapped) const {
@@ -707,7 +720,7 @@ void PantomirEngine::InitSwapchain() {
 
 	VK_CHECK(vkCreateImageView(_logicalGPU, &depthViewInfo, nullptr, &_depthImage.imageView));
 
-	_shutdownDeletionQueue.PushFunction([=]() {
+	_shutdownDeletionQueue.PushFunction([=, this]() {
 		DestroyImage(_colorImage);
 		DestroyImage(_depthImage);
 	});
@@ -721,7 +734,7 @@ void PantomirEngine::InitCommands() {
 	VK_CHECK(vkCreateCommandPool(_logicalGPU, &commandPoolInfo, nullptr, &_immediateCommandPool));
 	VkCommandBufferAllocateInfo commandBufferAllocInfoImmediate = vkinit::CommandBufferAllocateInfo(_immediateCommandPool, 1);
 	VK_CHECK(vkAllocateCommandBuffers(_logicalGPU, &commandBufferAllocInfoImmediate, &_immediateCommandBuffer)); /* Initial State */
-	_shutdownDeletionQueue.PushFunction([=]() {
+	_shutdownDeletionQueue.PushFunction([=, this]() {
 		vkDestroyCommandPool(_logicalGPU, _immediateCommandPool, nullptr);
 	});
 
@@ -730,7 +743,7 @@ void PantomirEngine::InitCommands() {
 		VK_CHECK(vkCreateCommandPool(_logicalGPU, &commandPoolInfo, nullptr, &frame.commandPool));
 		VkCommandBufferAllocateInfo commandBufferAllocInfo = vkinit::CommandBufferAllocateInfo(frame.commandPool, 1);
 		VK_CHECK(vkAllocateCommandBuffers(_logicalGPU, &commandBufferAllocInfo, &frame.mainCommandBuffer)); /* Initial State */
-		_shutdownDeletionQueue.PushFunction([=]() {
+		_shutdownDeletionQueue.PushFunction([=, this]() {
 			vkDestroyCommandPool(_logicalGPU, frame.commandPool, nullptr);
 		});
 	}
@@ -789,11 +802,11 @@ void PantomirEngine::InitDescriptors() {
 		_singleImageDescriptorLayout = builder.Build(_logicalGPU, VK_SHADER_STAGE_FRAGMENT_BIT);
 	}
 
-	// Allocate a descriptor set for our draw image
+	// TODO: Since we don't have a sampler, why is this here? Other descriptor sets are made later.
 	_drawImageDescriptorSet = globalDescriptorAllocator.Allocate(_logicalGPU, _drawImageDescriptorLayout);
-	DescriptorWriter writer;
-	writer.WriteImage(0, _colorImage.imageView, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-	writer.UpdateSet(_logicalGPU, _drawImageDescriptorSet);
+	DescriptorWriter drawImageDescriptorWriter;
+	drawImageDescriptorWriter.WriteImage(0, _colorImage.imageView, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+	drawImageDescriptorWriter.UpdateSet(_logicalGPU, _drawImageDescriptorSet);
 
 	_shutdownDeletionQueue.PushFunction([&]() {
 		globalDescriptorAllocator.DestroyPools(_logicalGPU);
@@ -826,7 +839,6 @@ void PantomirEngine::InitPipelines() {
 	_shutdownDeletionQueue.PushFunction([&]() {
 		_metalRoughMaterial.ClearResources(_logicalGPU);
 	});
-	InitMeshPipeline();
 	InitHDRIPipeline();
 }
 
@@ -965,95 +977,35 @@ void PantomirEngine::InitImgui() {
 	});
 }
 
-void PantomirEngine::InitMeshPipeline() {
-	VkShaderModule triangleMeshVertexShader;
-	if (!vkutil::LoadShaderModule("Assets/Shaders/colored_triangle_mesh.vert.spv", _logicalGPU, &triangleMeshVertexShader)) {
-		LOG(Engine, Error, "Error when building the triangle vertex shader module");
-	} else {
-		LOG(Engine, Info, "Triangle mesh vertex shader successfully loaded");
-	}
-
-	VkShaderModule triangleFragShader;
-	if (!vkutil::LoadShaderModule("Assets/Shaders/tex_image.frag.spv", _logicalGPU, &triangleFragShader)) {
-		LOG(Engine, Error, "Error when building the triangle fragment shader module");
-	} else {
-		LOG(Engine, Info, "Triangle fragment shader successfully loaded");
-	}
-
-	VkPushConstantRange bufferRange {};
-	bufferRange.offset                            = 0;
-	bufferRange.size                              = sizeof(GPUDrawPushConstants);
-	bufferRange.stageFlags                        = VK_SHADER_STAGE_VERTEX_BIT;
-
-	VkPipelineLayoutCreateInfo pipelineLayoutInfo = vkinit::PipelineLayoutCreateInfo();
-	pipelineLayoutInfo.pPushConstantRanges        = &bufferRange;
-	pipelineLayoutInfo.pushConstantRangeCount     = 1;
-	pipelineLayoutInfo.pSetLayouts                = &_singleImageDescriptorLayout;
-	pipelineLayoutInfo.setLayoutCount             = 1;
-	VK_CHECK(vkCreatePipelineLayout(_logicalGPU, &pipelineLayoutInfo, nullptr, &_meshPipelineLayout));
-
-	PipelineBuilder pipelineBuilder;
-	pipelineBuilder._pipelineLayout = _meshPipelineLayout;
-	// Connecting the vertex and pixel shaders to the pipeline
-	pipelineBuilder.SetShaders(triangleMeshVertexShader, triangleFragShader);
-	// It will draw triangles
-	pipelineBuilder.SetInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-	// Filled triangles
-	pipelineBuilder.SetPolygonMode(VK_POLYGON_MODE_FILL);
-	// No Backface culling
-	pipelineBuilder.SetCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE);
-	// No Multisampling
-	pipelineBuilder.SetMultisamplingNone();
-	// Blending On/Off
-	pipelineBuilder.EnableBlendingAdditive();
-	// pipelineBuilder.DisableBlending();
-	pipelineBuilder.EnableDepthtest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
-	// Connect the image format we will draw into, from draw image
-	pipelineBuilder.SetColorAttachmentFormat(_colorImage.imageFormat);
-	pipelineBuilder.SetDepthFormat(_depthImage.imageFormat);
-	// Finally build the pipeline
-	_meshPipeline = pipelineBuilder.BuildPipeline(_logicalGPU);
-
-	// Clean structures
-	vkDestroyShaderModule(_logicalGPU, triangleFragShader, nullptr);
-	vkDestroyShaderModule(_logicalGPU, triangleMeshVertexShader, nullptr);
-
-	_shutdownDeletionQueue.PushFunction([&]() {
-		vkDestroyPipelineLayout(_logicalGPU, _meshPipelineLayout, nullptr);
-		vkDestroyPipeline(_logicalGPU, _meshPipeline, nullptr);
-	});
-}
-
 void PantomirEngine::InitHDRIPipeline() {
 	VkShaderModule HDRIVertexShader;
 	if (!vkutil::LoadShaderModule("Assets/Shaders/HDRI.vert.spv", _logicalGPU, &HDRIVertexShader)) {
 		LOG(Engine, Error, "Error when building the triangle vertex shader module");
 	} else {
-		LOG(Engine, Info, "Triangle mesh vertex shader successfully loaded");
+		LOG(Engine, Info, "HDRI vertex shader successfully loaded");
 	}
 
 	VkShaderModule HDRIFragShader;
 	if (!vkutil::LoadShaderModule("Assets/Shaders/HDRI.frag.spv", _logicalGPU, &HDRIFragShader)) {
 		LOG(Engine, Error, "Error when building the triangle fragment shader module");
 	} else {
-		LOG(Engine, Info, "Triangle fragment shader successfully loaded");
+		LOG(Engine, Info, "HDRI fragment shader successfully loaded");
 	}
 
 	VkPushConstantRange bufferRange {};
 	bufferRange.offset                            = 0;
 	bufferRange.size                              = sizeof(HDRIPushConstants);
-	bufferRange.stageFlags                        = VK_SHADER_STAGE_VERTEX_BIT;
+	bufferRange.stageFlags                        = VK_SHADER_STAGE_VERTEX_BIT; // TODO: Maybe not just the vertex? Maybe the frag too?
 
 	VkPipelineLayoutCreateInfo pipelineLayoutInfo = vkinit::PipelineLayoutCreateInfo();
 	pipelineLayoutInfo.pPushConstantRanges        = &bufferRange;
 	pipelineLayoutInfo.pushConstantRangeCount     = 1;
 	pipelineLayoutInfo.pSetLayouts                = &_singleImageDescriptorLayout;
 	pipelineLayoutInfo.setLayoutCount             = 1;
-
-	VK_CHECK(vkCreatePipelineLayout(_logicalGPU, &pipelineLayoutInfo, nullptr, &_HDRIPipelineLayout));
+	VK_CHECK(vkCreatePipelineLayout(_logicalGPU, &pipelineLayoutInfo, nullptr, &_hdriPipelineLayout));
 
 	PipelineBuilder pipelineBuilder;
-	pipelineBuilder._pipelineLayout = _HDRIPipelineLayout;
+	pipelineBuilder._pipelineLayout = _hdriPipelineLayout;
 	pipelineBuilder.SetShaders(HDRIVertexShader, HDRIFragShader);
 	pipelineBuilder.SetInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
 	pipelineBuilder.SetPolygonMode(VK_POLYGON_MODE_FILL);
@@ -1063,15 +1015,15 @@ void PantomirEngine::InitHDRIPipeline() {
 	pipelineBuilder.EnableDepthtest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
 	pipelineBuilder.SetColorAttachmentFormat(_colorImage.imageFormat);
 	pipelineBuilder.SetDepthFormat(_depthImage.imageFormat);
-	_HDRIPipeline = pipelineBuilder.BuildPipeline(_logicalGPU);
+	_hdriPipeline = pipelineBuilder.BuildPipeline(_logicalGPU);
 
 	// Clean structures
 	vkDestroyShaderModule(_logicalGPU, HDRIFragShader, nullptr);
 	vkDestroyShaderModule(_logicalGPU, HDRIVertexShader, nullptr);
 
 	_shutdownDeletionQueue.PushFunction([&]() {
-		vkDestroyPipelineLayout(_logicalGPU, _HDRIPipelineLayout, nullptr);
-		vkDestroyPipeline(_logicalGPU, _HDRIPipeline, nullptr);
+		vkDestroyPipelineLayout(_logicalGPU, _hdriPipelineLayout, nullptr);
+		vkDestroyPipeline(_logicalGPU, _hdriPipeline, nullptr);
 	});
 }
 
@@ -1157,6 +1109,8 @@ void PantomirEngine::InitDefaultData() {
 	_loadedScenes["Echidna1"]                      = *modelFile;
 	_loadedHDRIs["citrus_orchard_road_puresky_4k"] = *hdriFile;
 
+	WriteHDRIDescriptorSet();
+
 	_shutdownDeletionQueue.PushFunction([=, this]() {
 		DestroyBuffer(materialConstants);
 	});
@@ -1239,6 +1193,7 @@ AllocatedImage PantomirEngine::CreateImage(const VkExtent3D size, const VkFormat
 
 void PantomirEngine::Draw() {
 	UpdateScene();
+
 	// CPU-GPU synchronization: wait until the gpu has finished rendering the last frame. Timeout of 1 second
 	VK_CHECK(vkWaitForFences(_logicalGPU, 1, &GetCurrentFrame().renderFence, true, 1000000000));
 	VK_CHECK(vkResetFences(_logicalGPU, 1, &GetCurrentFrame().renderFence));
@@ -1277,6 +1232,7 @@ void PantomirEngine::Draw() {
 	vkutil::TransitionImage(commandBuffer, _depthImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 
 	DrawGeometry(commandBuffer);
+	DrawSkybox(commandBuffer);
 
 	// Transition the draw image and the swapchain image into their correct transfer layouts
 	vkutil::TransitionImage(commandBuffer, _colorImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
@@ -1357,6 +1313,39 @@ void PantomirEngine::DrawBackground(VkCommandBuffer commandBuffer) {
 	vkCmdDispatch(commandBuffer, dispatchX, dispatchY, 1);
 }
 
+void PantomirEngine::DrawSkybox(const VkCommandBuffer commandBuffer) const {
+	VkRenderingAttachmentInfo colorAttachment = vkinit::AttachmentInfo(_colorImage.imageView, nullptr, VK_IMAGE_LAYOUT_GENERAL);
+	const VkRenderingInfo     renderInfo      = vkinit::RenderingInfo(_drawExtent, &colorAttachment, nullptr);
+	HDRIPushConstants   constants {
+		  .viewMatrix       = _mainCamera.GetViewMatrix(),
+		  .projectionMatrix = GetProjectionMatrix()
+	};
+
+	vkCmdBeginRendering(commandBuffer, &renderInfo);
+	VkViewport viewport = {};
+	viewport.x          = 0;
+	viewport.y          = 0;
+	viewport.width      = static_cast<float>(_windowExtent.width);
+	viewport.height     = static_cast<float>(_windowExtent.height);
+	viewport.minDepth   = 0.f;
+	viewport.maxDepth   = 1.f;
+	vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+	VkRect2D scissor      = {};
+	scissor.offset.x      = 0;
+	scissor.offset.y      = 0;
+	scissor.extent.width  = _windowExtent.width;
+	scissor.extent.height = _windowExtent.height;
+	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _hdriPipeline);
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _hdriPipelineLayout, 0, 1, &_singleImageDescriptorSet, 0, nullptr);
+
+	// TODO: Probably want to reuse the same GPUSceneBuffer data on the GPU, but just hacking this for now with push constants.
+	vkCmdPushConstants(commandBuffer, _hdriPipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(HDRIPushConstants), &constants);
+	vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+	vkCmdEndRendering(commandBuffer);
+}
+
 void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
 	// Visibility Culling
 	std::vector<uint32_t> opaqueDraws;
@@ -1414,7 +1403,7 @@ void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
 		DestroyBuffer(uniformBufferGPUSceneData);
 	});
 	GPUSceneData* uniformBufferData   = static_cast<GPUSceneData*>(uniformBufferGPUSceneData.allocation->GetMappedData());
-	*uniformBufferData                = _sceneData; // TODO: What's scene data
+	*uniformBufferData                = _sceneData;
 	VkDescriptorSet  globalDescriptor = GetCurrentFrame().frameDescriptors.Allocate(_logicalGPU, _gpuSceneDataDescriptorLayout);
 	DescriptorWriter uniformWriter;
 	uniformWriter.WriteBuffer(0, uniformBufferGPUSceneData.buffer, sizeof(GPUSceneData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
@@ -1441,6 +1430,7 @@ void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
                 lastPipeline = renderObject.material->pipeline;
                 vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderObject.material->pipeline->pipeline);
                 vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderObject.material->pipeline->layout, 0, 1, &globalDescriptor, 0, nullptr);
+                // TODO: Maybe cache viewport and scissor. This works since we are dynamically changing pipelines.
                 VkViewport viewport = {};
                 viewport.x          = 0;
                 viewport.y          = 0;
@@ -1456,7 +1446,7 @@ void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
                 scissor.extent.height = _windowExtent.height;
                 vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
             }
-            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderObject.material->pipeline->layout, 1, 1, &renderObject.material->materialSet, 0, nullptr);
+            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderObject.material->pipeline->layout, 1, 1, &renderObject.material->descriptorSet, 0, nullptr);
         }
         // Step 2: Bind index buffer
         // Rebind index buffer if needed
@@ -1518,7 +1508,7 @@ void PantomirEngine::UpdateScene() {
 	const glm::mat4 view       = _mainCamera.GetViewMatrix();
 
 	// Camera projection
-	glm::mat4       projection = glm::perspective(glm::radians(70.f), static_cast<float>(_windowExtent.width) / static_cast<float>(_windowExtent.height), 10000.f, 0.1f);
+	glm::mat4       projection = GetProjectionMatrix();
 
 	// Invert the Y direction on projection matrix so that we are more similar to opengl and gltf axis
 	projection[1][1] *= -1;
@@ -1530,8 +1520,7 @@ void PantomirEngine::UpdateScene() {
 	_mainDrawContext.opaqueSurfaces.clear();
 	_mainDrawContext.maskedSurfaces.clear();
 	_mainDrawContext.transparentSurfaces.clear();
-	_loadedScenes["Echidna1"]->Draw(glm::mat4 { 1.f }, _mainDrawContext);
-	_loadedHDRIs["citrus_orchard_road_puresky_4k"]->DrawSkybox(_mainCamera.GetViewMatrix());
+	_loadedScenes["Echidna1"]->FillDrawContext(glm::mat4 { 1.f }, _mainDrawContext);
 
 	// Some default lighting parameters
 	_sceneData.ambientColor                                                   = glm::vec4(.1f);

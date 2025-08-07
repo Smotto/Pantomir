@@ -15,8 +15,8 @@
 #include <fastgltf/core.hpp>
 #include <fastgltf/glm_element_traits.hpp>
 #include <fastgltf/tools.hpp>
-#include <unordered_set>
 #include <ranges>
+#include <unordered_set>
 
 /* Free Functions */
 VkFilter ExtractFilter(fastgltf::Filter filter) {
@@ -502,10 +502,10 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, cons
 	return currentGLTFPointer;
 }
 
-void LoadedGLTF::Draw(const glm::mat4& topMatrix, DrawContext& drawContext) {
+void LoadedGLTF::FillDrawContext(const glm::mat4& topMatrix, DrawContext& drawContext) {
 	// Create renderables from the sceneNodes
 	for (const auto& node : _topNodes) {
-		node->Draw(topMatrix, drawContext);
+		node->FillDrawContext(topMatrix, drawContext);
 	}
 }
 
@@ -558,19 +558,20 @@ std::optional<std::shared_ptr<LoadedHDRI>> LoadHDRI(PantomirEngine* engine, cons
 
 	// Step 1: Initialize 1 descriptor pool for this HDRI
 	std::vector<DescriptorAllocatorGrowable::PoolSizeRatio> poolSizeRatios {
-		{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4 },
-		{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 2 },
-		{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1 }
+		{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1 },
 	};
 	loadedHDRI->_descriptorPool.Init(engine->_logicalGPU, 1, poolSizeRatios);
 
 	// Step 2: Load sampler and create them on the device
-	VkSamplerCreateInfo samplerCreateInfo = { .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO, .pNext = nullptr };
-	samplerCreateInfo.maxLod              = VK_LOD_CLAMP_NONE; // Vulkan will use all mips down to the lowest
-	samplerCreateInfo.minLod              = 0;                 // Only allow LODs >= 0 (highest quality level)
-	samplerCreateInfo.magFilter           = VK_FILTER_LINEAR;
-	samplerCreateInfo.minFilter           = VK_FILTER_LINEAR;
-	samplerCreateInfo.mipmapMode          = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+	VkSamplerCreateInfo samplerCreateInfo = {
+		.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+		.pNext = nullptr
+	};
+	samplerCreateInfo.maxLod     = VK_LOD_CLAMP_NONE; // Vulkan will use all mips down to the lowest
+	samplerCreateInfo.minLod     = 0;                 // Only allow LODs >= 0 (highest quality level)
+	samplerCreateInfo.magFilter  = VK_FILTER_LINEAR;
+	samplerCreateInfo.minFilter  = VK_FILTER_LINEAR;
+	samplerCreateInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
 
 	VkSampler newSampler;
 	vkCreateSampler(engine->_logicalGPU, &samplerCreateInfo, nullptr, &newSampler);
@@ -588,11 +589,6 @@ std::optional<std::shared_ptr<LoadedHDRI>> LoadHDRI(PantomirEngine* engine, cons
 	loadedHDRI->_allocatedImage = newImage;
 
 	return loadedHDRI;
-}
-
-void LoadedHDRI::DrawSkybox(const glm::mat4& viewProjMatrix) {
-	// Bind skybox cubemap
-	// Render unit cube with depth 1 and no lighting.
 }
 
 void LoadedHDRI::ClearAll() {

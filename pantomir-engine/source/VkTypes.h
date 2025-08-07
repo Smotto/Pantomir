@@ -32,7 +32,7 @@ struct MaterialPipeline {
 
 struct MaterialInstance {
 	MaterialPipeline*  pipeline;
-	VkDescriptorSet    materialSet;
+	VkDescriptorSet    descriptorSet;
 	MaterialPass       passType;
 	VkCullModeFlagBits cullMode;
 };
@@ -73,7 +73,7 @@ public:
 	virtual ~IRenderable() = default;
 
 private:
-	virtual void Draw(const glm::mat4& topMatrix, DrawContext& drawContext) = 0;
+	virtual void FillDrawContext(const glm::mat4& topMatrix, DrawContext& drawContext) = 0;
 };
 
 // Implementation of a drawable scene node.
@@ -94,9 +94,9 @@ struct Node : IRenderable {
         }
 	}
 
-	void Draw(const glm::mat4& topMatrix, DrawContext& drawContext) override {
+	void FillDrawContext(const glm::mat4& topMatrix, DrawContext& drawContext) override {
 		for (const std::shared_ptr<Node>& child : _children) {
-			child->Draw(topMatrix, drawContext);
+			child->FillDrawContext(topMatrix, drawContext);
 		}
 	}
 };

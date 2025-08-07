@@ -65,7 +65,7 @@ struct LoadedGLTF final : IRenderable {
 		ClearAll();
 	};
 
-	void Draw(const glm::mat4& topMatrix, DrawContext& drawContext) override;
+	void FillDrawContext(const glm::mat4& topMatrix, DrawContext& drawContext) override;
 
 private:
 	void ClearAll();
@@ -81,8 +81,6 @@ struct LoadedHDRI {
 	~LoadedHDRI() {
 		ClearAll();
 	}
-
-	void DrawSkybox(const glm::mat4& viewProjMatrix);
 
 private:
 	void ClearAll();
