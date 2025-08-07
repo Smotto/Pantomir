@@ -27,6 +27,9 @@
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/transform.hpp>
 
+#include "PantomirFunctionLibrary.h"
+#include "VkPushConstants.h"
+
 bool IsVisible(const RenderObject& renderObject, const glm::mat4& viewProjection) {
 	constexpr std::array<glm::vec3, 8> unitCubeCorners {
 		glm::vec3 { 1, 1, 1 },
@@ -70,6 +73,474 @@ bool IsVisible(const RenderObject& renderObject, const glm::mat4& viewProjection
 	return true;
 }
 
+void GLTFMetallic_Roughness::BuildPipelines(PantomirEngine* engine) {
+	VkShaderModule meshVertexShader;
+	if (!vkutil::LoadShaderModule("Assets/Shaders/mesh.vert.spv", engine->_logicalGPU, &meshVertexShader)) {
+		LOG(Engine, Error, "Error when building the triangle vertex shader module");
+	}
+
+	VkShaderModule meshFragShader;
+	if (!vkutil::LoadShaderModule("Assets/Shaders/mesh.frag.spv", engine->_logicalGPU, &meshFragShader)) {
+		LOG(Engine, Error, "Error when building the triangle fragment shader module");
+	}
+
+	VkPushConstantRange matrixRange {};
+	matrixRange.offset     = 0;
+	matrixRange.size       = sizeof(GPUDrawPushConstants);
+	matrixRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+	DescriptorLayoutBuilder descriptorLayoutBuilder;
+	descriptorLayoutBuilder.AddBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+	descriptorLayoutBuilder.AddBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+	descriptorLayoutBuilder.AddBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+	descriptorLayoutBuilder.AddBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+	descriptorLayoutBuilder.AddBinding(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+	descriptorLayoutBuilder.AddBinding(5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+
+	_materialLayout                           = descriptorLayoutBuilder.Build(engine->_logicalGPU, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT); // Every binding will use these flags
+
+	VkDescriptorSetLayout      layouts[]      = { engine->_gpuSceneDataDescriptorLayout, _materialLayout };
+
+	VkPipelineLayoutCreateInfo meshLayoutInfo = vkinit::PipelineLayoutCreateInfo();
+	meshLayoutInfo.setLayoutCount             = 2;
+	meshLayoutInfo.pSetLayouts                = layouts; // Decays into pointer.
+	meshLayoutInfo.pPushConstantRanges        = &matrixRange;
+	meshLayoutInfo.pushConstantRangeCount     = 1;
+
+	VK_CHECK(vkCreatePipelineLayout(engine->_logicalGPU, &meshLayoutInfo, nullptr, &_pipelineLayout));
+
+	// Build the stage-create-info for both vertex and fragment stages. This lets
+	// the pipeline know the shader modules per stage
+	PipelineBuilder pipelineBuilder;
+
+	// Render format
+	pipelineBuilder.SetColorAttachmentFormat(engine->_colorImage.imageFormat);
+	pipelineBuilder.SetDepthFormat(engine->_depthImage.imageFormat);
+
+	pipelineBuilder.SetShaders(meshVertexShader, meshFragShader);
+	pipelineBuilder.SetInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+	pipelineBuilder.SetPolygonMode(VK_POLYGON_MODE_FILL);
+	pipelineBuilder.SetCullMode(VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_COUNTER_CLOCKWISE);
+	pipelineBuilder.SetMultisamplingNone();
+	pipelineBuilder.DisableBlending();
+	pipelineBuilder.EnableDepthtest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
+
+	// Use the triangle layout we created
+	pipelineBuilder._pipelineLayout        = _pipelineLayout;
+	_opaquePipeline.layout                 = _pipelineLayout;
+	_transparentPipeline.layout            = _pipelineLayout;
+	_maskedPipeline.layout                 = _pipelineLayout;
+	_opaqueDoubleSidedPipeline.layout      = _pipelineLayout;
+	_transparentDoubleSidedPipeline.layout = _pipelineLayout;
+	_maskedDoubleSidedPipeline.layout      = _pipelineLayout;
+
+	// Building Pipelines
+	_opaquePipeline.pipeline               = pipelineBuilder.BuildPipeline(engine->_logicalGPU);
+
+	pipelineBuilder.SetCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE);
+	_opaqueDoubleSidedPipeline.pipeline = pipelineBuilder.BuildPipeline(engine->_logicalGPU);
+
+	pipelineBuilder.SetCullMode(VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_COUNTER_CLOCKWISE);
+	pipelineBuilder.EnableBlendingAlphablend();
+	pipelineBuilder.EnableDepthtest(false, VK_COMPARE_OP_GREATER_OR_EQUAL);
+	_transparentPipeline.pipeline = pipelineBuilder.BuildPipeline(engine->_logicalGPU);
+
+	pipelineBuilder.SetCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE);
+	_transparentDoubleSidedPipeline.pipeline = pipelineBuilder.BuildPipeline(engine->_logicalGPU);
+
+	pipelineBuilder.SetCullMode(VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_COUNTER_CLOCKWISE);
+	pipelineBuilder.DisableBlending();
+	pipelineBuilder.EnableDepthtest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
+	_maskedPipeline.pipeline = pipelineBuilder.BuildPipeline(engine->_logicalGPU);
+
+	pipelineBuilder.SetCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE);
+	_maskedDoubleSidedPipeline.pipeline = pipelineBuilder.BuildPipeline(engine->_logicalGPU);
+
+	vkDestroyShaderModule(engine->_logicalGPU, meshFragShader, nullptr);
+	vkDestroyShaderModule(engine->_logicalGPU, meshVertexShader, nullptr);
+}
+
+void GLTFMetallic_Roughness::ClearResources(const VkDevice device) const {
+	vkDestroyPipeline(device, _maskedPipeline.pipeline, nullptr);
+	vkDestroyPipeline(device, _transparentPipeline.pipeline, nullptr);
+	vkDestroyPipeline(device, _opaquePipeline.pipeline, nullptr);
+	vkDestroyPipeline(device, _maskedDoubleSidedPipeline.pipeline, nullptr);
+	vkDestroyPipeline(device, _transparentDoubleSidedPipeline.pipeline, nullptr);
+	vkDestroyPipeline(device, _opaqueDoubleSidedPipeline.pipeline, nullptr);
+
+	vkDestroyPipelineLayout(device, _pipelineLayout, nullptr);
+	vkDestroyDescriptorSetLayout(device, _materialLayout, nullptr);
+}
+
+MaterialInstance GLTFMetallic_Roughness::WriteMaterial(VkDevice device, MaterialPass pass, VkCullModeFlagBits cullMode, const GLTFMetallic_Roughness::MaterialResources& resources, DescriptorAllocatorGrowable& descriptorAllocator) {
+	MaterialInstance materialInstance {};
+
+	materialInstance.passType = pass;
+	materialInstance.cullMode = cullMode;
+
+	// Per material, we choose a pipeline based on its properties.
+	if (pass == MaterialPass::AlphaBlend) {
+		if (cullMode == VK_CULL_MODE_NONE) {
+			materialInstance.pipeline = &_transparentDoubleSidedPipeline;
+		} else {
+			materialInstance.pipeline = &_transparentPipeline;
+		}
+	} else if (pass == MaterialPass::AlphaMask) {
+		if (cullMode == VK_CULL_MODE_NONE) {
+			materialInstance.pipeline = &_maskedDoubleSidedPipeline;
+		} else {
+			materialInstance.pipeline = &_maskedPipeline;
+		}
+	} else if (pass == MaterialPass::Opaque) {
+		if (cullMode == VK_CULL_MODE_NONE) {
+			materialInstance.pipeline = &_opaqueDoubleSidedPipeline;
+		} else {
+			materialInstance.pipeline = &_opaquePipeline;
+		}
+	} else {
+		materialInstance.pipeline = &_opaquePipeline;
+	}
+
+	materialInstance.materialSet = descriptorAllocator.Allocate(device, _materialLayout);
+
+	_writer.Clear();
+	_writer.WriteBuffer(0, resources.dataBuffer, sizeof(MaterialConstants), resources.dataBufferOffset, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+	_writer.WriteImage(1, resources.colorImage.imageView, resources.colorSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+	_writer.WriteImage(2, resources.metalRoughImage.imageView, resources.metalRoughSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+	_writer.WriteImage(3, resources.emissiveImage.imageView, resources.emissiveSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+	_writer.WriteImage(4, resources.normalImage.imageView, resources.normalSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+	_writer.WriteImage(5, resources.specularImage.imageView, resources.specularSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+
+	_writer.UpdateSet(device, materialInstance.materialSet);
+
+	return materialInstance;
+}
+
+void MeshNode::Draw(const glm::mat4& topMatrix, DrawContext& drawContext) {
+	const glm::mat4 nodeMatrix = topMatrix * _worldTransform;
+
+	for (const GeoSurface& geoSurface : _mesh->surfaces) {
+		RenderObject renderObject;
+		renderObject.indexCount          = geoSurface.count;
+		renderObject.firstIndex          = geoSurface.startIndex;
+		renderObject.indexBuffer         = _mesh->meshBuffers.indexBuffer.buffer;
+		renderObject.material            = &geoSurface.material->data;
+		renderObject.bounds              = geoSurface.bounds;
+		renderObject.transform           = nodeMatrix;
+		renderObject.vertexBufferAddress = _mesh->meshBuffers.vertexBufferAddress;
+
+		if (geoSurface.material->data.passType == MaterialPass::AlphaBlend) {
+			drawContext.transparentSurfaces.push_back(renderObject);
+		} else if (geoSurface.material->data.passType == MaterialPass::AlphaMask) {
+			drawContext.maskedSurfaces.push_back(renderObject);
+		} else if (geoSurface.material->data.passType == MaterialPass::Opaque) {
+			drawContext.opaqueSurfaces.push_back(renderObject);
+		} else {
+			drawContext.opaqueSurfaces.push_back(renderObject);
+		}
+	}
+
+	Node::Draw(topMatrix, drawContext);
+}
+
+int PantomirEngine::Start() {
+	try {
+		MainLoop();
+	} catch (const std::exception& exception) {
+		LOG(Engine, Error, "Exception: ", exception.what());
+		return EXIT_FAILURE;
+	}
+
+	return EXIT_SUCCESS;
+}
+
+void PantomirEngine::MainLoop() {
+	bool bQuit = false;
+
+	while (!bQuit) {
+		const auto start = std::chrono::steady_clock::now();
+
+		SDL_Event  event;
+
+		// Handle events on queue
+		while (SDL_PollEvent(&event) != 0) {
+			// Close the window when user alt-f4s or clicks the X button
+			if (event.type == SDL_EVENT_QUIT) {
+				bQuit = true;
+			}
+
+			_mainCamera.ProcessSDLEvent(event, _window);
+
+			if (event.type == SDL_EVENT_WINDOW_RESIZED) {
+				_resizeRequested = true;
+			}
+			if (event.type == SDL_EVENT_WINDOW_MINIMIZED) {
+				_stopRendering = true;
+			}
+			if (event.type == SDL_EVENT_WINDOW_RESTORED) {
+				_stopRendering = false;
+			}
+
+			ImGui_ImplSDL3_ProcessEvent(&event);
+		}
+
+		// Update camera movement based on current keyboard state
+		_mainCamera.UpdateMovement();
+
+		// Do not draw if we are minimized
+		if (_stopRendering) {
+			// Throttle loop speed
+			std::this_thread::sleep_for(std::chrono::milliseconds(100));
+			continue;
+		}
+
+		if (_resizeRequested) {
+			ResizeSwapchain();
+			// TODO: The images and views must also be replaced and updated for bindings.
+		}
+
+		ImGui_ImplVulkan_NewFrame();
+		ImGui_ImplSDL3_NewFrame();
+		ImGui::NewFrame();
+
+		if (ImGui::Begin("background")) {
+
+			ComputeEffect& selected = _backgroundEffects[_currentBackgroundEffect];
+
+			ImGui::SliderFloat("Render Scale", &_renderScale, 0.3f, 1.f);
+
+			ImGui::Text("Selected effect: ", selected.name);
+
+			ImGui::SliderInt("Effect Index", &_currentBackgroundEffect, 0, _backgroundEffects.size() - 1);
+
+			ImGui::InputFloat4("data1", reinterpret_cast<float*>(&selected.pushConstants.data1));
+			ImGui::InputFloat4("data2", reinterpret_cast<float*>(&selected.pushConstants.data2));
+			ImGui::InputFloat4("data3", reinterpret_cast<float*>(&selected.pushConstants.data3));
+			ImGui::InputFloat4("data4", reinterpret_cast<float*>(&selected.pushConstants.data4));
+		}
+
+		ImGui::End();
+
+		ImGui::Begin("Stats");
+		ImGui::Text("frametime %f ms", _stats.frameTime);
+		ImGui::Text("draw time %f ms", _stats.meshDrawTime);
+		ImGui::Text("update time %f ms", _stats.sceneUpdateTime);
+		ImGui::Text("triangles %i", _stats.triangleCount);
+		ImGui::Text("draws %i", _stats.drawcallCount);
+		ImGui::End();
+
+		ImGui::Render();
+
+		PantomirEngine::Draw();
+
+		const std::chrono::time_point      end     = std::chrono::steady_clock::now();
+		const std::chrono::duration<float> elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+		_stats.frameTime                           = elapsed.count() / 1000.f;
+		_deltaTime                                 = std::clamp(elapsed.count(), 0.0001f, 0.016f);
+	}
+}
+
+void PantomirEngine::ImmediateSubmit(std::function<void(VkCommandBuffer commandBuffer)>&& anonymousFunction) const {
+	VK_CHECK(vkResetFences(_logicalGPU, 1, &_immediateFence));
+	VK_CHECK(vkResetCommandBuffer(_immediateCommandBuffer, 0));
+
+	constexpr VkCommandBufferBeginInfo commandBufferBeginInfo = vkinit::CommandBufferBeginInfo(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+
+	VK_CHECK(vkBeginCommandBuffer(_immediateCommandBuffer, &commandBufferBeginInfo));
+
+	anonymousFunction(_immediateCommandBuffer);
+
+	VK_CHECK(vkEndCommandBuffer(_immediateCommandBuffer));
+
+	VkCommandBufferSubmitInfo commandInfo = vkinit::CommandBufferSubmitInfo(_immediateCommandBuffer);
+	const VkSubmitInfo2       submit      = vkinit::SubmitInfo(&commandInfo, nullptr, nullptr);
+
+	// Submit command buffer to the queue and execute it.
+	//  _renderFence will now block until the graphic commands finish execution
+	VK_CHECK(vkQueueSubmit2(_graphicsQueue, 1, &submit, _immediateFence));
+	VK_CHECK(vkWaitForFences(_logicalGPU, 1, &_immediateFence, true, 9999999999));
+}
+
+GPUMeshBuffers PantomirEngine::UploadMesh(const std::span<uint32_t> indices, const std::span<Vertex> vertices) const {
+	const size_t   vertexBufferSize = vertices.size() * sizeof(Vertex);
+	const size_t   indexBufferSize  = indices.size() * sizeof(uint32_t);
+
+	GPUMeshBuffers newSurface {};
+
+	// Create vertex buffer
+	newSurface.vertexBuffer = CreateBuffer(vertexBufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
+
+	// Find the address of the vertex buffer on the GPU
+	const VkBufferDeviceAddressInfo deviceAddressInfo { .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, .buffer = newSurface.vertexBuffer.buffer };
+	newSurface.vertexBufferAddress      = vkGetBufferDeviceAddress(_logicalGPU, &deviceAddressInfo);
+
+	// Create index buffer
+	newSurface.indexBuffer              = CreateBuffer(indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
+
+	const AllocatedBuffer stagingBuffer = CreateBuffer(vertexBufferSize + indexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
+	void*                 data          = stagingBuffer.allocation->GetMappedData();
+
+	// Copy vertex buffer
+	memcpy(data, vertices.data(), vertexBufferSize);
+	// Copy index buffer
+	memcpy(static_cast<char*>(data) + vertexBufferSize, indices.data(), indexBufferSize);
+
+	ImmediateSubmit([&](VkCommandBuffer commandBuffer) {
+		VkBufferCopy vertexCopy { 0 };
+		vertexCopy.dstOffset = 0;
+		vertexCopy.srcOffset = 0;
+		vertexCopy.size      = vertexBufferSize;
+
+		vkCmdCopyBuffer(commandBuffer, stagingBuffer.buffer, newSurface.vertexBuffer.buffer, 1, &vertexCopy);
+
+		VkBufferCopy indexCopy { 0 };
+		indexCopy.dstOffset = 0;
+		indexCopy.srcOffset = vertexBufferSize;
+		indexCopy.size      = indexBufferSize;
+
+		vkCmdCopyBuffer(commandBuffer, stagingBuffer.buffer, newSurface.indexBuffer.buffer, 1, &indexCopy);
+	});
+
+	DestroyBuffer(stagingBuffer);
+
+	return newSurface;
+}
+
+AllocatedImage PantomirEngine::CreateCubemapImage(void* dataSource, const VkExtent3D size, const VkFormat format, const VkImageUsageFlags usage, const bool mipmapped) const {
+	// TODO: Implement everything.
+	const size_t          dataSize        = size.width * size.height * size.depth * PantomirFunctionLibrary::BytesPerPixelFromFormat(format);
+	const AllocatedBuffer uploadBuffer    = CreateBuffer(dataSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU); // Transfer src bit means it's usable by GPU for copying.
+
+	void*                 dataDestination = uploadBuffer.info.pMappedData;
+	memcpy(dataDestination, dataSource, dataSize);
+
+	AllocatedImage newImage {};
+	newImage.imageFormat              = format;
+	newImage.imageExtent              = size;
+
+	VkImageCreateInfo imageCreateInfo = vkinit::ImageCreateInfo(format, usage, size);
+	if (mipmapped) {
+		imageCreateInfo.mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(size.width, size.height)))) + 1;
+	}
+	// imageCreateInfo.flags |= VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+	// imageCreateInfo.arrayLayers = 6;
+
+	// Always allocate images on dedicated GPU memory
+	VmaAllocationCreateInfo vmaAllocationCreateInfo = {};
+	vmaAllocationCreateInfo.usage                   = VMA_MEMORY_USAGE_GPU_ONLY;
+	vmaAllocationCreateInfo.requiredFlags           = static_cast<VkMemoryPropertyFlags>(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+	// Allocate and create the image
+	VK_CHECK(vmaCreateImage(_vmaAllocator, &imageCreateInfo, &vmaAllocationCreateInfo, &newImage.image, &newImage.allocation, nullptr));
+
+	// If the format is a depth format, we will need to have it use the correct
+	// aspect flag
+	VkImageAspectFlags aspectFlag = VK_IMAGE_ASPECT_COLOR_BIT;
+	if (format == VK_FORMAT_D32_SFLOAT) {
+		aspectFlag = VK_IMAGE_ASPECT_DEPTH_BIT;
+	}
+
+	// Build an image-view for the image
+	VkImageViewCreateInfo viewInfo       = vkinit::ImageViewCreateInfo(format, newImage.image, aspectFlag);
+	viewInfo.subresourceRange.levelCount = imageCreateInfo.mipLevels;
+	// viewInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
+	// viewInfo.subresourceRange.layerCount = 6;
+
+	VK_CHECK(vkCreateImageView(_logicalGPU, &viewInfo, nullptr, &newImage.imageView));
+
+	ImmediateSubmit([&](VkCommandBuffer commandBuffer) {
+		vkutil::TransitionImage(commandBuffer, newImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+		VkBufferImageCopy copyRegion               = {};
+		copyRegion.bufferOffset                    = 0;
+		copyRegion.bufferRowLength                 = 0;
+		copyRegion.bufferImageHeight               = 0;
+
+		copyRegion.imageSubresource.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
+		copyRegion.imageSubresource.mipLevel       = 0;
+		copyRegion.imageSubresource.baseArrayLayer = 0;
+		copyRegion.imageSubresource.layerCount     = 1;
+		copyRegion.imageExtent                     = size;
+
+		// Copy the buffer into the image
+		vkCmdCopyBufferToImage(commandBuffer, uploadBuffer.buffer, newImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+
+		if (mipmapped) {
+			vkutil::GenerateMipmaps(commandBuffer, newImage.image, VkExtent2D { newImage.imageExtent.width, newImage.imageExtent.height });
+		} else {
+			vkutil::TransitionImage(commandBuffer, newImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+		}
+	});
+
+	DestroyBuffer(uploadBuffer);
+
+	return newImage;
+}
+
+AllocatedImage PantomirEngine::CreateImage(void* dataSource, const VkExtent3D size, const VkFormat format, const VkImageUsageFlags usage, const bool mipmapped) const {
+	const size_t          dataSize        = size.width * size.height * size.depth * PantomirFunctionLibrary::BytesPerPixelFromFormat(format);
+	// Vulkan doesn't allow us to send pixel data straight to an image, it has to be sent to a buffer first.
+	const AllocatedBuffer uploadBuffer    = CreateBuffer(dataSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU); // Transfer src bit means it's usable by GPU for copying.
+
+	void*                 dataDestination = uploadBuffer.info.pMappedData;
+	memcpy(dataDestination, dataSource, dataSize);
+
+	AllocatedImage newImage = CreateImage(size, format, usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, mipmapped);
+
+	ImmediateSubmit([&](VkCommandBuffer commandBuffer) {
+		vkutil::TransitionImage(commandBuffer, newImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+		VkBufferImageCopy copyRegion               = {};
+		copyRegion.bufferOffset                    = 0;
+		copyRegion.bufferRowLength                 = 0;
+		copyRegion.bufferImageHeight               = 0;
+
+		copyRegion.imageSubresource.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
+		copyRegion.imageSubresource.mipLevel       = 0;
+		copyRegion.imageSubresource.baseArrayLayer = 0;
+		copyRegion.imageSubresource.layerCount     = 1;
+		copyRegion.imageExtent                     = size;
+
+		// Copy the buffer into the image
+		vkCmdCopyBufferToImage(commandBuffer, uploadBuffer.buffer, newImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+
+		if (mipmapped) {
+			vkutil::GenerateMipmaps(commandBuffer, newImage.image, VkExtent2D { newImage.imageExtent.width, newImage.imageExtent.height });
+		} else {
+			vkutil::TransitionImage(commandBuffer, newImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+		}
+	});
+
+	DestroyBuffer(uploadBuffer);
+
+	return newImage;
+}
+
+void PantomirEngine::DestroyImage(const AllocatedImage& img) const {
+	vkDestroyImageView(_logicalGPU, img.imageView, nullptr);
+	vmaDestroyImage(_vmaAllocator, img.image, img.allocation);
+}
+
+AllocatedBuffer PantomirEngine::CreateBuffer(const size_t allocSize, const VkBufferUsageFlags usage, const VmaMemoryUsage memoryUsage) const {
+	VkBufferCreateInfo bufferInfo = { .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
+	bufferInfo.pNext              = nullptr;
+	bufferInfo.size               = allocSize;
+	bufferInfo.usage              = usage;
+
+	VmaAllocationCreateInfo vmaAllocInfo {};
+	vmaAllocInfo.usage = memoryUsage;
+	vmaAllocInfo.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
+	AllocatedBuffer newBuffer;
+
+	VK_CHECK(vmaCreateBuffer(_vmaAllocator, &bufferInfo, &vmaAllocInfo, &newBuffer.buffer, &newBuffer.allocation, &newBuffer.info));
+
+	return newBuffer;
+}
+
+void PantomirEngine::DestroyBuffer(const AllocatedBuffer& buffer) const {
+	vmaDestroyBuffer(_vmaAllocator, buffer.buffer, buffer.allocation);
+}
+
 PantomirEngine::PantomirEngine() {
 	InitSDLWindow();
 	InitVulkan();
@@ -79,7 +550,6 @@ PantomirEngine::PantomirEngine() {
 	InitDescriptors();
 	InitPipelines();
 	InitImgui();
-	InitMeshPipeline();
 	InitDefaultData();
 }
 
@@ -356,6 +826,8 @@ void PantomirEngine::InitPipelines() {
 	_shutdownDeletionQueue.PushFunction([&]() {
 		_metalRoughMaterial.ClearResources(_logicalGPU);
 	});
+	InitMeshPipeline();
+	InitHDRIPipeline();
 }
 
 void PantomirEngine::InitBackgroundPipelines() {
@@ -438,27 +910,27 @@ void PantomirEngine::InitBackgroundPipelines() {
 
 void PantomirEngine::InitImgui() {
 	// 1: Create descriptor pool for IMGUI the size of the pool is very oversized, but it's copied from imgui demo itself.
-	VkDescriptorPoolSize       poolSizes[] = { { VK_DESCRIPTOR_TYPE_SAMPLER, 1000 },
-		                                       { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 },
-		                                       { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000 },
-		                                       { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000 },
-		                                       { VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000 },
-		                                       { VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000 },
-		                                       { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000 },
-		                                       { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000 },
-		                                       { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000 },
-		                                       { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000 },
-		                                       { VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000 } };
+	VkDescriptorPoolSize       poolSizes[]    = { { VK_DESCRIPTOR_TYPE_SAMPLER, 1000 },
+		                                          { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 },
+		                                          { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000 },
+		                                          { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000 },
+		                                          { VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000 },
+		                                          { VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000 },
+		                                          { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000 },
+		                                          { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000 },
+		                                          { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000 },
+		                                          { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000 },
+		                                          { VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000 } };
 
-	VkDescriptorPoolCreateInfo pool_info   = {};
-	pool_info.sType                        = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-	pool_info.flags                        = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-	pool_info.maxSets                      = 1000;
-	pool_info.poolSizeCount                = static_cast<uint32_t>(std::size(poolSizes));
-	pool_info.pPoolSizes                   = poolSizes;
+	VkDescriptorPoolCreateInfo poolCreateInfo = {};
+	poolCreateInfo.sType                      = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+	poolCreateInfo.flags                      = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+	poolCreateInfo.maxSets                    = 1000;
+	poolCreateInfo.poolSizeCount              = static_cast<uint32_t>(std::size(poolSizes));
+	poolCreateInfo.pPoolSizes                 = poolSizes;
 
 	VkDescriptorPool imguiPool;
-	VK_CHECK(vkCreateDescriptorPool(_logicalGPU, &pool_info, nullptr, &imguiPool));
+	VK_CHECK(vkCreateDescriptorPool(_logicalGPU, &poolCreateInfo, nullptr, &imguiPool));
 
 	// 2: Initialize imgui library
 	// This initializes the core structures of imgui
@@ -477,16 +949,13 @@ void PantomirEngine::InitImgui() {
 	init_info.MinImageCount                                       = 3;
 	init_info.ImageCount                                          = 3;
 	init_info.UseDynamicRendering                                 = true;
-
 	// Dynamic rendering parameters for imgui to use
 	init_info.PipelineRenderingCreateInfo                         = { .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
 	init_info.PipelineRenderingCreateInfo.colorAttachmentCount    = 1;
 	init_info.PipelineRenderingCreateInfo.pColorAttachmentFormats = &_swapchainImageFormat;
-
 	init_info.MSAASamples                                         = VK_SAMPLE_COUNT_1_BIT;
 
 	ImGui_ImplVulkan_Init(&init_info);
-
 	ImGui_ImplVulkan_CreateFontsTexture();
 
 	// Add the destroy imgui created structures
@@ -497,18 +966,18 @@ void PantomirEngine::InitImgui() {
 }
 
 void PantomirEngine::InitMeshPipeline() {
-	VkShaderModule triangleFragShader;
-	if (!vkutil::LoadShaderModule("Assets/Shaders/tex_image.frag.spv", _logicalGPU, &triangleFragShader)) {
-		LOG(Engine, Error, "Error when building the triangle fragment shader module");
-	} else {
-		LOG(Engine, Info, "Triangle fragment shader successfully loaded");
-	}
-
 	VkShaderModule triangleMeshVertexShader;
 	if (!vkutil::LoadShaderModule("Assets/Shaders/colored_triangle_mesh.vert.spv", _logicalGPU, &triangleMeshVertexShader)) {
 		LOG(Engine, Error, "Error when building the triangle vertex shader module");
 	} else {
 		LOG(Engine, Info, "Triangle mesh vertex shader successfully loaded");
+	}
+
+	VkShaderModule triangleFragShader;
+	if (!vkutil::LoadShaderModule("Assets/Shaders/tex_image.frag.spv", _logicalGPU, &triangleFragShader)) {
+		LOG(Engine, Error, "Error when building the triangle fragment shader module");
+	} else {
+		LOG(Engine, Info, "Triangle fragment shader successfully loaded");
 	}
 
 	VkPushConstantRange bufferRange {};
@@ -521,11 +990,9 @@ void PantomirEngine::InitMeshPipeline() {
 	pipelineLayoutInfo.pushConstantRangeCount     = 1;
 	pipelineLayoutInfo.pSetLayouts                = &_singleImageDescriptorLayout;
 	pipelineLayoutInfo.setLayoutCount             = 1;
-
 	VK_CHECK(vkCreatePipelineLayout(_logicalGPU, &pipelineLayoutInfo, nullptr, &_meshPipelineLayout));
 
 	PipelineBuilder pipelineBuilder;
-
 	pipelineBuilder._pipelineLayout = _meshPipelineLayout;
 	// Connecting the vertex and pixel shaders to the pipeline
 	pipelineBuilder.SetShaders(triangleMeshVertexShader, triangleFragShader);
@@ -541,11 +1008,9 @@ void PantomirEngine::InitMeshPipeline() {
 	pipelineBuilder.EnableBlendingAdditive();
 	// pipelineBuilder.DisableBlending();
 	pipelineBuilder.EnableDepthtest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
-
 	// Connect the image format we will draw into, from draw image
 	pipelineBuilder.SetColorAttachmentFormat(_colorImage.imageFormat);
 	pipelineBuilder.SetDepthFormat(_depthImage.imageFormat);
-
 	// Finally build the pipeline
 	_meshPipeline = pipelineBuilder.BuildPipeline(_logicalGPU);
 
@@ -559,40 +1024,86 @@ void PantomirEngine::InitMeshPipeline() {
 	});
 }
 
+void PantomirEngine::InitHDRIPipeline() {
+	VkShaderModule HDRIVertexShader;
+	if (!vkutil::LoadShaderModule("Assets/Shaders/HDRI.vert.spv", _logicalGPU, &HDRIVertexShader)) {
+		LOG(Engine, Error, "Error when building the triangle vertex shader module");
+	} else {
+		LOG(Engine, Info, "Triangle mesh vertex shader successfully loaded");
+	}
+
+	VkShaderModule HDRIFragShader;
+	if (!vkutil::LoadShaderModule("Assets/Shaders/HDRI.frag.spv", _logicalGPU, &HDRIFragShader)) {
+		LOG(Engine, Error, "Error when building the triangle fragment shader module");
+	} else {
+		LOG(Engine, Info, "Triangle fragment shader successfully loaded");
+	}
+
+	VkPushConstantRange bufferRange {};
+	bufferRange.offset                            = 0;
+	bufferRange.size                              = sizeof(HDRIPushConstants);
+	bufferRange.stageFlags                        = VK_SHADER_STAGE_VERTEX_BIT;
+
+	VkPipelineLayoutCreateInfo pipelineLayoutInfo = vkinit::PipelineLayoutCreateInfo();
+	pipelineLayoutInfo.pPushConstantRanges        = &bufferRange;
+	pipelineLayoutInfo.pushConstantRangeCount     = 1;
+	pipelineLayoutInfo.pSetLayouts                = &_singleImageDescriptorLayout;
+	pipelineLayoutInfo.setLayoutCount             = 1;
+
+	VK_CHECK(vkCreatePipelineLayout(_logicalGPU, &pipelineLayoutInfo, nullptr, &_HDRIPipelineLayout));
+
+	PipelineBuilder pipelineBuilder;
+	pipelineBuilder._pipelineLayout = _HDRIPipelineLayout;
+	pipelineBuilder.SetShaders(HDRIVertexShader, HDRIFragShader);
+	pipelineBuilder.SetInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+	pipelineBuilder.SetPolygonMode(VK_POLYGON_MODE_FILL);
+	pipelineBuilder.SetCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE);
+	pipelineBuilder.SetMultisamplingNone();
+	pipelineBuilder.EnableBlendingAdditive();
+	pipelineBuilder.EnableDepthtest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
+	pipelineBuilder.SetColorAttachmentFormat(_colorImage.imageFormat);
+	pipelineBuilder.SetDepthFormat(_depthImage.imageFormat);
+	_HDRIPipeline = pipelineBuilder.BuildPipeline(_logicalGPU);
+
+	// Clean structures
+	vkDestroyShaderModule(_logicalGPU, HDRIFragShader, nullptr);
+	vkDestroyShaderModule(_logicalGPU, HDRIVertexShader, nullptr);
+
+	_shutdownDeletionQueue.PushFunction([&]() {
+		vkDestroyPipelineLayout(_logicalGPU, _HDRIPipelineLayout, nullptr);
+		vkDestroyPipeline(_logicalGPU, _HDRIPipeline, nullptr);
+	});
+}
+
 void PantomirEngine::InitDefaultData() {
 	_mainCamera._velocity                 = glm::vec3(0.f);
-	_mainCamera._position                 = glm::vec3(0.f, 1.5f, 1.50f);
-
+	_mainCamera._position                 = glm::vec3(0.f, 1.5f, 1.5f);
 	_mainCamera._pitch                    = 0;
 	_mainCamera._yaw                      = 0;
 
 	// 3 default textures, white, grey, black. 1 pixel each
 	uint32_t white                        = glm::packUnorm4x8(glm::vec4(1, 1, 1, 1));
-	_whiteImage                           = CreateImage((void*)&white, VkExtent3D { 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, 1);
-
+	_whiteImage                           = CreateImage((void*)&white, VkExtent3D { 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
 	uint32_t grey                         = glm::packUnorm4x8(glm::vec4(1.0f, 0.5f, 0.0f, 1));
 	_greyImage                            = CreateImage((void*)&grey, VkExtent3D { 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
-
 	uint32_t black                        = glm::packUnorm4x8(glm::vec4(0, 0, 0, 0));
 	_blackImage                           = CreateImage((void*)&black, VkExtent3D { 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
 
 	// Checkerboard image
 	uint32_t                      magenta = glm::packUnorm4x8(glm::vec4(1, 0, 1, 1));
-	std::array<uint32_t, 16 * 16> pixels; // for 16x16 checkerboard texture
+	std::array<uint32_t, 16 * 16> pixels {}; // for 16x16 checkerboard texture
 	for (int x = 0; x < 16; x++) {
 		for (int y = 0; y < 16; y++) {
 			pixels[y * 16 + x] = ((x % 2) ^ (y % 2)) ? magenta : black;
 		}
 	}
-	_errorCheckerboardImage               = CreateImage(pixels.data(), VkExtent3D { 16, 16, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
+	_errorCheckerboardImage = CreateImage(pixels.data(), VkExtent3D { 16, 16, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
 
-	VkSamplerCreateInfo samplerCreateInfo = { .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
+	VkSamplerCreateInfo samplerCreateInfo { .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
 
-	samplerCreateInfo.magFilter           = VK_FILTER_NEAREST;
-	samplerCreateInfo.minFilter           = VK_FILTER_NEAREST;
-
+	samplerCreateInfo.magFilter = VK_FILTER_NEAREST;
+	samplerCreateInfo.minFilter = VK_FILTER_NEAREST;
 	vkCreateSampler(_logicalGPU, &samplerCreateInfo, nullptr, &_defaultSamplerNearest);
-
 	samplerCreateInfo.magFilter = VK_FILTER_LINEAR;
 	samplerCreateInfo.minFilter = VK_FILTER_LINEAR;
 	vkCreateSampler(_logicalGPU, &samplerCreateInfo, nullptr, &_defaultSamplerLinear);
@@ -607,7 +1118,7 @@ void PantomirEngine::InitDefaultData() {
 		DestroyImage(errorCheckerboardImage);
 	});
 
-	GLTFMetallic_Roughness::MaterialResources materialResources;
+	GLTFMetallic_Roughness::MaterialResources materialResources {};
 	// Default the material textures
 	materialResources.colorImage                                 = _whiteImage;
 	materialResources.colorSampler                               = _defaultSamplerLinear;
@@ -628,7 +1139,7 @@ void PantomirEngine::InitDefaultData() {
 	sceneUniformData->colorFactors                               = glm::vec4 { 1, 1, 1, 1 };
 	sceneUniformData->metalRoughFactors                          = glm::vec4 { 1, 1, 1, 0 };
 	sceneUniformData->emissiveFactors                            = glm::vec3 { 0, 0, 0 };
-	sceneUniformData->specularFactor                             = 0.f;
+	sceneUniformData->specularFactor                             = 0.F;
 
 	materialResources.dataBuffer                                 = materialConstants.buffer;
 	materialResources.dataBufferOffset                           = 0;
@@ -651,68 +1162,7 @@ void PantomirEngine::InitDefaultData() {
 	});
 }
 
-GPUMeshBuffers PantomirEngine::UploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices) {
-	const size_t   vertexBufferSize = vertices.size() * sizeof(Vertex);
-	const size_t   indexBufferSize  = indices.size() * sizeof(uint32_t);
-
-	GPUMeshBuffers newSurface;
-
-	// Create vertex buffer
-	newSurface.vertexBuffer = CreateBuffer(vertexBufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
-
-	// Find the address of the vertex buffer on the GPU
-	VkBufferDeviceAddressInfo deviceAddressInfo { .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, .buffer = newSurface.vertexBuffer.buffer };
-	newSurface.vertexBufferAddress = vkGetBufferDeviceAddress(_logicalGPU, &deviceAddressInfo);
-
-	// Create index buffer
-	newSurface.indexBuffer         = CreateBuffer(indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
-
-	AllocatedBuffer staging        = CreateBuffer(vertexBufferSize + indexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
-	void*           data           = staging.allocation->GetMappedData();
-
-	// Copy vertex buffer
-	memcpy(data, vertices.data(), vertexBufferSize);
-	// Copy index buffer
-	memcpy(static_cast<char*>(data) + vertexBufferSize, indices.data(), indexBufferSize);
-
-	ImmediateSubmit([&](VkCommandBuffer commandBuffer) {
-		VkBufferCopy vertexCopy { 0 };
-		vertexCopy.dstOffset = 0;
-		vertexCopy.srcOffset = 0;
-		vertexCopy.size      = vertexBufferSize;
-
-		vkCmdCopyBuffer(commandBuffer, staging.buffer, newSurface.vertexBuffer.buffer, 1, &vertexCopy);
-
-		VkBufferCopy indexCopy { 0 };
-		indexCopy.dstOffset = 0;
-		indexCopy.srcOffset = vertexBufferSize;
-		indexCopy.size      = indexBufferSize;
-
-		vkCmdCopyBuffer(commandBuffer, staging.buffer, newSurface.indexBuffer.buffer, 1, &indexCopy);
-	});
-
-	DestroyBuffer(staging);
-
-	return newSurface;
-}
-
-AllocatedBuffer PantomirEngine::CreateBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage) {
-	VkBufferCreateInfo bufferInfo = { .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
-	bufferInfo.pNext              = nullptr;
-	bufferInfo.size               = allocSize;
-	bufferInfo.usage              = usage;
-
-	VmaAllocationCreateInfo vmaAllocInfo {};
-	vmaAllocInfo.usage = memoryUsage;
-	vmaAllocInfo.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
-	AllocatedBuffer newBuffer;
-
-	VK_CHECK(vmaCreateBuffer(_vmaAllocator, &bufferInfo, &vmaAllocInfo, &newBuffer.buffer, &newBuffer.allocation, &newBuffer.info));
-
-	return newBuffer;
-}
-
-void PantomirEngine::CreateSwapchain(uint32_t width, uint32_t height) {
+void PantomirEngine::CreateSwapchain(const uint32_t width, const uint32_t height) {
 	vkb::SwapchainBuilder swapchainBuilder { _physicalGPU, _logicalGPU, _surface };
 
 	_swapchainImageFormat         = VK_FORMAT_B8G8R8A8_UNORM; // HDR is VK_FORMAT_A2B10G10R10_UNORM_PACK32
@@ -733,16 +1183,58 @@ void PantomirEngine::CreateSwapchain(uint32_t width, uint32_t height) {
 	_swapchainImageViews = builtSwapchain.get_image_views().value();
 }
 
-void PantomirEngine::DestroySwapchain() {
+void PantomirEngine::DestroySwapchain() const {
 	vkDestroySwapchainKHR(_logicalGPU, _swapchain, nullptr);
 
-	for (int i = 0; i < _swapchainImageViews.size(); i++) {
-		vkDestroyImageView(_logicalGPU, _swapchainImageViews[i], nullptr);
+	for (const VkImageView& _swapchainImageView : _swapchainImageViews) {
+		vkDestroyImageView(_logicalGPU, _swapchainImageView, nullptr);
 	}
 }
 
-void PantomirEngine::DestroyBuffer(const AllocatedBuffer& buffer) {
-	vmaDestroyBuffer(_vmaAllocator, buffer.buffer, buffer.allocation);
+void PantomirEngine::ResizeSwapchain() {
+	vkDeviceWaitIdle(_logicalGPU);
+	DestroySwapchain();
+	int windowWidth;
+	int windowHeight;
+	SDL_GetWindowSize(_window, &windowWidth, &windowHeight);
+	_windowExtent.width  = windowWidth;
+	_windowExtent.height = windowHeight;
+	CreateSwapchain(windowWidth, windowHeight);
+	_resizeRequested = false;
+}
+
+AllocatedImage PantomirEngine::CreateImage(const VkExtent3D size, const VkFormat format, const VkImageUsageFlags usage, const bool mipmapped) const {
+	AllocatedImage newImage {};
+	newImage.imageFormat              = format;
+	newImage.imageExtent              = size;
+
+	VkImageCreateInfo imageCreateInfo = vkinit::ImageCreateInfo(format, usage, size);
+	if (mipmapped) {
+		imageCreateInfo.mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(size.width, size.height)))) + 1;
+	}
+
+	// Always allocate images on dedicated GPU memory
+	VmaAllocationCreateInfo vmaAllocationCreateInfo = {};
+	vmaAllocationCreateInfo.usage                   = VMA_MEMORY_USAGE_GPU_ONLY;
+	vmaAllocationCreateInfo.requiredFlags           = static_cast<VkMemoryPropertyFlags>(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+	// Allocate and create the image
+	VK_CHECK(vmaCreateImage(_vmaAllocator, &imageCreateInfo, &vmaAllocationCreateInfo, &newImage.image, &newImage.allocation, nullptr));
+
+	// If the format is a depth format, we will need to have it use the correct
+	// aspect flag
+	VkImageAspectFlags aspectFlag = VK_IMAGE_ASPECT_COLOR_BIT;
+	if (format == VK_FORMAT_D32_SFLOAT) {
+		aspectFlag = VK_IMAGE_ASPECT_DEPTH_BIT;
+	}
+
+	// Build an image-view for the image
+	VkImageViewCreateInfo viewInfo       = vkinit::ImageViewCreateInfo(format, newImage.image, aspectFlag);
+	viewInfo.subresourceRange.levelCount = imageCreateInfo.mipLevels;
+
+	VK_CHECK(vkCreateImageView(_logicalGPU, &viewInfo, nullptr, &newImage.imageView));
+
+	return newImage;
 }
 
 void PantomirEngine::Draw() {
@@ -754,8 +1246,8 @@ void PantomirEngine::Draw() {
 	GetCurrentFrame().deletionQueue.Flush();
 	GetCurrentFrame().frameDescriptors.ClearPools(_logicalGPU);
 
-	uint32_t swapchainImageIndex;
-	VkResult acquireNextImageKhr = vkAcquireNextImageKHR(_logicalGPU, _swapchain, 1000000000, GetCurrentFrame().swapchainSemaphore, nullptr, &swapchainImageIndex);
+	uint32_t       swapchainImageIndex;
+	const VkResult acquireNextImageKhr = vkAcquireNextImageKHR(_logicalGPU, _swapchain, 1000000000, GetCurrentFrame().swapchainSemaphore, nullptr, &swapchainImageIndex);
 	if (acquireNextImageKhr == VK_ERROR_OUT_OF_DATE_KHR) {
 		_resizeRequested = true;
 		return;
@@ -859,8 +1351,8 @@ void PantomirEngine::DrawBackground(VkCommandBuffer commandBuffer) {
 	constexpr uint32_t WORKGROUP_SIZE_X = 16;
 	constexpr uint32_t WORKGROUP_SIZE_Y = 16;
 
-	uint32_t           dispatchX        = (_drawExtent.width + WORKGROUP_SIZE_X - 1) / WORKGROUP_SIZE_X;
-	uint32_t           dispatchY        = (_drawExtent.height + WORKGROUP_SIZE_Y - 1) / WORKGROUP_SIZE_Y;
+	const uint32_t     dispatchX        = (_drawExtent.width + WORKGROUP_SIZE_X - 1) / WORKGROUP_SIZE_X;
+	const uint32_t     dispatchY        = (_drawExtent.height + WORKGROUP_SIZE_Y - 1) / WORKGROUP_SIZE_Y;
 
 	vkCmdDispatch(commandBuffer, dispatchX, dispatchY, 1);
 }
@@ -874,7 +1366,6 @@ void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
 			opaqueDraws.push_back(index);
 		}
 	}
-
 	std::vector<uint32_t> maskedDraws;
 	maskedDraws.reserve(_mainDrawContext.maskedSurfaces.size());
 	for (uint32_t index = 0; index < _mainDrawContext.maskedSurfaces.size(); ++index) {
@@ -882,7 +1373,6 @@ void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
 			maskedDraws.push_back(index);
 		}
 	}
-
 	std::vector<uint32_t> transparentDraws;
 	transparentDraws.reserve(_mainDrawContext.transparentSurfaces.size());
 	for (uint32_t index = 0; index < _mainDrawContext.transparentSurfaces.size(); ++index) {
@@ -892,53 +1382,42 @@ void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
 	}
 
 	// Sorting the opaque surfaces by material and mesh
-	std::sort(opaqueDraws.begin(), opaqueDraws.end(), [&](const uint32_t& iA, const uint32_t& iB) {
+	std::ranges::sort(opaqueDraws, [&](const uint32_t& iA, const uint32_t& iB) {
 		const RenderObject& A = _mainDrawContext.opaqueSurfaces[iA];
 		const RenderObject& B = _mainDrawContext.opaqueSurfaces[iB];
 		if (A.material == B.material) {
 			return A.indexBuffer < B.indexBuffer;
 		}
-
 		return A.material < B.material;
 	});
-
-	std::sort(maskedDraws.begin(), maskedDraws.end(), [&](const uint32_t& iA, const uint32_t& iB) {
+	std::ranges::sort(maskedDraws, [&](const uint32_t& iA, const uint32_t& iB) {
 		const RenderObject& A = _mainDrawContext.maskedSurfaces[iA];
 		const RenderObject& B = _mainDrawContext.maskedSurfaces[iB];
 		if (A.material == B.material) {
 			return A.indexBuffer < B.indexBuffer;
 		}
-
 		return A.material < B.material;
 	});
-
-	std::sort(transparentDraws.begin(), transparentDraws.end(), [&](const uint32_t& iA, const uint32_t& iB) {
+	std::ranges::sort(transparentDraws, [&](const uint32_t& iA, const uint32_t& iB) {
 		const float distanceA = glm::length(_mainCamera._position - glm::vec3(_mainDrawContext.transparentSurfaces[iA].transform[3])); // Using squared distance is fine for sorting
 		const float distanceB = glm::length(_mainCamera._position - glm::vec3(_mainDrawContext.transparentSurfaces[iB].transform[3]));
 		return distanceA > distanceB; // Draw farthest first
 	});
 
-	_stats.drawcallCount               = 0;
-	_stats.triangleCount               = 0;
-	auto            start              = std::chrono::steady_clock::now();
+	_stats.drawcallCount                                                         = 0;
+	_stats.triangleCount                                                         = 0;
+	std::chrono::time_point<std::chrono::steady_clock> start                     = std::chrono::steady_clock::now();
 
-	// Allocate a new uniform buffer for the scene data
-	AllocatedBuffer gpuSceneDataBuffer = CreateBuffer(sizeof(GPUSceneData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-
-	// Add it to the deletion queue of this frame so it gets deleted once it's been used
+	// 1 Uniform buffer, holds a struct of GPUSceneData
+	AllocatedBuffer                                    uniformBufferGPUSceneData = CreateBuffer(sizeof(GPUSceneData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 	GetCurrentFrame().deletionQueue.PushFunction([=, this]() {
-		DestroyBuffer(gpuSceneDataBuffer);
+		DestroyBuffer(uniformBufferGPUSceneData);
 	});
-
-	// Write the buffer
-	GPUSceneData* sceneUniformData    = static_cast<GPUSceneData*>(gpuSceneDataBuffer.allocation->GetMappedData());
-	*sceneUniformData                 = _sceneData;
-
-	// Create a descriptor set that binds that buffer and update it
+	GPUSceneData* uniformBufferData   = static_cast<GPUSceneData*>(uniformBufferGPUSceneData.allocation->GetMappedData());
+	*uniformBufferData                = _sceneData; // TODO: What's scene data
 	VkDescriptorSet  globalDescriptor = GetCurrentFrame().frameDescriptors.Allocate(_logicalGPU, _gpuSceneDataDescriptorLayout);
-
 	DescriptorWriter uniformWriter;
-	uniformWriter.WriteBuffer(0, gpuSceneDataBuffer.buffer, sizeof(GPUSceneData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+	uniformWriter.WriteBuffer(0, uniformBufferGPUSceneData.buffer, sizeof(GPUSceneData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 	uniformWriter.UpdateSet(_logicalGPU, globalDescriptor);
 
 	// Begin a render pass connected to our draw image
@@ -948,11 +1427,13 @@ void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
 	vkCmdBeginRendering(commandBuffer, &renderInfo);
 
 	// Defined outside the draw function, this is the state we will try to skip
-	MaterialPipeline* lastPipeline    = nullptr;
-	MaterialInstance* lastMaterial    = nullptr;
-	VkBuffer          lastIndexBuffer = VK_NULL_HANDLE;
+	MaterialPipeline* lastPipeline       = nullptr;
+	MaterialInstance* lastMaterial       = nullptr;
+	VkBuffer          lastIndexBuffer    = VK_NULL_HANDLE;
 
-	auto              draw            = [&](const RenderObject& renderObject) {
+	// TODO: Need to make this easier to understand, because the Draw() function is gathering draw context, and not recording draws for Vulkan yet.
+	auto              actualDrawFunction = [&](const RenderObject& renderObject) {
+        // Step 1: Bind Pipeline
         if (renderObject.material != lastMaterial) {
             lastMaterial = renderObject.material;
             // Rebind pipeline and descriptors if the material changed
@@ -960,7 +1441,6 @@ void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
                 lastPipeline = renderObject.material->pipeline;
                 vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderObject.material->pipeline->pipeline);
                 vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderObject.material->pipeline->layout, 0, 1, &globalDescriptor, 0, nullptr);
-
                 VkViewport viewport = {};
                 viewport.x          = 0;
                 viewport.y          = 0;
@@ -968,62 +1448,58 @@ void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
                 viewport.height     = static_cast<float>(_windowExtent.height);
                 viewport.minDepth   = 0.f;
                 viewport.maxDepth   = 1.f;
-
                 vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
-
                 VkRect2D scissor      = {};
                 scissor.offset.x      = 0;
                 scissor.offset.y      = 0;
                 scissor.extent.width  = _windowExtent.width;
                 scissor.extent.height = _windowExtent.height;
-
                 vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
             }
-
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderObject.material->pipeline->layout, 1, 1, &renderObject.material->materialSet, 0, nullptr);
         }
-
+        // Step 2: Bind index buffer
         // Rebind index buffer if needed
         if (renderObject.indexBuffer != lastIndexBuffer) {
             lastIndexBuffer = renderObject.indexBuffer;
             vkCmdBindIndexBuffer(commandBuffer, renderObject.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
         }
-
+        // Step 3: Calculate Mesh Matrix Transform, and then
         // Calculate final mesh matrix
-        GPUDrawPushConstants push_constants;
-        push_constants.worldMatrix         = renderObject.transform;
-        push_constants.vertexBufferAddress = renderObject.vertexBufferAddress;
+        GPUDrawPushConstants gPUDrawPushConstants {};
+        gPUDrawPushConstants.worldMatrix         = renderObject.transform;
+        gPUDrawPushConstants.vertexBufferAddress = renderObject.vertexBufferAddress;
+        vkCmdPushConstants(commandBuffer, renderObject.material->pipeline->layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &gPUDrawPushConstants);
 
-        vkCmdPushConstants(commandBuffer, renderObject.material->pipeline->layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &push_constants);
-
+        // THE ACTUAL DRAW CALL
         vkCmdDrawIndexed(commandBuffer, renderObject.indexCount, 1, renderObject.firstIndex, 0, 0);
 
         _stats.drawcallCount++;
         _stats.triangleCount += renderObject.indexCount / 3;
-	};
+    };
 
 	for (const uint32_t& renderIndex : opaqueDraws) {
-		draw(_mainDrawContext.opaqueSurfaces[renderIndex]);
+		actualDrawFunction(_mainDrawContext.opaqueSurfaces[renderIndex]);
 	}
 	for (const uint32_t& renderIndex : maskedDraws) {
-		draw(_mainDrawContext.maskedSurfaces[renderIndex]);
+		actualDrawFunction(_mainDrawContext.maskedSurfaces[renderIndex]);
 	}
 	for (const uint32_t& renderIndex : transparentDraws) {
-		draw(_mainDrawContext.transparentSurfaces[renderIndex]);
+		actualDrawFunction(_mainDrawContext.transparentSurfaces[renderIndex]);
 	}
 
 	_mainDrawContext.opaqueSurfaces.clear();
 	_mainDrawContext.maskedSurfaces.clear();
 	_mainDrawContext.transparentSurfaces.clear();
 
-	auto end            = std::chrono::steady_clock::now();
-	auto elapsed        = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-	_stats.meshDrawTime = elapsed.count() / 1000.f;
+	std::chrono::time_point<std::chrono::steady_clock> end     = std::chrono::steady_clock::now();
+	std::chrono::microseconds                          elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+	_stats.meshDrawTime                                        = elapsed.count() / 1000.f;
 
 	vkCmdEndRendering(commandBuffer);
 }
 
-void PantomirEngine::DrawImgui(VkCommandBuffer commandBuffer, VkImageView targetImageView) const {
+void PantomirEngine::DrawImgui(const VkCommandBuffer commandBuffer, const VkImageView targetImageView) const {
 	VkRenderingAttachmentInfo colorAttachment = vkinit::AttachmentInfo(targetImageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 	const VkRenderingInfo     renderInfo      = vkinit::RenderingInfo(_swapchainExtent, &colorAttachment, nullptr);
 
@@ -1034,126 +1510,15 @@ void PantomirEngine::DrawImgui(VkCommandBuffer commandBuffer, VkImageView target
 	vkCmdEndRendering(commandBuffer);
 }
 
-void PantomirEngine::ImmediateSubmit(std::function<void(VkCommandBuffer commandBuffer)>&& anonymousFunction) {
-	VK_CHECK(vkResetFences(_logicalGPU, 1, &_immediateFence));
-	VK_CHECK(vkResetCommandBuffer(_immediateCommandBuffer, 0));
-
-	constexpr VkCommandBufferBeginInfo commandBufferBeginInfo = vkinit::CommandBufferBeginInfo(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
-
-	VK_CHECK(vkBeginCommandBuffer(_immediateCommandBuffer, &commandBufferBeginInfo));
-
-	anonymousFunction(_immediateCommandBuffer);
-
-	VK_CHECK(vkEndCommandBuffer(_immediateCommandBuffer));
-
-	VkCommandBufferSubmitInfo commandInfo = vkinit::CommandBufferSubmitInfo(_immediateCommandBuffer);
-	VkSubmitInfo2             submit      = vkinit::SubmitInfo(&commandInfo, nullptr, nullptr);
-
-	// Submit command buffer to the queue and execute it.
-	//  _renderFence will now block until the graphic commands finish execution
-	VK_CHECK(vkQueueSubmit2(_graphicsQueue, 1, &submit, _immediateFence));
-	VK_CHECK(vkWaitForFences(_logicalGPU, 1, &_immediateFence, true, 9999999999));
-}
-
-void PantomirEngine::ResizeSwapchain() {
-	vkDeviceWaitIdle(_logicalGPU);
-	DestroySwapchain();
-	int windowWidth, windowHeight;
-	SDL_GetWindowSize(_window, &windowWidth, &windowHeight);
-	_windowExtent.width  = windowWidth;
-	_windowExtent.height = windowHeight;
-	CreateSwapchain(windowWidth, windowHeight);
-	_resizeRequested = false;
-}
-
-AllocatedImage PantomirEngine::CreateImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped) const {
-	AllocatedImage newImage;
-	newImage.imageFormat              = format;
-	newImage.imageExtent              = size;
-
-	VkImageCreateInfo imageCreateInfo = vkinit::ImageCreateInfo(format, usage, size);
-	if (mipmapped) {
-		imageCreateInfo.mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(size.width, size.height)))) + 1;
-	}
-
-	// Always allocate images on dedicated GPU memory
-	VmaAllocationCreateInfo vmaAllocationCreateInfo = {};
-	vmaAllocationCreateInfo.usage                   = VMA_MEMORY_USAGE_GPU_ONLY;
-	vmaAllocationCreateInfo.requiredFlags           = static_cast<VkMemoryPropertyFlags>(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-	// Allocate and create the image
-	VK_CHECK(vmaCreateImage(_vmaAllocator, &imageCreateInfo, &vmaAllocationCreateInfo, &newImage.image, &newImage.allocation, nullptr));
-
-	// If the format is a depth format, we will need to have it use the correct
-	// aspect flag
-	VkImageAspectFlags aspectFlag = VK_IMAGE_ASPECT_COLOR_BIT;
-	if (format == VK_FORMAT_D32_SFLOAT) {
-		aspectFlag = VK_IMAGE_ASPECT_DEPTH_BIT;
-	}
-
-	// Build an image-view for the image
-	VkImageViewCreateInfo view_info       = vkinit::ImageViewCreateInfo(format, newImage.image, aspectFlag);
-	view_info.subresourceRange.levelCount = imageCreateInfo.mipLevels;
-
-	VK_CHECK(vkCreateImageView(_logicalGPU, &view_info, nullptr, &newImage.imageView));
-
-	return newImage;
-}
-
-AllocatedImage PantomirEngine::CreateImage(void* dataSource, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped, size_t bytesPerChannel) {
-	// Vulkan doesn't allow us to send pixel data straight to an image, it has to be sent to a buffer first.
-	size_t          channelCount    = 4;
-	size_t          dataSize        = size.width * size.height * size.depth * channelCount * bytesPerChannel;
-	AllocatedBuffer uploadBuffer    = CreateBuffer(dataSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU); // Transfer src bit means it's usable by GPU for copying.
-
-	void*           dataDestination = uploadBuffer.info.pMappedData;
-	memcpy(dataDestination, dataSource, dataSize);
-
-	AllocatedImage allocatedImage = CreateImage(size, format, usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, mipmapped);
-
-	ImmediateSubmit([&](VkCommandBuffer commandBuffer) {
-		vkutil::TransitionImage(commandBuffer, allocatedImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-
-		VkBufferImageCopy copyRegion               = {};
-		copyRegion.bufferOffset                    = 0;
-		copyRegion.bufferRowLength                 = 0;
-		copyRegion.bufferImageHeight               = 0;
-
-		copyRegion.imageSubresource.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
-		copyRegion.imageSubresource.mipLevel       = 0;
-		copyRegion.imageSubresource.baseArrayLayer = 0;
-		copyRegion.imageSubresource.layerCount     = 1;
-		copyRegion.imageExtent                     = size;
-
-		// Copy the buffer into the image
-		vkCmdCopyBufferToImage(commandBuffer, uploadBuffer.buffer, allocatedImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
-
-		if (mipmapped) {
-			vkutil::GenerateMipmaps(commandBuffer, allocatedImage.image, VkExtent2D { allocatedImage.imageExtent.width, allocatedImage.imageExtent.height });
-		} else {
-			vkutil::TransitionImage(commandBuffer, allocatedImage.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-		}
-	});
-
-	DestroyBuffer(uploadBuffer);
-
-	return allocatedImage;
-}
-
-void PantomirEngine::DestroyImage(const AllocatedImage& img) const {
-	vkDestroyImageView(_logicalGPU, img.imageView, nullptr);
-	vmaDestroyImage(_vmaAllocator, img.image, img.allocation);
-}
-
 void PantomirEngine::UpdateScene() {
 	const auto start = std::chrono::steady_clock::now();
 
 	_mainCamera.Update(_deltaTime);
 
-	glm::mat4 view       = _mainCamera.GetViewMatrix();
+	const glm::mat4 view       = _mainCamera.GetViewMatrix();
 
 	// Camera projection
-	glm::mat4 projection = glm::perspective(glm::radians(70.f), static_cast<float>(_windowExtent.width) / static_cast<float>(_windowExtent.height), 10000.f, 0.1f);
+	glm::mat4       projection = glm::perspective(glm::radians(70.f), static_cast<float>(_windowExtent.width) / static_cast<float>(_windowExtent.height), 10000.f, 0.1f);
 
 	// Invert the Y direction on projection matrix so that we are more similar to opengl and gltf axis
 	projection[1][1] *= -1;
@@ -1163,7 +1528,8 @@ void PantomirEngine::UpdateScene() {
 	_sceneData.viewProjection = projection * view;
 
 	_mainDrawContext.opaqueSurfaces.clear();
-
+	_mainDrawContext.maskedSurfaces.clear();
+	_mainDrawContext.transparentSurfaces.clear();
 	_loadedScenes["Echidna1"]->Draw(glm::mat4 { 1.f }, _mainDrawContext);
 	_loadedHDRIs["citrus_orchard_road_puresky_4k"]->DrawSkybox(_mainCamera.GetViewMatrix());
 
@@ -1173,279 +1539,11 @@ void PantomirEngine::UpdateScene() {
 	_sceneData.sunlightDirection                                              = glm::vec4(0, 0, -1.0, 1.f);
 
 	const std::chrono::time_point<std::chrono::steady_clock> end              = std::chrono::steady_clock::now();
-	const auto                                               elapsed          = end - start;
-	const float                                              deltaTimeSeconds = std::chrono::duration<float>(elapsed).count();
+	const std::chrono::duration<float>                       elapsed          = std::chrono::duration<float>(end - start);
+	const float                                              deltaTimeSeconds = elapsed.count();
 
 	_stats.sceneUpdateTime                                                    = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
 	_deltaTime                                                                = std::clamp(deltaTimeSeconds, 0.0001f, 0.016f);
-}
-
-void GLTFMetallic_Roughness::BuildPipelines(PantomirEngine* engine) {
-	VkShaderModule meshVertexShader;
-	if (!vkutil::LoadShaderModule("Assets/Shaders/mesh.vert.spv", engine->_logicalGPU, &meshVertexShader)) {
-		LOG(Engine, Error, "Error when building the triangle vertex shader module");
-	}
-
-	VkShaderModule meshFragShader;
-	if (!vkutil::LoadShaderModule("Assets/Shaders/mesh.frag.spv", engine->_logicalGPU, &meshFragShader)) {
-		LOG(Engine, Error, "Error when building the triangle fragment shader module");
-	}
-
-	VkPushConstantRange matrixRange {};
-	matrixRange.offset     = 0;
-	matrixRange.size       = sizeof(GPUDrawPushConstants);
-	matrixRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-
-	DescriptorLayoutBuilder descriptorLayoutBuilder;
-	descriptorLayoutBuilder.AddBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-	descriptorLayoutBuilder.AddBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-	descriptorLayoutBuilder.AddBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-	descriptorLayoutBuilder.AddBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-	descriptorLayoutBuilder.AddBinding(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-	descriptorLayoutBuilder.AddBinding(5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-
-	_materialLayout                           = descriptorLayoutBuilder.Build(engine->_logicalGPU, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT); // Every binding will use these flags
-
-	VkDescriptorSetLayout      layouts[]      = { engine->_gpuSceneDataDescriptorLayout, _materialLayout };
-
-	VkPipelineLayoutCreateInfo meshLayoutInfo = vkinit::PipelineLayoutCreateInfo();
-	meshLayoutInfo.setLayoutCount             = 2;
-	meshLayoutInfo.pSetLayouts                = layouts; // Decays into pointer.
-	meshLayoutInfo.pPushConstantRanges        = &matrixRange;
-	meshLayoutInfo.pushConstantRangeCount     = 1;
-
-	VK_CHECK(vkCreatePipelineLayout(engine->_logicalGPU, &meshLayoutInfo, nullptr, &_pipelineLayout));
-
-	// Build the stage-create-info for both vertex and fragment stages. This lets
-	// the pipeline know the shader modules per stage
-	PipelineBuilder pipelineBuilder;
-
-	// Render format
-	pipelineBuilder.SetColorAttachmentFormat(engine->_colorImage.imageFormat);
-	pipelineBuilder.SetDepthFormat(engine->_depthImage.imageFormat);
-
-	pipelineBuilder.SetShaders(meshVertexShader, meshFragShader);
-	pipelineBuilder.SetInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
-	pipelineBuilder.SetPolygonMode(VK_POLYGON_MODE_FILL);
-	pipelineBuilder.SetCullMode(VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_COUNTER_CLOCKWISE);
-	pipelineBuilder.SetMultisamplingNone();
-	pipelineBuilder.DisableBlending();
-	pipelineBuilder.EnableDepthtest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
-
-	// Use the triangle layout we created
-	pipelineBuilder._pipelineLayout        = _pipelineLayout;
-	_opaquePipeline.layout                 = _pipelineLayout;
-	_transparentPipeline.layout            = _pipelineLayout;
-	_maskedPipeline.layout                 = _pipelineLayout;
-	_opaqueDoubleSidedPipeline.layout      = _pipelineLayout;
-	_transparentDoubleSidedPipeline.layout = _pipelineLayout;
-	_maskedDoubleSidedPipeline.layout      = _pipelineLayout;
-
-	// Building Pipelines
-	_opaquePipeline.pipeline               = pipelineBuilder.BuildPipeline(engine->_logicalGPU);
-
-	pipelineBuilder.SetCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE);
-	_opaqueDoubleSidedPipeline.pipeline = pipelineBuilder.BuildPipeline(engine->_logicalGPU);
-
-	pipelineBuilder.SetCullMode(VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_COUNTER_CLOCKWISE);
-	pipelineBuilder.EnableBlendingAlphablend();
-	pipelineBuilder.EnableDepthtest(false, VK_COMPARE_OP_GREATER_OR_EQUAL);
-	_transparentPipeline.pipeline = pipelineBuilder.BuildPipeline(engine->_logicalGPU);
-
-	pipelineBuilder.SetCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE);
-	_transparentDoubleSidedPipeline.pipeline = pipelineBuilder.BuildPipeline(engine->_logicalGPU);
-
-	pipelineBuilder.SetCullMode(VK_CULL_MODE_BACK_BIT, VK_FRONT_FACE_COUNTER_CLOCKWISE);
-	pipelineBuilder.DisableBlending();
-	pipelineBuilder.EnableDepthtest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
-	_maskedPipeline.pipeline = pipelineBuilder.BuildPipeline(engine->_logicalGPU);
-
-	pipelineBuilder.SetCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE);
-	_maskedDoubleSidedPipeline.pipeline = pipelineBuilder.BuildPipeline(engine->_logicalGPU);
-
-	vkDestroyShaderModule(engine->_logicalGPU, meshFragShader, nullptr);
-	vkDestroyShaderModule(engine->_logicalGPU, meshVertexShader, nullptr);
-}
-
-void GLTFMetallic_Roughness::ClearResources(VkDevice device) {
-	vkDestroyPipeline(device, _maskedPipeline.pipeline, nullptr);
-	vkDestroyPipeline(device, _transparentPipeline.pipeline, nullptr);
-	vkDestroyPipeline(device, _opaquePipeline.pipeline, nullptr);
-	vkDestroyPipeline(device, _maskedDoubleSidedPipeline.pipeline, nullptr);
-	vkDestroyPipeline(device, _transparentDoubleSidedPipeline.pipeline, nullptr);
-	vkDestroyPipeline(device, _opaqueDoubleSidedPipeline.pipeline, nullptr);
-
-	vkDestroyPipelineLayout(device, _pipelineLayout, nullptr);
-	vkDestroyDescriptorSetLayout(device, _materialLayout, nullptr);
-}
-
-MaterialInstance GLTFMetallic_Roughness::WriteMaterial(VkDevice device, MaterialPass pass, VkCullModeFlagBits cullMode, const GLTFMetallic_Roughness::MaterialResources& resources, DescriptorAllocatorGrowable& descriptorAllocator) {
-	MaterialInstance materialInstance {};
-
-	materialInstance.passType = pass;
-	materialInstance.cullMode = cullMode;
-
-	// Per material, we choose a pipeline based on its properties.
-	if (pass == MaterialPass::AlphaBlend) {
-		if (cullMode == VK_CULL_MODE_NONE) {
-			materialInstance.pipeline = &_transparentDoubleSidedPipeline;
-		} else {
-			materialInstance.pipeline = &_transparentPipeline;
-		}
-	} else if (pass == MaterialPass::AlphaMask) {
-		if (cullMode == VK_CULL_MODE_NONE) {
-			materialInstance.pipeline = &_maskedDoubleSidedPipeline;
-		} else {
-			materialInstance.pipeline = &_maskedPipeline;
-		}
-	} else if (pass == MaterialPass::Opaque) {
-		if (cullMode == VK_CULL_MODE_NONE) {
-			materialInstance.pipeline = &_opaqueDoubleSidedPipeline;
-		} else {
-			materialInstance.pipeline = &_opaquePipeline;
-		}
-	} else {
-		materialInstance.pipeline = &_opaquePipeline;
-	}
-
-	materialInstance.materialSet = descriptorAllocator.Allocate(device, _materialLayout);
-
-	_writer.Clear();
-	_writer.WriteBuffer(0, resources.dataBuffer, sizeof(MaterialConstants), resources.dataBufferOffset, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-	_writer.WriteImage(1, resources.colorImage.imageView, resources.colorSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-	_writer.WriteImage(2, resources.metalRoughImage.imageView, resources.metalRoughSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-	_writer.WriteImage(3, resources.emissiveImage.imageView, resources.emissiveSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-	_writer.WriteImage(4, resources.normalImage.imageView, resources.normalSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-	_writer.WriteImage(5, resources.specularImage.imageView, resources.specularSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-
-	_writer.UpdateSet(device, materialInstance.materialSet);
-
-	return materialInstance;
-}
-
-void MeshNode::Draw(const glm::mat4& topMatrix, DrawContext& drawContext) {
-	glm::mat4 nodeMatrix = topMatrix * _worldTransform;
-
-	for (const GeoSurface& geoSurface : _mesh->surfaces) {
-		RenderObject renderObject;
-		renderObject.indexCount          = geoSurface.count;
-		renderObject.firstIndex          = geoSurface.startIndex;
-		renderObject.indexBuffer         = _mesh->meshBuffers.indexBuffer.buffer;
-		renderObject.material            = &geoSurface.material->data;
-		renderObject.bounds              = geoSurface.bounds;
-		renderObject.transform           = nodeMatrix;
-		renderObject.vertexBufferAddress = _mesh->meshBuffers.vertexBufferAddress;
-
-		if (geoSurface.material->data.passType == MaterialPass::AlphaBlend) {
-			drawContext.transparentSurfaces.push_back(renderObject);
-		} else if (geoSurface.material->data.passType == MaterialPass::AlphaMask) {
-			drawContext.maskedSurfaces.push_back(renderObject);
-		} else if (geoSurface.material->data.passType == MaterialPass::Opaque) {
-			drawContext.opaqueSurfaces.push_back(renderObject);
-		} else {
-			drawContext.opaqueSurfaces.push_back(renderObject);
-		}
-	}
-
-	Node::Draw(topMatrix, drawContext);
-}
-
-void PantomirEngine::MainLoop() {
-	bool bQuit = false;
-
-	while (!bQuit) {
-		const auto start = std::chrono::steady_clock::now();
-
-		SDL_Event  event;
-
-		// Handle events on queue
-		while (SDL_PollEvent(&event) != 0) {
-			// Close the window when user alt-f4s or clicks the X button
-			if (event.type == SDL_EVENT_QUIT) {
-				bQuit = true;
-			}
-
-			_mainCamera.ProcessSDLEvent(event, _window);
-
-			if (event.type == SDL_EVENT_WINDOW_RESIZED) {
-				_resizeRequested = true;
-			}
-
-			if (event.type == SDL_EVENT_WINDOW_MINIMIZED) {
-				_stopRendering = true;
-			}
-			if (event.type == SDL_EVENT_WINDOW_RESTORED) {
-				_stopRendering = false;
-			}
-
-			ImGui_ImplSDL3_ProcessEvent(&event);
-		}
-
-		// Update camera movement based on current keyboard state
-		_mainCamera.UpdateMovement();
-
-		// Do not draw if we are minimized
-		if (_stopRendering) {
-			// Throttle loop speed
-			std::this_thread::sleep_for(std::chrono::milliseconds(100));
-			continue;
-		}
-
-		if (_resizeRequested) {
-			ResizeSwapchain();
-			// TODO: The images and views must also be replaced and updated for bindings.
-		}
-
-		ImGui_ImplVulkan_NewFrame();
-		ImGui_ImplSDL3_NewFrame();
-		ImGui::NewFrame();
-
-		if (ImGui::Begin("background")) {
-
-			ComputeEffect& selected = _backgroundEffects[_currentBackgroundEffect];
-
-			ImGui::SliderFloat("Render Scale", &_renderScale, 0.3f, 1.f);
-
-			ImGui::Text("Selected effect: ", selected.name);
-
-			ImGui::SliderInt("Effect Index", &_currentBackgroundEffect, 0, _backgroundEffects.size() - 1);
-
-			ImGui::InputFloat4("data1", reinterpret_cast<float*>(&selected.pushConstants.data1));
-			ImGui::InputFloat4("data2", reinterpret_cast<float*>(&selected.pushConstants.data2));
-			ImGui::InputFloat4("data3", reinterpret_cast<float*>(&selected.pushConstants.data3));
-			ImGui::InputFloat4("data4", reinterpret_cast<float*>(&selected.pushConstants.data4));
-		}
-
-		ImGui::End();
-
-		ImGui::Begin("Stats");
-		ImGui::Text("frametime %f ms", _stats.frameTime);
-		ImGui::Text("draw time %f ms", _stats.meshDrawTime);
-		ImGui::Text("update time %f ms", _stats.sceneUpdateTime);
-		ImGui::Text("triangles %i", _stats.triangleCount);
-		ImGui::Text("draws %i", _stats.drawcallCount);
-		ImGui::End();
-
-		ImGui::Render();
-
-		PantomirEngine::Draw();
-
-		const std::chrono::time_point      end     = std::chrono::steady_clock::now();
-		const std::chrono::duration<float> elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-		_stats.frameTime                           = elapsed.count() / 1000.f;
-		_deltaTime                                 = std::clamp(elapsed.count(), 0.0001f, 0.016f);
-	}
-}
-
-int PantomirEngine::Start() {
-	try {
-		MainLoop();
-	} catch (const std::exception& exception) {
-		LOG(Engine, Error, "Exception: ", exception.what());
-		return EXIT_FAILURE;
-	}
-
-	return EXIT_SUCCESS;
 }
 
 int main(int argc, char* argv[]) {

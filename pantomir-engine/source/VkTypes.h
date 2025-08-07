@@ -59,12 +59,6 @@ struct GPUMeshBuffers {
 	VkDeviceAddress vertexBufferAddress;
 };
 
-// Push constants for our mesh object draws
-struct GPUDrawPushConstants {
-	glm::mat4       worldMatrix;
-	VkDeviceAddress vertexBufferAddress;
-};
-
 struct AllocatedImage {
 	VkImage       image;
 	VkImageView   imageView;
@@ -75,6 +69,10 @@ struct AllocatedImage {
 
 struct DrawContext;
 class IRenderable {
+public:
+	virtual ~IRenderable() = default;
+
+private:
 	virtual void Draw(const glm::mat4& topMatrix, DrawContext& drawContext) = 0;
 };
 

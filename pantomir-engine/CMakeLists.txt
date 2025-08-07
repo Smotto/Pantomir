@@ -1,5 +1,4 @@
 ﻿cmake_minimum_required(VERSION 3.31)
-project(pantomir-engine LANGUAGES CXX)
 
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 23)

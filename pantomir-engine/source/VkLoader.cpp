@@ -16,6 +16,7 @@
 #include <fastgltf/glm_element_traits.hpp>
 #include <fastgltf/tools.hpp>
 #include <unordered_set>
+#include <ranges>
 
 /* Free Functions */
 VkFilter ExtractFilter(fastgltf::Filter filter) {
@@ -386,24 +387,21 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, cons
 			}
 
 			// Load vertex normals
-			fastgltf::Attribute* normals = primitive.findAttribute("NORMAL");
-			if (normals != primitive.attributes.end()) {
+			if (fastgltf::Attribute* normals = primitive.findAttribute("NORMAL"); normals != primitive.attributes.end()) {
 				fastgltf::iterateAccessorWithIndex<glm::vec3>(gltfAsset, gltfAsset.accessors[normals->accessorIndex], [&](glm::vec3 vertex, size_t index) {
 					vertices[initialVertex + index].normal = vertex;
 				});
 			}
 
 			// Load vertex tangents
-			fastgltf::Attribute* tangents = primitive.findAttribute("TANGENT");
-			if (tangents != primitive.attributes.end()) {
+			if (fastgltf::Attribute* tangents = primitive.findAttribute("TANGENT"); tangents != primitive.attributes.end()) {
 				fastgltf::iterateAccessorWithIndex<glm::vec4>(gltfAsset, gltfAsset.accessors[tangents->accessorIndex], [&](glm::vec4 tangent, size_t index) {
 					vertices[initialVertex + index].tangent = tangent;
 				});
 			}
 
 			// Load UVs
-			fastgltf::Attribute* uv = primitive.findAttribute("TEXCOORD_0");
-			if (uv != primitive.attributes.end()) {
+			if (fastgltf::Attribute* uv = primitive.findAttribute("TEXCOORD_0"); uv != primitive.attributes.end()) {
 				fastgltf::iterateAccessorWithIndex<glm::vec2>(gltfAsset, gltfAsset.accessors[uv->accessorIndex], [&](glm::vec2 vertex, size_t index) {
 					vertices[initialVertex + index].uv_x = vertex.x;
 					vertices[initialVertex + index].uv_y = vertex.y;
@@ -411,8 +409,7 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, cons
 			}
 
 			// Load vertex colors
-			fastgltf::Attribute* colors = primitive.findAttribute("COLOR_0");
-			if (colors != primitive.attributes.end()) {
+			if (fastgltf::Attribute* colors = primitive.findAttribute("COLOR_0"); colors != primitive.attributes.end()) {
 				fastgltf::iterateAccessorWithIndex<glm::vec4>(gltfAsset, gltfAsset.accessors[colors->accessorIndex], [&](glm::vec4 vertex, size_t index) {
 					vertices[initialVertex + index].color = vertex;
 				});
@@ -507,23 +504,23 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, cons
 
 void LoadedGLTF::Draw(const glm::mat4& topMatrix, DrawContext& drawContext) {
 	// Create renderables from the sceneNodes
-	for (auto& node : _topNodes) {
+	for (const auto& node : _topNodes) {
 		node->Draw(topMatrix, drawContext);
 	}
 }
 
 void LoadedGLTF::ClearAll() {
-	VkDevice device = _enginePtr->_logicalGPU;
+	const VkDevice device = _enginePtr->_logicalGPU;
 
 	_descriptorPool.DestroyPools(device);
 	_enginePtr->DestroyBuffer(_materialDataBuffer);
 
-	for (auto& [key, value] : _meshes) {
+	for (const std::shared_ptr<MeshAsset>& value : _meshes | std::views::values) {
 		_enginePtr->DestroyBuffer(value->meshBuffers.indexBuffer);
 		_enginePtr->DestroyBuffer(value->meshBuffers.vertexBuffer);
 	}
 
-	for (auto& [key, value] : _images) {
+	for (AllocatedImage& value : _images | std::views::values) {
 		if (value.image == _enginePtr->_errorCheckerboardImage.image) {
 			// Dont destroy the default images
 			continue;
@@ -531,7 +528,7 @@ void LoadedGLTF::ClearAll() {
 		_enginePtr->DestroyImage(value);
 	}
 
-	for (auto& sampler : _samplers) {
+	for (const VkSampler& sampler : _samplers) {
 		vkDestroySampler(device, sampler, nullptr);
 	}
 }
@@ -560,9 +557,11 @@ std::optional<std::shared_ptr<LoadedHDRI>> LoadHDRI(PantomirEngine* engine, cons
 	loadedHDRI->_enginePtr = engine;
 
 	// Step 1: Initialize 1 descriptor pool for this HDRI
-	std::vector<DescriptorAllocatorGrowable::PoolSizeRatio> poolSizeRatios { { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4 },
-		                                                                     { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 2 },
-		                                                                     { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1 } };
+	std::vector<DescriptorAllocatorGrowable::PoolSizeRatio> poolSizeRatios {
+		{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4 },
+		{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 2 },
+		{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1 }
+	};
 	loadedHDRI->_descriptorPool.Init(engine->_logicalGPU, 1, poolSizeRatios);
 
 	// Step 2: Load sampler and create them on the device
@@ -577,13 +576,13 @@ std::optional<std::shared_ptr<LoadedHDRI>> LoadHDRI(PantomirEngine* engine, cons
 	vkCreateSampler(engine->_logicalGPU, &samplerCreateInfo, nullptr, &newSampler);
 	loadedHDRI->_sampler = newSampler;
 
-	// Step 3: Load image and create them on the device
+	// Step 3: Load data to a staging buffer, then create image and views on the device
 	VkExtent3D imageExtent;
 	imageExtent.width  = static_cast<uint32_t>(width);
 	imageExtent.height = static_cast<uint32_t>(height);
 	imageExtent.depth  = 1; // Only going to be 1, we aren't making smokes or CT/MRI scans.
 
-	newImage           = engine->CreateImage(imageData, imageExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, true, sizeof(float));
+	newImage           = engine->CreateImage(imageData, imageExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, true);
 	stbi_image_free(imageData);
 
 	loadedHDRI->_allocatedImage = newImage;
@@ -597,7 +596,7 @@ void LoadedHDRI::DrawSkybox(const glm::mat4& viewProjMatrix) {
 }
 
 void LoadedHDRI::ClearAll() {
-	VkDevice device = _enginePtr->_logicalGPU;
+	const VkDevice device = _enginePtr->_logicalGPU;
 
 	_descriptorPool.DestroyPools(device);
 	// TODO: Destroy buffers? Does HDRI need buffers?

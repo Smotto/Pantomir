@@ -32,16 +32,16 @@ layout(push_constant) uniform constants {
 
 void main()
 {
-    Vertex v = PushConstants.vertexBuffer.vertices[gl_VertexIndex];
+    Vertex vertex = PushConstants.vertexBuffer.vertices[gl_VertexIndex];
 
-    vec3 position = v.position;
-    vec3 normal = v.normal;
-    vec3 tangent = v.tangent.xyz;
-    float handedness = v.tangent.w;
+    vec3 position = vertex.position;
+    vec3 normal = vertex.normal;
+    vec3 tangent = vertex.tangent.xyz;
+    float handedness = vertex.tangent.w;
     vec3 bitangent = cross(normal, tangent) * handedness;
 
-    vec2 uv = vec2(v.uv_x, v.uv_y);
-    vec3 color = v.color.rgb;
+    vec2 uv = vec2(vertex.uv_x, vertex.uv_y);
+    vec3 color = vertex.color.rgb;
 
     vec4 worldPos = PushConstants.renderMatrix * vec4(position, 1.0);
     gl_Position = sceneData.viewproj * worldPos;

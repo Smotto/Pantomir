@@ -17,15 +17,12 @@ public:
 	float     _pitch { 0.f }; // Vertical rotation
 	float     _yaw { 0.f };   // Horizontal rotation
 
-	glm::mat4 GetViewMatrix() const;
-	glm::mat4 GetRotationMatrix() const;
+	[[nodiscard]] glm::mat4 GetViewMatrix() const;
+	[[nodiscard]] glm::mat4 GetRotationMatrix() const;
 
 	void      ProcessSDLEvent(SDL_Event& event, SDL_Window* window);
-	float     GetCurrentSpeedMultiplier() const;
 	void      UpdateMovement();
 	void      Update(const float deltaTime);
-
-private:
 };
 
 #endif /*! PANTOMIR_CAMERA_H_ */

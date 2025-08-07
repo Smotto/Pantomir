@@ -5,10 +5,10 @@
 #include "VkDescriptors.h"
 #include "VkTypes.h"
 
+struct ComputeEffect;
 struct LoadedHDRI;
 struct RenderObject;
 struct LoadedGLTF;
-struct MeshAsset;
 
 struct EngineStats {
 	float frameTime;
@@ -24,12 +24,6 @@ struct DrawContext {
 	std::vector<RenderObject> maskedSurfaces;
 };
 
-struct MeshNode : Node {
-	std::shared_ptr<MeshAsset> _mesh;
-
-	void                       Draw(const glm::mat4& topMatrix, DrawContext& drawContext) override;
-};
-
 struct GPUSceneData {
 	glm::mat4 view;
 	glm::mat4 proj;
@@ -37,25 +31,6 @@ struct GPUSceneData {
 	glm::vec4 ambientColor;
 	glm::vec4 sunlightDirection; // w for sun power
 	glm::vec4 sunlightColor;
-};
-
-struct ComputePushConstants {
-	glm::vec4 data1;
-	glm::vec4 data2;
-	glm::vec4 data3;
-	glm::vec4 data4;
-	glm::vec3 cameraPosition;
-	float     padding;
-	glm::mat4 cameraRotation;
-};
-
-struct ComputeEffect {
-	const char*          name;
-
-	VkPipeline           pipeline;
-	VkPipelineLayout     layout;
-
-	ComputePushConstants pushConstants;
 };
 
 struct DeletionQueue {
@@ -140,71 +115,80 @@ struct GLTFMetallic_Roughness {
 	DescriptorWriter _writer;
 
 	void             BuildPipelines(PantomirEngine* engine);
-	void             ClearResources(VkDevice device);
+	void             ClearResources(VkDevice device) const;
 
 	MaterialInstance WriteMaterial(VkDevice device, MaterialPass pass, VkCullModeFlagBits cullMode, const MaterialResources& resources, DescriptorAllocatorGrowable& descriptorAllocator);
 };
 
+struct MeshAsset;
+struct MeshNode final : Node {
+	std::shared_ptr<MeshAsset> _mesh;
+
+	void                       Draw(const glm::mat4& topMatrix, DrawContext& drawContext) override;
+};
+
 class PantomirEngine {
 public:
-	bool                                                   _bUseValidationLayers = true;
+	bool                       _bUseValidationLayers = true;
 
-	EngineStats                                            _stats;
+	EngineStats                _stats {};
 
-	Camera                                                 _mainCamera;
+	Camera                     _mainCamera {};
 
-	VkPipelineLayout                                       _meshPipelineLayout {};
-	VkPipeline                                             _meshPipeline {};
+	VkPipelineLayout           _HDRIPipelineLayout {};
+	VkPipeline                 _HDRIPipeline {};
+	VkPipelineLayout           _meshPipelineLayout {};
+	VkPipeline                 _meshPipeline {};
 
-	std::vector<ComputeEffect>                             _backgroundEffects;
-	int                                                    _currentBackgroundEffect { 0 };
+	std::vector<ComputeEffect> _backgroundEffects {};
+	int                        _currentBackgroundEffect { 0 };
 
 	// Immediate submit structures
-	VkFence                                                _immediateFence {};
-	VkCommandBuffer                                        _immediateCommandBuffer {};
-	VkCommandPool                                          _immediateCommandPool {};
+	VkFence                    _immediateFence {};
+	VkCommandBuffer            _immediateCommandBuffer {};
+	VkCommandPool              _immediateCommandPool {};
 
-	VkPipeline                                             _gradientPipeline {};
-	VkPipelineLayout                                       _gradientPipelineLayout {};
-	VkDescriptorSet                                        _drawImageDescriptorSet {};
-	VkDescriptorSetLayout                                  _drawImageDescriptorLayout {};
+	VkPipeline                 _gradientPipeline {};
+	VkPipelineLayout           _gradientPipelineLayout {};
+	VkDescriptorSet            _drawImageDescriptorSet {};
+	VkDescriptorSetLayout      _drawImageDescriptorLayout {};
 
-	GPUSceneData                                           _sceneData {};
-	VkDescriptorSetLayout                                  _gpuSceneDataDescriptorLayout {};
+	GPUSceneData               _sceneData {};
+	VkDescriptorSetLayout      _gpuSceneDataDescriptorLayout {};
 
-	DrawContext                                            _mainDrawContext;
+	DrawContext                _mainDrawContext {};
 
-	AllocatedImage                                         _colorImage {};
-	AllocatedImage                                         _depthImage {};
-	VkExtent2D                                             _drawExtent {};
-	VmaAllocator                                           _vmaAllocator {};
-	DeletionQueue                                          _shutdownDeletionQueue;
+	AllocatedImage             _colorImage {};
+	AllocatedImage             _depthImage {};
+	VkExtent2D                 _drawExtent {};
+	VmaAllocator               _vmaAllocator {};
+	DeletionQueue              _shutdownDeletionQueue {};
 
-	bool                                                   _isInitialized { false };
-	int                                                    _frameNumber { 0 };
-	bool                                                   _stopRendering { false };
-	bool                                                   _resizeRequested { false };
-	VkExtent2D                                             _windowExtent { 1280, 720 };
+	bool                       _isInitialized { false };
+	int                        _frameNumber { 0 };
+	bool                       _stopRendering { false };
+	bool                       _resizeRequested { false };
+	VkExtent2D                 _windowExtent { 1280, 720 };
 
-	struct SDL_Window*                                     _window { nullptr };
-	float                                                  _windowRatio = 0.8;
-	float                                                  _renderScale = 1.f;
+	SDL_Window*                _window { nullptr };
+	float                      _windowRatio = 0.8;
+	float                      _renderScale = 1.f;
 
-	VkInstance                                             _instance {};       // Vulkan Library Handle
-	VkDebugUtilsMessengerEXT                               _debugMessenger {}; // Vulkan debug output handle
-	VkPhysicalDevice                                       _physicalGPU {};    // GPU chosen as the default device
-	VkDevice                                               _logicalGPU {};     // Vulkan device for commands
-	VkSurfaceKHR                                           _surface {};        // Vulkan window surface
+	VkInstance                 _instance {};       // Vulkan Library Handle
+	VkDebugUtilsMessengerEXT   _debugMessenger {}; // Vulkan debug output handle
+	VkPhysicalDevice           _physicalGPU {};    // GPU chosen as the default device
+	VkDevice                   _logicalGPU {};     // Vulkan device for commands
+	VkSurfaceKHR               _surface {};        // Vulkan window surface
 
-	VkSwapchainKHR                                         _swapchain {};
-	VkFormat                                               _swapchainImageFormat;
+	VkSwapchainKHR             _swapchain {};
+	VkFormat                   _swapchainImageFormat;
 
-	std::vector<VkImage>                                   _swapchainImages;
-	std::vector<VkImageView>                               _swapchainImageViews;
-	VkExtent2D                                             _swapchainExtent {};
+	std::vector<VkImage>       _swapchainImages;
+	std::vector<VkImageView>   _swapchainImageViews;
+	VkExtent2D                 _swapchainExtent {};
 
-	FrameData                                              _frames[FRAME_OVERLAP];
-	FrameData&                                             GetCurrentFrame() {
+	FrameData                  _frames[FRAME_OVERLAP];
+	FrameData&                 GetCurrentFrame() {
         return _frames[_frameNumber % FRAME_OVERLAP];
 	};
 
@@ -235,21 +219,17 @@ public:
 		return instance;
 	}
 
-	[[nodiscard]] int Start();
-	void              MainLoop();
-	void              Draw();
-	void              DrawBackground(VkCommandBuffer commandBuffer);
-	void              DrawGeometry(VkCommandBuffer commandBuffer);
-	void              DrawImgui(VkCommandBuffer commandBuffer, VkImageView targetImageView) const;
-	void              ImmediateSubmit(std::function<void(VkCommandBuffer cmd)>&& anonymousFunction);
+	[[nodiscard]] int             Start();
+	void                          MainLoop();
+	void                          ImmediateSubmit(std::function<void(VkCommandBuffer cmd)>&& anonymousFunction) const;
 
-	GPUMeshBuffers    UploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices);
-	AllocatedImage    CreateImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false) const;
-	AllocatedImage    CreateImage(void* dataSource, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped = false, size_t bytesPerChannel = 1);
-	void              DestroyImage(const AllocatedImage& img) const;
+	GPUMeshBuffers                UploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices) const;
+	AllocatedImage                CreateCubemapImage(void* dataSource, const VkExtent3D size, const VkFormat format, const VkImageUsageFlags usage, const bool mipmapped = false) const;
+	AllocatedImage                CreateImage(void* dataSource, const VkExtent3D size, const VkFormat format, const VkImageUsageFlags usage, const bool mipmapped = false) const;
+	void                          DestroyImage(const AllocatedImage& img) const;
 
-	AllocatedBuffer   CreateBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
-	void              DestroyBuffer(const AllocatedBuffer& buffer);
+	[[nodiscard]] AllocatedBuffer CreateBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage) const;
+	void                          DestroyBuffer(const AllocatedBuffer& buffer) const;
 
 private:
 	float _deltaTime = 0.0f;
@@ -257,23 +237,31 @@ private:
 	PantomirEngine();
 	~PantomirEngine();
 
-	void InitSDLWindow();
-	void InitVulkan();
-	void InitSwapchain();
-	void InitCommands();
-	void InitSyncStructures();
-	void InitDescriptors();
-	void InitPipelines();
-	void InitBackgroundPipelines();
-	void InitImgui();
-	void InitMeshPipeline();
-	void InitDefaultData();
+	void                         InitSDLWindow();
+	void                         InitVulkan();
+	void                         InitSwapchain();
+	void                         InitCommands();
+	void                         InitSyncStructures();
+	void                         InitDescriptors();
+	void                         InitPipelines();
+	void                         InitBackgroundPipelines();
+	void                         InitImgui();
+	void                         InitMeshPipeline();
+	void                         InitHDRIPipeline();
+	void                         InitDefaultData();
 
-	void CreateSwapchain(uint32_t width, uint32_t height);
-	void DestroySwapchain();
-	void ResizeSwapchain();
+	void                         CreateSwapchain(uint32_t width, uint32_t height);
+	void                         DestroySwapchain() const;
+	void                         ResizeSwapchain();
 
-	void UpdateScene();
+	[[nodiscard]] AllocatedImage CreateImage(const VkExtent3D size, const VkFormat format, const VkImageUsageFlags usage, const bool mipmapped) const;
+
+	void                         Draw();
+	void                         DrawBackground(VkCommandBuffer commandBuffer);
+	void                         DrawGeometry(VkCommandBuffer commandBuffer);
+	void                         DrawImgui(VkCommandBuffer commandBuffer, VkImageView targetImageView) const;
+
+	void                         UpdateScene();
 };
 
 #endif /*! PANTOMIR_ENGINE_H_ */

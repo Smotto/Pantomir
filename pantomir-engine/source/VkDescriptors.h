@@ -16,7 +16,7 @@ struct DescriptorAllocatorGrowable {
 	void            ClearPools(VkDevice device);
 	void            DestroyPools(VkDevice device);
 
-	VkDescriptorSet Allocate(VkDevice device, VkDescriptorSetLayout layout, void* pNext = nullptr);
+	VkDescriptorSet Allocate(VkDevice device, VkDescriptorSetLayout layout, const void* pNext = nullptr);
 
 private:
 	VkDescriptorPool                                        GetOrCreatePool(VkDevice device);
@@ -25,7 +25,7 @@ private:
 	std::vector<DescriptorAllocatorGrowable::PoolSizeRatio> _ratios;
 	std::vector<VkDescriptorPool>                           _fullPools;
 	std::deque<VkDescriptorPool>                            _readyPools;
-	uint32_t                                                _setsPerPool;
+	uint32_t                                                _setsPerPool = 0;
 };
 
 // ------------------------------------------------------------

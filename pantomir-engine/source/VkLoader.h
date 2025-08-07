@@ -47,7 +47,7 @@ struct MeshAsset {
 
 class PantomirEngine;
 
-struct LoadedGLTF : public IRenderable {
+struct LoadedGLTF final : IRenderable {
 	// Storage for all the data on a given glTF file
 	std::unordered_map<std::string, std::shared_ptr<MeshAsset>>    _meshes;
 	std::unordered_map<std::string, std::shared_ptr<Node>>         _nodes;
@@ -61,7 +61,7 @@ struct LoadedGLTF : public IRenderable {
 	AllocatedBuffer                                                _materialDataBuffer;
 	PantomirEngine*                                                _enginePtr;
 
-	~LoadedGLTF() {
+	~LoadedGLTF() override {
 		ClearAll();
 	};
 

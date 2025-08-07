@@ -62,24 +62,24 @@ VkPipeline PipelineBuilder::BuildPipeline(VkDevice device) {
 	}
 }
 
-void PipelineBuilder::SetShaders(VkShaderModule vertexShader, VkShaderModule fragmentShader) {
+void PipelineBuilder::SetShaders(const VkShaderModule vertexShader, const VkShaderModule fragmentShader) {
 	_shaderStages.clear();
 	_shaderStages.push_back(vkinit::PipelineShaderStageCreateInfo(VK_SHADER_STAGE_VERTEX_BIT, vertexShader));
 	_shaderStages.push_back(vkinit::PipelineShaderStageCreateInfo(VK_SHADER_STAGE_FRAGMENT_BIT, fragmentShader));
 }
 
-void PipelineBuilder::SetInputTopology(VkPrimitiveTopology topology) {
+void PipelineBuilder::SetInputTopology(const VkPrimitiveTopology topology) {
 	_inputAssembly.topology               = topology;
 	// We are not going to use primitive restart
 	_inputAssembly.primitiveRestartEnable = VK_FALSE;
 }
 
-void PipelineBuilder::SetPolygonMode(VkPolygonMode mode) {
+void PipelineBuilder::SetPolygonMode(const VkPolygonMode mode) {
 	_rasterizer.polygonMode = mode;
 	_rasterizer.lineWidth   = 1.f;
 }
 
-void PipelineBuilder::SetCullMode(VkCullModeFlags cullMode, VkFrontFace frontFace) {
+void PipelineBuilder::SetCullMode(const VkCullModeFlags cullMode, const VkFrontFace frontFace) {
 	_rasterizer.cullMode  = cullMode;
 	_rasterizer.frontFace = frontFace;
 }
@@ -102,18 +102,18 @@ void PipelineBuilder::DisableBlending() {
 	_colorBlendAttachment.blendEnable    = VK_FALSE;
 }
 
-void PipelineBuilder::SetColorAttachmentFormat(VkFormat format) {
+void PipelineBuilder::SetColorAttachmentFormat(const VkFormat format) {
 	_colorAttachmentFormat              = format;
 	// Connect the format to the renderInfo structure
 	_renderInfo.colorAttachmentCount    = 1;
 	_renderInfo.pColorAttachmentFormats = &_colorAttachmentFormat;
 }
 
-void PipelineBuilder::SetDepthFormat(VkFormat format) {
+void PipelineBuilder::SetDepthFormat(const VkFormat format) {
 	_renderInfo.depthAttachmentFormat = format;
 }
 
-void PipelineBuilder::EnableDepthtest(bool depthWriteEnable, VkCompareOp op) {
+void PipelineBuilder::EnableDepthtest(const bool depthWriteEnable, const VkCompareOp op) {
 	_depthStencil.depthTestEnable       = VK_TRUE;
 	_depthStencil.depthWriteEnable      = depthWriteEnable;
 	_depthStencil.depthCompareOp        = op;
@@ -170,7 +170,7 @@ void PipelineBuilder::EnableBlendingAlphablend() {
 	_colorBlendAttachment.alphaBlendOp        = VK_BLEND_OP_ADD;
 }
 
-bool vkutil::LoadShaderModule(const char* filePath, VkDevice device, VkShaderModule* outShaderModule) {
+bool vkutil::LoadShaderModule(const char* filePath, const VkDevice device, VkShaderModule* outShaderModule) {
 	std::ifstream file(filePath, std::ios::ate | std::ios::binary); // Open file with cursor at the end.
 
 	if (!file.is_open()) {
