@@ -220,7 +220,7 @@ MaterialInstance GLTFMetallic_Roughness::WriteMaterial(VkDevice device, Material
 void PantomirEngine::WriteHDRIDescriptorSet() {
 	_singleImageDescriptorSet = globalDescriptorAllocator.Allocate(_logicalGPU, _singleImageDescriptorLayout);
 	DescriptorWriter singleImageDescriptorWriter;
-	singleImageDescriptorWriter.WriteImage(0, _loadedHDRIs["citrus_orchard_road_puresky_4k"]->_allocatedImage.imageView, _loadedHDRIs["citrus_orchard_road_puresky_4k"]->_sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+	singleImageDescriptorWriter.WriteImage(0, _loadedHDRIs["brown_photostudio_02_4k"]->_allocatedImage.imageView, _loadedHDRIs["brown_photostudio_02_4k"]->_sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 	singleImageDescriptorWriter.UpdateSet(_logicalGPU, _singleImageDescriptorSet);
 }
 
@@ -487,7 +487,10 @@ AllocatedImage PantomirEngine::CreateHDRIImage(void* dataSource, const VkExtent3
 }
 
 glm::mat4 PantomirEngine::GetProjectionMatrix() const {
-	return glm::perspective(glm::radians(70.f), static_cast<float>(_windowExtent.width) / static_cast<float>(_windowExtent.height), 10000.f, 0.1f);
+	glm::mat4 projection = glm::perspective(glm::radians(70.f), static_cast<float>(_windowExtent.width) / static_cast<float>(_windowExtent.height), 10000.f, 0.1f);
+	projection[1][1] *= -1;
+	// Invert the Y direction on projection matrix so that we are more similar to opengl and gltf axis
+	return projection;
 }
 
 AllocatedImage PantomirEngine::CreateImage(void* dataSource, const VkExtent3D size, const VkFormat format, const VkImageUsageFlags usage, const bool mipmapped) const {
@@ -1011,7 +1014,7 @@ void PantomirEngine::InitHDRIPipeline() {
 	pipelineBuilder.SetPolygonMode(VK_POLYGON_MODE_FILL);
 	pipelineBuilder.SetCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE);
 	pipelineBuilder.SetMultisamplingNone();
-	pipelineBuilder.EnableBlendingAdditive();
+	pipelineBuilder.DisableBlending();
 	pipelineBuilder.EnableDepthtest(true, VK_COMPARE_OP_GREATER_OR_EQUAL);
 	pipelineBuilder.SetColorAttachmentFormat(_colorImage.imageFormat);
 	pipelineBuilder.SetDepthFormat(_depthImage.imageFormat);
@@ -1100,14 +1103,14 @@ void PantomirEngine::InitDefaultData() {
 
 	std::string                                modelPath         = { "Assets/Models/Echidna1.glb" };
 	std::optional<std::shared_ptr<LoadedGLTF>> modelFile         = LoadGltf(this, modelPath);
-	std::string                                hdriPath          = { "Assets/Textures/citrus_orchard_road_puresky_4k.hdr" };
+	std::string                                hdriPath          = { "Assets/Textures/brown_photostudio_02_4k.hdr" };
 	std::optional<std::shared_ptr<LoadedHDRI>> hdriFile          = LoadHDRI(this, hdriPath);
 
 	assert(modelFile.has_value());
 	assert(hdriFile.has_value());
 
 	_loadedScenes["Echidna1"]                      = *modelFile;
-	_loadedHDRIs["citrus_orchard_road_puresky_4k"] = *hdriFile;
+	_loadedHDRIs["brown_photostudio_02_4k"] = *hdriFile;
 
 	WriteHDRIDescriptorSet();
 
@@ -1231,8 +1234,8 @@ void PantomirEngine::Draw() {
 	vkutil::TransitionImage(commandBuffer, _colorImage.image, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 	vkutil::TransitionImage(commandBuffer, _depthImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
 
+	DrawHDRI(commandBuffer);
 	DrawGeometry(commandBuffer);
-	DrawSkybox(commandBuffer);
 
 	// Transition the draw image and the swapchain image into their correct transfer layouts
 	vkutil::TransitionImage(commandBuffer, _colorImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
@@ -1313,12 +1316,15 @@ void PantomirEngine::DrawBackground(VkCommandBuffer commandBuffer) {
 	vkCmdDispatch(commandBuffer, dispatchX, dispatchY, 1);
 }
 
-void PantomirEngine::DrawSkybox(const VkCommandBuffer commandBuffer) const {
+void PantomirEngine::DrawHDRI(const VkCommandBuffer commandBuffer) const {
 	VkRenderingAttachmentInfo colorAttachment = vkinit::AttachmentInfo(_colorImage.imageView, nullptr, VK_IMAGE_LAYOUT_GENERAL);
 	const VkRenderingInfo     renderInfo      = vkinit::RenderingInfo(_drawExtent, &colorAttachment, nullptr);
-	HDRIPushConstants   constants {
-		  .viewMatrix       = _mainCamera.GetViewMatrix(),
-		  .projectionMatrix = GetProjectionMatrix()
+	glm::mat4                 viewMatrix      = _mainCamera.GetViewMatrix();
+	viewMatrix[3]                             = glm::vec4(0.0, 0.0, 0.0, 1.0);
+
+	HDRIPushConstants constants {
+		.viewMatrix       = viewMatrix,
+		.projectionMatrix = GetProjectionMatrix()
 	};
 
 	vkCmdBeginRendering(commandBuffer, &renderInfo);
@@ -1508,14 +1514,11 @@ void PantomirEngine::UpdateScene() {
 	const glm::mat4 view       = _mainCamera.GetViewMatrix();
 
 	// Camera projection
-	glm::mat4       projection = GetProjectionMatrix();
+	const glm::mat4 projection = GetProjectionMatrix();
 
-	// Invert the Y direction on projection matrix so that we are more similar to opengl and gltf axis
-	projection[1][1] *= -1;
-
-	_sceneData.view           = view;
-	_sceneData.proj           = projection;
-	_sceneData.viewProjection = projection * view;
+	_sceneData.view            = view;
+	_sceneData.proj            = projection;
+	_sceneData.viewProjection  = projection * view;
 
 	_mainDrawContext.opaqueSurfaces.clear();
 	_mainDrawContext.maskedSurfaces.clear();

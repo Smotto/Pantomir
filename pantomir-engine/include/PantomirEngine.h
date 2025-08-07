@@ -262,7 +262,7 @@ private:
 
 	void                         Draw();
 	void                         DrawBackground(VkCommandBuffer commandBuffer);
-	void                         DrawSkybox(VkCommandBuffer commandBuffer) const;
+	void                         DrawHDRI(VkCommandBuffer commandBuffer) const;
 	void                         DrawGeometry(VkCommandBuffer commandBuffer);
 	void                         DrawImgui(VkCommandBuffer commandBuffer, VkImageView targetImageView) const;
 

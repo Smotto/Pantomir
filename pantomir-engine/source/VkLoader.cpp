@@ -546,8 +546,10 @@ std::optional<std::shared_ptr<LoadedHDRI>> LoadHDRI(PantomirEngine* engine, cons
 	int                         width               = 0;
 	int                         height              = 0;
 	int                         channelCount        = 0;
-	constexpr int               desiredChannelCount = 4;                                                                                // RGBE
-	float*                      imageData           = stbi_loadf(filePath.data(), &width, &height, &channelCount, desiredChannelCount); // HDR's have float format
+	constexpr int               desiredChannelCount = 4; // RGBE
+	stbi_set_flip_vertically_on_load(true);
+	float* imageData = stbi_loadf(filePath.data(), &width, &height, &channelCount, desiredChannelCount); // HDR's have float format
+	stbi_set_flip_vertically_on_load(false);
 
 	if (imageData == nullptr) {
 		LOG(Engine, Error, "stbi_load_from_memory failed: {}", stbi_failure_reason());
@@ -567,11 +569,14 @@ std::optional<std::shared_ptr<LoadedHDRI>> LoadHDRI(PantomirEngine* engine, cons
 		.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
 		.pNext = nullptr
 	};
-	samplerCreateInfo.maxLod     = VK_LOD_CLAMP_NONE; // Vulkan will use all mips down to the lowest
-	samplerCreateInfo.minLod     = 0;                 // Only allow LODs >= 0 (highest quality level)
-	samplerCreateInfo.magFilter  = VK_FILTER_LINEAR;
-	samplerCreateInfo.minFilter  = VK_FILTER_LINEAR;
-	samplerCreateInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+
+	samplerCreateInfo.maxLod       = VK_LOD_CLAMP_NONE; // Vulkan will use all mips down to the lowest
+	samplerCreateInfo.minLod       = 0;                 // Only allow LODs >= 0 (highest quality level)
+	samplerCreateInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+	samplerCreateInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+	samplerCreateInfo.magFilter    = VK_FILTER_LINEAR;
+	samplerCreateInfo.minFilter    = VK_FILTER_LINEAR;
+	samplerCreateInfo.mipmapMode   = VK_SAMPLER_MIPMAP_MODE_LINEAR;
 
 	VkSampler newSampler;
 	vkCreateSampler(engine->_logicalGPU, &samplerCreateInfo, nullptr, &newSampler);
