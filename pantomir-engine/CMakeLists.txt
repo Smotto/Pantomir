@@ -22,6 +22,7 @@ target_include_directories(pantomir-engine PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/in
 
 # Platform-specific definitions
 target_compile_definitions(pantomir-engine PRIVATE
+        GLM_ENABLE_EXPERIMENTAL
         GLM_FORCE_DEPTH_ZERO_TO_ONE
 )
 

@@ -1,7 +1,6 @@
 #include "Camera.h"
 
 #include <SDL3/SDL_events.h>
-#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/quaternion.hpp>
 #include <glm/gtx/transform.hpp>
 
@@ -75,21 +74,21 @@ void Camera::UpdateMovement() {
 
 	// Check movement keys
 	if (keyState[SDL_SCANCODE_W]) {
-		_velocity.z = -currentSpeed;
+		_velocity.z = -currentSpeed; // Forward RHS -Z Forward
 	}
 	if (keyState[SDL_SCANCODE_S]) {
-		_velocity.z = currentSpeed;
+		_velocity.z = currentSpeed; // Backwards RHS +Z Backwards
 	}
 	if (keyState[SDL_SCANCODE_A]) {
-		_velocity.x = -currentSpeed;
+		_velocity.x = -currentSpeed; // Left RHS -X
 	}
 	if (keyState[SDL_SCANCODE_D]) {
-		_velocity.x = currentSpeed;
+		_velocity.x = currentSpeed; // Right RHS +X
 	}
 	if (keyState[SDL_SCANCODE_Q]) {
-		_velocity.y = currentSpeed;
+		_velocity.y = currentSpeed; // Up RHS +Y
 	}
 	if (keyState[SDL_SCANCODE_Z]) {
-		_velocity.y = -currentSpeed;
+		_velocity.y = -currentSpeed; // Down RHS -Y
 	}
 }

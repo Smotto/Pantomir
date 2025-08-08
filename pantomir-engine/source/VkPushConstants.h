@@ -6,8 +6,7 @@ struct ComputePushConstants {
 	glm::vec4 data2;
 	glm::vec4 data3;
 	glm::vec4 data4;
-	glm::vec3 cameraPosition;
-	float     padding;
+	alignas(16) glm::vec3 cameraPosition;
 	glm::mat4 cameraRotation;
 };
 

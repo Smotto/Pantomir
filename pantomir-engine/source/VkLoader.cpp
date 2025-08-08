@@ -5,11 +5,9 @@
 #include "PantomirEngine.h"
 #include "VkTypes.h"
 
-#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/quaternion.hpp>
 
-// This will make stb_image add the definitions of the functions into this cpp file for linking
-#define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_IMPLEMENTATION // Compiles stb_image functions
 #include "stb_image.h"
 
 #include <fastgltf/core.hpp>

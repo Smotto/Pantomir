@@ -12,7 +12,6 @@ void vkutil::TransitionImage(VkCommandBuffer commandBuffer, VkImage image, VkIma
 	imageBarrier.srcAccessMask          = VK_ACCESS_2_MEMORY_WRITE_BIT;
 	imageBarrier.dstStageMask           = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT; // All future commands
 	imageBarrier.dstAccessMask          = VK_ACCESS_2_MEMORY_WRITE_BIT | VK_ACCESS_2_MEMORY_READ_BIT;
-
 	imageBarrier.oldLayout              = currentLayout;
 	imageBarrier.newLayout              = newLayout;
 
@@ -30,15 +29,15 @@ void vkutil::TransitionImage(VkCommandBuffer commandBuffer, VkImage image, VkIma
 	vkCmdPipelineBarrier2(commandBuffer, &depInfo);
 }
 
-void vkutil::CopyImageToImage(VkCommandBuffer commandBuffer, VkImage source, VkImage destination, VkExtent2D srcSize, VkExtent2D dstSize) {
+void vkutil::CopyImageToImage(const VkCommandBuffer commandBuffer, const VkImage source, const VkImage destination, const VkExtent2D sourceSize, const VkExtent2D destinationSize) {
 	VkImageBlit2 blitRegion { .sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2, .pNext = nullptr };
 
-	blitRegion.srcOffsets[1].x               = srcSize.width;
-	blitRegion.srcOffsets[1].y               = srcSize.height;
+	blitRegion.srcOffsets[1].x               = sourceSize.width;
+	blitRegion.srcOffsets[1].y               = sourceSize.height;
 	blitRegion.srcOffsets[1].z               = 1;
 
-	blitRegion.dstOffsets[1].x               = dstSize.width;
-	blitRegion.dstOffsets[1].y               = dstSize.height;
+	blitRegion.dstOffsets[1].x               = destinationSize.width;
+	blitRegion.dstOffsets[1].y               = destinationSize.height;
 	blitRegion.dstOffsets[1].z               = 1;
 
 	blitRegion.srcSubresource.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -67,7 +66,6 @@ void vkutil::CopyImageToImage(VkCommandBuffer commandBuffer, VkImage source, VkI
 void vkutil::GenerateMipmaps(const VkCommandBuffer commandBuffer, const VkImage image, VkExtent2D imageSize) {
 	const int mipLevels = static_cast<int>(std::floor(std::log2(std::max(imageSize.width, imageSize.height)))) + 1;
 	for (int mip = 0; mip < mipLevels; mip++) {
-
 		VkExtent2D halfSize = imageSize;
 		halfSize.width /= 2;
 		halfSize.height /= 2;
@@ -130,6 +128,7 @@ void vkutil::GenerateMipmaps(const VkCommandBuffer commandBuffer, const VkImage 
 		}
 	}
 
+	// TODO: Do a manual optimized transition instead.
 	// Transition all mip levels into the final read_only layout
 	TransitionImage(commandBuffer, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 }

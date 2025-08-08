@@ -114,7 +114,7 @@ namespace vkinit {
 			.imageLayout = layout,
 			.loadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR,
 			.storeOp     = VK_ATTACHMENT_STORE_OP_STORE,
-			.clearValue  = { .depthStencil = { .depth = 0.0f, .stencil = 0 } }
+			.clearValue  = { .depthStencil = { .depth = 0.0F, .stencil = 0 } } // Clear depth is 0.0 because we Reversed Z
 		};
 	}
 
