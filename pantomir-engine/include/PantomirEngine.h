@@ -269,7 +269,7 @@ public:
 
 	std::unordered_map<std::string, std::shared_ptr<LoadedGLTF>> _loadedScenes;
 	std::unordered_map<std::string, std::shared_ptr<LoadedHDRI>> _loadedHDRIs;
-	std::shared_ptr<LoadedHDRI>                                  _selectedHDRI;
+	std::shared_ptr<LoadedHDRI>                                  _currentHDRI;
 
 	GLTFMetallic_Roughness                                       _metalRoughMaterial;
 	MaterialInstance                                             _defaultMaterialInstance {};

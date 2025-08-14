@@ -25,13 +25,13 @@
 
 #include "Camera.h"
 
+#include <glm/gtc/type_ptr.hpp>
+#include <glm/gtx/norm.hpp>
+#include <glm/gtx/string_cast.hpp> // TODO: Used for debug. Not going to wrap with NDEBUG for now.
 #include <glm/gtx/transform.hpp>
 
 #include "PantomirFunctionLibrary.h"
 #include "VkPushConstants.h"
-
-// TODO: Used for debug. Not going to wrap with NDEBUG for now.
-#include <glm/gtx/string_cast.hpp>
 
 void GLTFMetallic_Roughness::BuildPipelines(PantomirEngine* engine) {
 	VkShaderModule meshVertexShader;
@@ -180,7 +180,7 @@ void MeshNode::FillDrawContext(const glm::mat4& topMatrix, DrawContext& drawCont
 	const glm::mat4 nodeMatrix = topMatrix * _worldTransform;
 
 	for (const GeoSurface& geoSurface : _mesh->surfaces) {
-		RenderObject renderObject;
+		RenderObject renderObject {};
 		renderObject.indexCount          = geoSurface.count;
 		renderObject.firstIndex          = geoSurface.startIndex;
 		renderObject.indexBuffer         = _mesh->meshBuffers.indexBuffer.buffer;
@@ -264,8 +264,42 @@ void PantomirEngine::MainLoop() {
 		ImGui::NewFrame();
 
 		if (ImGui::Begin("Lights")) {
-			// TODO: Use a reference to some lighting effects
-			ImGui::SliderFloat("Render Scale", &_renderScale, 0.3f, 1.f);
+
+			// Render scale control
+			ImGui::SliderFloat("Render Scale", &_renderScale, 0.3f, 1.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+
+			// Ambient color (allow HDR range)
+			ImGui::ColorEdit3("Ambient Color", glm::value_ptr(_sceneData.ambientColor), ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR);
+
+			// Sunlight color (allow HDR range)
+			ImGui::ColorEdit3("Sunlight Color", glm::value_ptr(_sceneData.sunlightColor), ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR);
+
+			// Sunlight direction (as a normalized vector)
+			glm::vec3 sunDirection = glm::vec3(_sceneData.sunlightDirection);
+			if (ImGui::DragFloat3("Sunlight Direction", glm::value_ptr(sunDirection), 0.01f, -1.0f, 1.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp)) {
+				if (glm::length2(sunDirection) > 0.0f) { // Avoid NaNs
+					sunDirection                 = glm::normalize(sunDirection);
+					_sceneData.sunlightDirection = glm::vec4(sunDirection, 1.0f);
+				}
+			}
+		}
+		ImGui::End();
+
+		if (ImGui::Begin("HDRI Selector")) {
+			static std::string currentName;
+
+			if (ImGui::BeginCombo("HDRI", currentName.c_str())) {
+				for (auto& [name, hdri] : _loadedHDRIs) {
+					bool isSelected = (currentName == name);
+					if (ImGui::Selectable(name.c_str(), isSelected)) {
+						currentName = name;
+						_currentHDRI = hdri;
+					}
+					if (isSelected)
+						ImGui::SetItemDefaultFocus();
+				}
+				ImGui::EndCombo();
+			}
 		}
 
 		ImGui::End();
@@ -813,6 +847,10 @@ void PantomirEngine::InitDefaultData() {
 	_mainCamera._pitch                    = 0;
 	_mainCamera._yaw                      = 0;
 
+	_sceneData.ambientColor               = glm::vec4(.1f);
+	_sceneData.sunlightColor              = glm::vec4(1.f);
+	_sceneData.sunlightDirection          = glm::vec4(0, 0, -1.0, 1.f);
+
 	// 3 default textures, white, grey, black. 1 pixel each
 	uint32_t white                        = glm::packUnorm4x8(glm::vec4(1, 1, 1, 1));
 	_whiteImage                           = CreateImage((void*)&white, VkExtent3D { 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
@@ -881,13 +919,17 @@ void PantomirEngine::InitDefaultData() {
 	std::string                                modelPath         = { "Assets/Models/Echidna1.glb" };
 	std::optional<std::shared_ptr<LoadedGLTF>> modelFile         = LoadGltf(this, modelPath);
 	std::string                                hdriPath          = { "Assets/Textures/citrus_orchard_road_puresky_4k.hdr" };
+	std::string                                hdriPath2         = { "Assets/Textures/brown_photostudio_02_4k.hdr" };
 	std::optional<std::shared_ptr<LoadedHDRI>> hdriFile          = LoadHDRI(this, hdriPath);
+	std::optional<std::shared_ptr<LoadedHDRI>> hdriFile2         = LoadHDRI(this, hdriPath2);
 
 	assert(modelFile.has_value());
 	assert(hdriFile.has_value());
 
 	_loadedScenes["Echidna1"]                      = *modelFile;
 	_loadedHDRIs["citrus_orchard_road_puresky_4k"] = *hdriFile;
+	_loadedHDRIs["brown_photostudio_02_4k"]        = *hdriFile2;
+	_currentHDRI = _loadedHDRIs["citrus_orchard_road_puresky_4k"];
 
 	_shutdownDeletionQueue.PushFunction([this, materialConstants]() {
 		DestroyBuffer(materialConstants);
@@ -1059,7 +1101,7 @@ void PantomirEngine::DrawHDRI(const VkCommandBuffer commandBuffer) {
 	VkDescriptorSet     hdriDescriptorSet = GetCurrentFrame().descriptorPoolManager.Allocate(_logicalGPU, _hdriDescriptorSetLayout); // Allocate a set from a descriptor pool, using this layout.
 	DescriptorSetWriter singleImageDescriptorWriter;
 	// TODO: Maybe we can do some HDRI switched with loaded hdris, and then call this function to update with the new selected HDRI.
-	singleImageDescriptorWriter.WriteImage(0, _loadedHDRIs["citrus_orchard_road_puresky_4k"]->_allocatedImage.imageView, _loadedHDRIs["citrus_orchard_road_puresky_4k"]->_sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+	singleImageDescriptorWriter.WriteImage(0, _currentHDRI->_allocatedImage.imageView, _currentHDRI->_sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 	singleImageDescriptorWriter.UpdateSet(_logicalGPU, hdriDescriptorSet);
 
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _hdriPipelineLayout, 0, 1, &hdriDescriptorSet, 0, nullptr);
@@ -1189,8 +1231,6 @@ void PantomirEngine::UpdateScene() {
 	_mainCamera.Update(_deltaTime);
 
 	const glm::mat4 view       = _mainCamera.GetViewMatrix();
-
-	// Camera projection
 	const glm::mat4 projection = GetProjectionMatrix();
 
 	_sceneData.view            = view;
@@ -1201,10 +1241,6 @@ void PantomirEngine::UpdateScene() {
 	_mainDrawContext.maskedSurfaces.clear();
 	_mainDrawContext.transparentSurfaces.clear();
 	_loadedScenes["Echidna1"]->FillDrawContext(glm::mat4 { 1.f }, _mainDrawContext);
-
-	_sceneData.ambientColor                                                   = glm::vec4(.1f);
-	_sceneData.sunlightColor                                                  = glm::vec4(1.f);
-	_sceneData.sunlightDirection                                              = glm::vec4(0, 0, -1.0, 1.f);
 
 	const std::chrono::time_point<std::chrono::steady_clock> end              = std::chrono::steady_clock::now();
 	const std::chrono::duration<float>                       elapsed          = std::chrono::duration<float>(end - start);
