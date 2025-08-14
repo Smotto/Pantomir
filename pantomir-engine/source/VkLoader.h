@@ -57,7 +57,7 @@ struct LoadedGLTF final : IRenderable {
 	// Nodes that don't have a parent, for iterating through the file in tree order
 	std::vector<std::shared_ptr<Node>>                             _topNodes;
 	std::vector<VkSampler>                                         _samplers;
-	DescriptorAllocatorGrowable                                    _descriptorPool;
+	DescriptorPoolManager                                          _descriptorPool;
 	AllocatedBuffer                                                _materialDataBuffer;
 	PantomirEngine*                                                _enginePtr;
 
@@ -72,11 +72,11 @@ private:
 };
 
 struct LoadedHDRI {
-	AllocatedImage              _allocatedImage;
+	AllocatedImage        _allocatedImage;
 
-	VkSampler                   _sampler;
-	DescriptorAllocatorGrowable _descriptorPool;
-	PantomirEngine*             _enginePtr;
+	VkSampler             _sampler;
+	DescriptorPoolManager _descriptorPool;
+	PantomirEngine*       _enginePtr;
 
 	~LoadedHDRI() {
 		ClearAll();

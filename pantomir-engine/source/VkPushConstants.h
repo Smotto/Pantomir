@@ -19,7 +19,7 @@ struct ComputeEffect {
 
 // Push constants for our mesh object draws
 struct GPUDrawPushConstants {
-	glm::mat4       worldMatrix;
+	glm::mat4       worldSpaceTransform;
 	VkDeviceAddress vertexBufferAddress;
 };
 

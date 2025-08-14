@@ -171,15 +171,15 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, cons
 		LOG(Engine, Error, "Failed to load GLTF: {}", getErrorMessage(assetResult.error()));
 		return std::nullopt;
 	}
-	fastgltf::Asset                                         gltfAsset = std::move(assetResult.get());
+	fastgltf::Asset                                                    gltfAsset = std::move(assetResult.get());
 
-	std::vector<DescriptorAllocatorGrowable::PoolSizeRatio> poolSizeRatios { { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4 },
-		                                                                     { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 2 },
-		                                                                     { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1 } };
+	std::vector<DescriptorPoolManager::DescriptorTypeCountMultipliers> poolSizeRatios { { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4 },
+		                                                                                { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 2 },
+		                                                                                { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1 } };
 
-	std::shared_ptr<LoadedGLTF>                             currentGLTFPointer = std::make_shared<LoadedGLTF>();
-	currentGLTFPointer->_enginePtr                                             = engine;
-	LoadedGLTF& currentGLTF                                                    = *currentGLTFPointer;
+	std::shared_ptr<LoadedGLTF>                                        currentGLTFPointer = std::make_shared<LoadedGLTF>();
+	currentGLTFPointer->_enginePtr                                                        = engine;
+	LoadedGLTF& currentGLTF                                                               = *currentGLTFPointer;
 	currentGLTF._descriptorPool.Init(engine->_logicalGPU, gltfAsset.materials.size(), poolSizeRatios);
 
 	std::vector<std::shared_ptr<MeshAsset>>    meshes;
@@ -226,7 +226,7 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, cons
 		materials.push_back(currentMaterial);
 		currentGLTF._materials[material.name.c_str()] = currentMaterial;
 
-		GLTFMetallic_Roughness::MaterialConstants constants;
+		GLTFMetallic_Roughness::MaterialConstants constants {};
 		constants.colorFactors.x      = material.pbrData.baseColorFactor[0];
 		constants.colorFactors.y      = material.pbrData.baseColorFactor[1];
 		constants.colorFactors.z      = material.pbrData.baseColorFactor[2];
@@ -259,7 +259,7 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, cons
 		// Write material parameters to buffer
 		sceneMaterialConstants[dataIndex] = constants;
 
-		GLTFMetallic_Roughness::MaterialResources materialResources;
+		GLTFMetallic_Roughness::MaterialResources materialResources {};
 
 		// Default the material textures
 		materialResources.colorImage        = engine->_whiteImage;
@@ -374,7 +374,7 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, cons
 				vertices.resize(vertices.size() + posAccessor.count);
 
 				fastgltf::iterateAccessorWithIndex<glm::vec3>(gltfAsset, posAccessor, [&](glm::vec3 vertex, size_t index) {
-					Vertex newVertex;
+					Vertex newVertex {};
 					newVertex.position              = vertex;
 					newVertex.normal                = { 1, 0, 0 };
 					newVertex.color                 = glm::vec4 { 1.f };
@@ -469,16 +469,16 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, cons
 			               const glm::quat rotation(transform.rotation[3], transform.rotation[0], transform.rotation[1], transform.rotation[2]); // Note: glTF uses (x, y, z, w)
 			               const glm::vec3 scale(transform.scale[0], transform.scale[1], transform.scale[2]);
 
-			               const glm::mat4 T        = glm::translate(glm::mat4(1.0f), translation);
-			               const glm::mat4 R        = glm::toMat4(rotation);
-			               const glm::mat4 S        = glm::scale(glm::mat4(1.0f), scale);
+			               const glm::mat4 Translation = glm::translate(glm::mat4(1.0F), translation);
+			               const glm::mat4 Rotation    = glm::toMat4(rotation);
+			               const glm::mat4 Scale       = glm::scale(glm::mat4(1.0F), scale);
 
-			               newNode->_localTransform = T * R * S;
+			               newNode->_localTransform    = Translation * Rotation * Scale;
 		               } },
 		           gltfNode.transform);
 	}
 
-	// Build the node graph for hierarchal transforms later on.
+	// Build entity hierarchy
 	for (int index = 0; index < gltfAsset.nodes.size(); index++) {
 		fastgltf::Node&        node      = gltfAsset.nodes[index];
 		std::shared_ptr<Node>& sceneNode = nodes[index];
@@ -489,11 +489,11 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, cons
 		}
 	}
 
-	// Find the top nodes, with no parents
+	// Go through built nodes, propagate transforms on parents only.
 	for (std::shared_ptr<Node>& node : nodes) {
 		if (node->_parent.lock() == nullptr) {
 			currentGLTF._topNodes.push_back(node);
-			node->RefreshTransform(glm::mat4 { 1.f });
+			node->PropagateTransform(glm::mat4 { 1.F });
 		}
 	}
 
@@ -538,13 +538,12 @@ void LoadedGLTF::ClearAll() {
 std::optional<std::shared_ptr<LoadedHDRI>> LoadHDRI(PantomirEngine* engine, const std::string_view& filePath) {
 	LOG(Engine, Info, "Loading HDRI: {}", filePath);
 
-	std::shared_ptr<LoadedHDRI> loadedHDRI = std::make_shared<LoadedHDRI>();
+	std::shared_ptr<LoadedHDRI> loadedHDRI          = std::make_shared<LoadedHDRI>();
 
-	AllocatedImage              newImage {};
 	int                         width               = 0;
 	int                         height              = 0;
 	int                         channelCount        = 0;
-	constexpr int               desiredChannelCount = 4; // RGBE
+	constexpr int               desiredChannelCount = 4;
 	stbi_set_flip_vertically_on_load(true);
 	float* imageData = stbi_loadf(filePath.data(), &width, &height, &channelCount, desiredChannelCount); // HDR's have float format
 	stbi_set_flip_vertically_on_load(false);
@@ -557,24 +556,23 @@ std::optional<std::shared_ptr<LoadedHDRI>> LoadHDRI(PantomirEngine* engine, cons
 	loadedHDRI->_enginePtr = engine;
 
 	// Step 1: Initialize 1 descriptor pool for this HDRI
-	std::vector<DescriptorAllocatorGrowable::PoolSizeRatio> poolSizeRatios {
+	std::vector<DescriptorPoolManager::DescriptorTypeCountMultipliers> poolSizeRatios {
 		{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1 },
 	};
 	loadedHDRI->_descriptorPool.Init(engine->_logicalGPU, 1, poolSizeRatios);
 
 	// Step 2: Load sampler and create them on the device
 	VkSamplerCreateInfo samplerCreateInfo = {
-		.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-		.pNext = nullptr
+		.sType        = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+		.pNext        = nullptr,
+		.magFilter    = VK_FILTER_LINEAR,
+		.minFilter    = VK_FILTER_LINEAR,
+		.mipmapMode   = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+		.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+		.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+		.minLod       = 0,
+		.maxLod       = VK_LOD_CLAMP_NONE,
 	};
-
-	samplerCreateInfo.maxLod       = VK_LOD_CLAMP_NONE; // Vulkan will use all mips down to the lowest
-	samplerCreateInfo.minLod       = 0;                 // Only allow LODs >= 0 (highest quality level)
-	samplerCreateInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-	samplerCreateInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-	samplerCreateInfo.magFilter    = VK_FILTER_LINEAR;
-	samplerCreateInfo.minFilter    = VK_FILTER_LINEAR;
-	samplerCreateInfo.mipmapMode   = VK_SAMPLER_MIPMAP_MODE_LINEAR;
 
 	VkSampler newSampler;
 	vkCreateSampler(engine->_logicalGPU, &samplerCreateInfo, nullptr, &newSampler);
@@ -582,14 +580,13 @@ std::optional<std::shared_ptr<LoadedHDRI>> LoadHDRI(PantomirEngine* engine, cons
 
 	// Step 3: Load data to a staging buffer, then create image and views on the device
 	VkExtent3D imageExtent;
-	imageExtent.width  = static_cast<uint32_t>(width);
-	imageExtent.height = static_cast<uint32_t>(height);
-	imageExtent.depth  = 1; // Only going to be 1, we aren't making smokes or CT/MRI scans.
+	imageExtent.width           = static_cast<uint32_t>(width);
+	imageExtent.height          = static_cast<uint32_t>(height);
+	imageExtent.depth           = 1; // Only going to be 1, we aren't making smokes or CT/MRI scans.
 
-	newImage           = engine->CreateImage(imageData, imageExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, false);
+	loadedHDRI->_allocatedImage = engine->CreateImage(imageData, imageExtent, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_SAMPLED_BIT, false);
+
 	stbi_image_free(imageData);
-
-	loadedHDRI->_allocatedImage = newImage;
 
 	return loadedHDRI;
 }
@@ -598,7 +595,6 @@ void LoadedHDRI::ClearAll() {
 	const VkDevice device = _enginePtr->_logicalGPU;
 
 	_descriptorPool.DestroyPools(device);
-	// TODO: Destroy buffers? Does HDRI need buffers?
 	_enginePtr->DestroyImage(_allocatedImage);
 	vkDestroySampler(device, _sampler, nullptr);
 }

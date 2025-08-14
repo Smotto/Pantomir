@@ -87,10 +87,10 @@ struct Node : IRenderable {
 	glm::mat4                          _localTransform;
 	glm::mat4                          _worldTransform;
 
-	void                               RefreshTransform(const glm::mat4& parentMatrix) {
+	void                               PropagateTransform(const glm::mat4& parentMatrix) {
         _worldTransform = parentMatrix * _localTransform;
         for (const std::shared_ptr<Node>& child : _children) {
-            child->RefreshTransform(_worldTransform);
+            child->PropagateTransform(_worldTransform);
         }
 	}
 
@@ -99,6 +99,13 @@ struct Node : IRenderable {
 			child->FillDrawContext(topMatrix, drawContext);
 		}
 	}
+};
+
+struct MeshAsset;
+struct MeshNode final : Node {
+	std::shared_ptr<MeshAsset> _mesh;
+
+	void                       FillDrawContext(const glm::mat4& topMatrix, DrawContext& drawContext) override;
 };
 
 #define VK_CHECK(x)                                                          \
