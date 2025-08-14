@@ -33,48 +33,6 @@
 // TODO: Used for debug. Not going to wrap with NDEBUG for now.
 #include <glm/gtx/string_cast.hpp>
 
-bool IsVisible(const RenderObject& renderObject, const glm::mat4& viewProjection) {
-	constexpr std::array<glm::vec3, 8> unitCubeCorners {
-		glm::vec3 { 1, 1, 1 },
-		glm::vec3 { 1, 1, -1 },
-		glm::vec3 { 1, -1, 1 },
-		glm::vec3 { 1, -1, -1 },
-		glm::vec3 { -1, 1, 1 },
-		glm::vec3 { -1, 1, -1 },
-		glm::vec3 { -1, -1, 1 },
-		glm::vec3 { -1, -1, -1 },
-	};
-
-	const glm::mat4 objectToClipSpaceMatrix = viewProjection * renderObject.transform;
-
-	glm::vec3       clipSpaceMin            = glm::vec3 { 1.5F };
-	glm::vec3       clipSpaceMax            = glm::vec3 { -1.5F };
-
-	// Project each corner of the bounding box into clip space.
-	for (const glm::vec3& localCorner : unitCubeCorners) {
-		glm::vec3 worldCorner      = renderObject.bounds.originPoint + (localCorner * renderObject.bounds.extents);
-		glm::vec4 clipSpaceCorner  = objectToClipSpaceMatrix * glm::vec4(worldCorner, 1.0F);
-
-		// Divide by w to convert to normalized clip space (from -1 to 1)
-		glm::vec3 normalizedCorner = glm::vec3(clipSpaceCorner) / clipSpaceCorner.w;
-
-		// Expand the bounding box in clip space
-		clipSpaceMin               = glm::min(clipSpaceMin, normalizedCorner);
-		clipSpaceMax               = glm::max(clipSpaceMax, normalizedCorner);
-	}
-
-	constexpr glm::vec3 clipBoundsMin = { -1.0F, -1.0F, 0.0F };
-	constexpr glm::vec3 clipBoundsMax = { 1.0F, 1.0F, 1.0F };
-
-	// If the box is fully outside the clip space in any direction, it's not visible
-	bool                outOfBounds =
-	    clipSpaceMin.x > clipBoundsMax.x || clipSpaceMax.x < clipBoundsMin.x ||
-	    clipSpaceMin.y > clipBoundsMax.y || clipSpaceMax.y < clipBoundsMin.y ||
-	    clipSpaceMin.z > clipBoundsMax.z || clipSpaceMax.z < clipBoundsMin.z;
-
-	return !outOfBounds;
-}
-
 void GLTFMetallic_Roughness::BuildPipelines(PantomirEngine* engine) {
 	VkShaderModule meshVertexShader;
 	if (!vkutil::LoadShaderModule("Assets/Shaders/mesh.vert.spv", engine->_logicalGPU, &meshVertexShader)) {
@@ -411,7 +369,30 @@ AllocatedImage PantomirEngine::CreateImage(void* dataSource, const VkExtent3D si
 	memcpy(stagingBuffer.info.pMappedData, dataSource, dataSize);
 
 	// Vulkan doesn't allow us to send pixel data straight to an image, it has to be sent to a buffer first.
-	const AllocatedImage newImage = CreateImage(size, format, usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, mipmapped);
+	AllocatedImage newImage {};
+	newImage.imageFormat              = format;
+	newImage.imageExtent              = size;
+
+	VkImageCreateInfo imageCreateInfo = vkinit::ImageCreateInfo(format, usage | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, size);
+	if (mipmapped) {
+		imageCreateInfo.mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(size.width, size.height)))) + 1;
+	}
+
+	VmaAllocationCreateInfo vmaAllocationCreateInfo {};
+	vmaAllocationCreateInfo.usage         = VMA_MEMORY_USAGE_GPU_ONLY; // Allocate images on dedicated GPU memory
+	vmaAllocationCreateInfo.requiredFlags = static_cast<VkMemoryPropertyFlags>(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+	VK_CHECK(vmaCreateImage(_vmaAllocator, &imageCreateInfo, &vmaAllocationCreateInfo, &newImage.image, &newImage.allocation, nullptr));
+
+	VkImageAspectFlags aspectFlag = VK_IMAGE_ASPECT_COLOR_BIT;
+	if (format == VK_FORMAT_D32_SFLOAT) {
+		aspectFlag = VK_IMAGE_ASPECT_DEPTH_BIT;
+	}
+
+	VkImageViewCreateInfo viewInfo       = vkinit::ImageViewCreateInfo(format, newImage.image, aspectFlag);
+	viewInfo.subresourceRange.levelCount = imageCreateInfo.mipLevels;
+
+	VK_CHECK(vkCreateImageView(_logicalGPU, &viewInfo, nullptr, &newImage.imageView));
 
 	ImmediateSubmit([&](const VkCommandBuffer commandBuffer) {
 		VkBufferImageCopy copyRegion               = {};
@@ -678,6 +659,7 @@ void PantomirEngine::InitSyncStructures() {
 }
 
 void PantomirEngine::InitDescriptors() {
+
 	// Make the descriptor set layout for our scene draw
 	{
 		DescriptorLayoutBuilder builder;
@@ -894,7 +876,7 @@ void PantomirEngine::InitDefaultData() {
 	defaultMaterialResources.dataBuffer                          = materialConstants.buffer;
 	defaultMaterialResources.dataBufferOffset                    = 0;
 
-	_defaultData                                                 = _metalRoughMaterial.WriteMaterial(_logicalGPU, MaterialPass::Opaque, VK_CULL_MODE_NONE, defaultMaterialResources, GetCurrentFrame().descriptorPoolManager);
+	_defaultMaterialInstance                                     = _metalRoughMaterial.WriteMaterial(_logicalGPU, MaterialPass::Opaque, VK_CULL_MODE_NONE, defaultMaterialResources, GetCurrentFrame().descriptorPoolManager);
 
 	std::string                                modelPath         = { "Assets/Models/Echidna1.glb" };
 	std::optional<std::shared_ptr<LoadedGLTF>> modelFile         = LoadGltf(this, modelPath);
@@ -953,35 +935,6 @@ void PantomirEngine::ResizeSwapchain() {
 	_resizeRequested = false;
 }
 
-AllocatedImage PantomirEngine::CreateImage(const VkExtent3D size, const VkFormat format, const VkImageUsageFlags usage, const bool mipmapped) const {
-	AllocatedImage newImage {};
-	newImage.imageFormat              = format;
-	newImage.imageExtent              = size;
-
-	VkImageCreateInfo imageCreateInfo = vkinit::ImageCreateInfo(format, usage, size);
-	if (mipmapped) {
-		imageCreateInfo.mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(size.width, size.height)))) + 1;
-	}
-
-	VmaAllocationCreateInfo vmaAllocationCreateInfo {};
-	vmaAllocationCreateInfo.usage         = VMA_MEMORY_USAGE_GPU_ONLY; // Allocate images on dedicated GPU memory
-	vmaAllocationCreateInfo.requiredFlags = static_cast<VkMemoryPropertyFlags>(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-	VK_CHECK(vmaCreateImage(_vmaAllocator, &imageCreateInfo, &vmaAllocationCreateInfo, &newImage.image, &newImage.allocation, nullptr));
-
-	VkImageAspectFlags aspectFlag = VK_IMAGE_ASPECT_COLOR_BIT;
-	if (format == VK_FORMAT_D32_SFLOAT) {
-		aspectFlag = VK_IMAGE_ASPECT_DEPTH_BIT;
-	}
-
-	VkImageViewCreateInfo viewInfo       = vkinit::ImageViewCreateInfo(format, newImage.image, aspectFlag);
-	viewInfo.subresourceRange.levelCount = imageCreateInfo.mipLevels;
-
-	VK_CHECK(vkCreateImageView(_logicalGPU, &viewInfo, nullptr, &newImage.imageView));
-
-	return newImage;
-}
-
 void PantomirEngine::Draw() {
 	UpdateScene();
 
@@ -1012,6 +965,21 @@ void PantomirEngine::Draw() {
 
 	/* Recording State */
 	VK_CHECK(vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo));
+
+	VkViewport viewport = {};
+	viewport.x          = 0;
+	viewport.y          = 0;
+	viewport.width      = static_cast<float>(_windowExtent.width);
+	viewport.height     = static_cast<float>(_windowExtent.height);
+	viewport.minDepth   = 0.f;
+	viewport.maxDepth   = 1.f;
+	vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+	VkRect2D scissor      = {};
+	scissor.offset.x      = 0;
+	scissor.offset.y      = 0;
+	scissor.extent.width  = _windowExtent.width;
+	scissor.extent.height = _windowExtent.height;
+	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
 	vkutil::TransitionImage(commandBuffer, _colorImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 	vkutil::TransitionImage(commandBuffer, _depthImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
@@ -1085,20 +1053,6 @@ void PantomirEngine::DrawHDRI(const VkCommandBuffer commandBuffer) {
 	};
 
 	vkCmdBeginRendering(commandBuffer, &renderInfo);
-	VkViewport viewport = {};
-	viewport.x          = 0;
-	viewport.y          = 0;
-	viewport.width      = static_cast<float>(_windowExtent.width);
-	viewport.height     = static_cast<float>(_windowExtent.height);
-	viewport.minDepth   = 0.F;
-	viewport.maxDepth   = 1.F;
-	vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
-	VkRect2D scissor      = {};
-	scissor.offset.x      = 0;
-	scissor.offset.y      = 0;
-	scissor.extent.width  = _windowExtent.width;
-	scissor.extent.height = _windowExtent.height;
-	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _hdriPipeline);
 
@@ -1119,50 +1073,23 @@ void PantomirEngine::DrawHDRI(const VkCommandBuffer commandBuffer) {
 void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
 	// Visibility Culling
 	std::vector<uint32_t> opaqueDraws;
-	opaqueDraws.reserve(_mainDrawContext.opaqueSurfaces.size());
-	for (uint32_t index = 0; index < _mainDrawContext.opaqueSurfaces.size(); ++index) {
-		if (IsVisible(_mainDrawContext.opaqueSurfaces[index], _sceneData.viewProjection)) {
-			opaqueDraws.push_back(index);
-		}
-	}
 	std::vector<uint32_t> maskedDraws;
-	maskedDraws.reserve(_mainDrawContext.maskedSurfaces.size());
-	for (uint32_t index = 0; index < _mainDrawContext.maskedSurfaces.size(); ++index) {
-		if (IsVisible(_mainDrawContext.maskedSurfaces[index], _sceneData.viewProjection)) {
-			maskedDraws.push_back(index);
-		}
-	}
 	std::vector<uint32_t> transparentDraws;
-	transparentDraws.reserve(_mainDrawContext.transparentSurfaces.size());
-	for (uint32_t index = 0; index < _mainDrawContext.transparentSurfaces.size(); ++index) {
-		if (IsVisible(_mainDrawContext.transparentSurfaces[index], _sceneData.viewProjection)) {
-			transparentDraws.push_back(index);
-		}
-	}
 
-	// Sorting the opaque surfaces by material and mesh
-	std::ranges::sort(opaqueDraws, [&](const uint32_t& iA, const uint32_t& iB) {
-		const RenderObject& A = _mainDrawContext.opaqueSurfaces[iA];
-		const RenderObject& B = _mainDrawContext.opaqueSurfaces[iB];
-		if (A.material == B.material) {
-			return A.indexBuffer < B.indexBuffer;
-		}
-		return A.material < B.material;
-	});
-	std::ranges::sort(maskedDraws, [&](const uint32_t& iA, const uint32_t& iB) {
-		const RenderObject& A = _mainDrawContext.maskedSurfaces[iA];
-		const RenderObject& B = _mainDrawContext.maskedSurfaces[iB];
-		if (A.material == B.material) {
-			return A.indexBuffer < B.indexBuffer;
-		}
-		return A.material < B.material;
-	});
-	std::ranges::sort(transparentDraws, [&](const uint32_t& iA, const uint32_t& iB) {
-		const float distanceA = glm::length(_mainCamera._position - glm::vec3(_mainDrawContext.transparentSurfaces[iA].transform[3])); // Using squared distance is fine for sorting
-		const float distanceB = glm::length(_mainCamera._position - glm::vec3(_mainDrawContext.transparentSurfaces[iB].transform[3]));
-		return distanceA > distanceB; // Draw farthest first
-	});
+	BuildDrawListByMaterialMesh(_mainDrawContext.opaqueSurfaces,
+	                            _sceneData.viewProjection,
+	                            opaqueDraws);
 
+	BuildDrawListByMaterialMesh(_mainDrawContext.maskedSurfaces,
+	                            _sceneData.viewProjection,
+	                            maskedDraws);
+
+	BuildDrawListTransparent(_mainDrawContext.transparentSurfaces,
+	                         _sceneData.viewProjection,
+	                         _mainCamera._position,
+	                         transparentDraws);
+
+	// Timer Starts
 	_stats.drawcallCount                                                         = 0;
 	_stats.triangleCount                                                         = 0;
 	std::chrono::time_point<std::chrono::steady_clock> start                     = std::chrono::steady_clock::now();
@@ -1175,7 +1102,7 @@ void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
 	GPUSceneData* uniformBufferData            = static_cast<GPUSceneData*>(uniformBufferGPUSceneData.allocation->GetMappedData());
 	*uniformBufferData                         = _sceneData;
 
-	VkDescriptorSet     sceneDataDescriptorSet = GetCurrentFrame().descriptorPoolManager.Allocate(_logicalGPU, _gpuSceneDataDescriptorSetLayout); // TODO: Allocating on the fly? Are you insane?
+	VkDescriptorSet     sceneDataDescriptorSet = GetCurrentFrame().descriptorPoolManager.Allocate(_logicalGPU, _gpuSceneDataDescriptorSetLayout);
 	DescriptorSetWriter uniformWriter;
 	uniformWriter.WriteBuffer(0, uniformBufferGPUSceneData.buffer, sizeof(GPUSceneData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 	uniformWriter.UpdateSet(_logicalGPU, sceneDataDescriptorSet);
@@ -1201,21 +1128,6 @@ void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
                 lastPipeline = renderObject.material->pipeline;
                 vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderObject.material->pipeline->pipeline);
                 vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderObject.material->pipeline->layout, 0, 1, &sceneDataDescriptorSet, 0, nullptr);
-                // TODO: Maybe cache viewport and scissor. This works since we are dynamically changing pipelines.
-                VkViewport viewport = {};
-                viewport.x          = 0;
-                viewport.y          = 0;
-                viewport.width      = static_cast<float>(_windowExtent.width);
-                viewport.height     = static_cast<float>(_windowExtent.height);
-                viewport.minDepth   = 0.f;
-                viewport.maxDepth   = 1.f;
-                vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
-                VkRect2D scissor      = {};
-                scissor.offset.x      = 0;
-                scissor.offset.y      = 0;
-                scissor.extent.width  = _windowExtent.width;
-                scissor.extent.height = _windowExtent.height;
-                vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
             }
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderObject.material->pipeline->layout, 1, 1, &renderObject.material->descriptorSet, 0, nullptr);
         }
@@ -1252,6 +1164,7 @@ void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
 	_mainDrawContext.maskedSurfaces.clear();
 	_mainDrawContext.transparentSurfaces.clear();
 
+	// Timer Stops
 	std::chrono::time_point<std::chrono::steady_clock> end     = std::chrono::steady_clock::now();
 	std::chrono::microseconds                          elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 	_stats.meshDrawTime                                        = elapsed.count() / 1000.f;
@@ -1289,7 +1202,6 @@ void PantomirEngine::UpdateScene() {
 	_mainDrawContext.transparentSurfaces.clear();
 	_loadedScenes["Echidna1"]->FillDrawContext(glm::mat4 { 1.f }, _mainDrawContext);
 
-	// Some default lighting parameters
 	_sceneData.ambientColor                                                   = glm::vec4(.1f);
 	_sceneData.sunlightColor                                                  = glm::vec4(1.f);
 	_sceneData.sunlightDirection                                              = glm::vec4(0, 0, -1.0, 1.f);

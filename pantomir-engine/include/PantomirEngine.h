@@ -119,6 +119,96 @@ struct GLTFMetallic_Roughness {
 	MaterialInstance    WriteMaterial(VkDevice device, MaterialPass passType, VkCullModeFlagBits cullMode, const MaterialResources& resources, DescriptorPoolManager& descriptorPoolManager);
 };
 
+inline bool IsVisible(const RenderObject& renderObject, const glm::mat4& viewProjection) {
+	constexpr std::array<glm::vec3, 8> unitCubeCorners {
+		glm::vec3 { 1, 1, 1 },
+		glm::vec3 { 1, 1, -1 },
+		glm::vec3 { 1, -1, 1 },
+		glm::vec3 { 1, -1, -1 },
+		glm::vec3 { -1, 1, 1 },
+		glm::vec3 { -1, 1, -1 },
+		glm::vec3 { -1, -1, 1 },
+		glm::vec3 { -1, -1, -1 },
+	};
+
+	const glm::mat4 objectToClipSpaceMatrix = viewProjection * renderObject.transform;
+
+	glm::vec3       clipSpaceMin            = glm::vec3 { 1.5F };
+	glm::vec3       clipSpaceMax            = glm::vec3 { -1.5F };
+
+	// Project each corner of the bounding box into clip space.
+	for (const glm::vec3& localCorner : unitCubeCorners) {
+		glm::vec3 worldCorner      = renderObject.bounds.originPoint + (localCorner * renderObject.bounds.extents);
+		glm::vec4 clipSpaceCorner  = objectToClipSpaceMatrix * glm::vec4(worldCorner, 1.0F);
+
+		// Divide by w to convert to normalized clip space (from -1 to 1)
+		glm::vec3 normalizedCorner = glm::vec3(clipSpaceCorner) / clipSpaceCorner.w;
+
+		// Expand the bounding box in clip space
+		clipSpaceMin               = glm::min(clipSpaceMin, normalizedCorner);
+		clipSpaceMax               = glm::max(clipSpaceMax, normalizedCorner);
+	}
+
+	constexpr glm::vec3 clipBoundsMin = { -1.0F, -1.0F, 0.0F };
+	constexpr glm::vec3 clipBoundsMax = { 1.0F, 1.0F, 1.0F };
+
+	// If the box is fully outside the clip space in any direction, it's not visible
+	bool                outOfBounds =
+	    clipSpaceMin.x > clipBoundsMax.x || clipSpaceMax.x < clipBoundsMin.x ||
+	    clipSpaceMin.y > clipBoundsMax.y || clipSpaceMax.y < clipBoundsMin.y ||
+	    clipSpaceMin.z > clipBoundsMax.z || clipSpaceMax.z < clipBoundsMin.z;
+
+	return !outOfBounds;
+}
+
+inline void BuildDrawListByMaterialMesh(const std::vector<RenderObject>& surfaces,
+                                        const glm::mat4&                 viewProjection,
+                                        std::vector<uint32_t>&           out_indices) {
+	out_indices.clear();
+	out_indices.reserve(surfaces.size());
+
+	// Visibility culling
+	for (uint32_t index = 0; index < static_cast<uint32_t>(surfaces.size()); ++index) {
+		if (IsVisible(surfaces[index], viewProjection)) {
+			out_indices.push_back(index);
+		}
+	}
+
+	// Sort by material, then by mesh index
+	std::ranges::sort(out_indices, [&](const uint32_t& a, const uint32_t& b) {
+		const RenderObject& A = surfaces[a];
+		const RenderObject& B = surfaces[b];
+		if (A.material == B.material) {
+			return A.indexBuffer < B.indexBuffer;
+		}
+		return A.material < B.material;
+	});
+}
+
+inline void BuildDrawListTransparent(const std::vector<RenderObject>& surfaces,
+                                     const glm::mat4&                 viewProjection,
+                                     const glm::vec3&                 cameraPos,
+                                     std::vector<uint32_t>&           out_indices) {
+	out_indices.clear();
+	out_indices.reserve(surfaces.size());
+
+	// Visibility culling
+	for (uint32_t index = 0; index < static_cast<uint32_t>(surfaces.size()); ++index) {
+		if (IsVisible(surfaces[index], viewProjection)) {
+			out_indices.push_back(index);
+		}
+	}
+
+	// Sort farthest to nearest (squared distance for speed)
+	std::ranges::sort(out_indices, [&](const uint32_t& a, const uint32_t& b) {
+		const glm::vec3 posA   = glm::vec3(surfaces[a].transform[3]);
+		const glm::vec3 posB   = glm::vec3(surfaces[b].transform[3]);
+		const float     distA2 = glm::dot(cameraPos - posA, cameraPos - posA);
+		const float     distB2 = glm::dot(cameraPos - posB, cameraPos - posB);
+		return distA2 > distB2; // farthest first
+	});
+}
+
 class PantomirEngine {
 public:
 	bool                     _bUseValidationLayers = true;
@@ -135,9 +225,6 @@ public:
 	VkCommandBuffer          _immediateCommandBuffer {};
 	VkCommandPool            _immediateCommandPool {};
 
-	VkPipeline               _gradientPipeline {};
-	VkPipelineLayout         _gradientPipelineLayout {};
-
 	GPUSceneData             _sceneData {};
 	VkDescriptorSetLayout    _gpuSceneDataDescriptorSetLayout {};
 	VkDescriptorSetLayout    _hdriDescriptorSetLayout {};
@@ -150,7 +237,6 @@ public:
 	VmaAllocator             _vmaAllocator {};
 	DeletionQueue            _shutdownDeletionQueue {};
 
-	bool                     _isInitialized { false };
 	int                      _frameNumber { 0 };
 	bool                     _stopRendering { false };
 	bool                     _resizeRequested { false };
@@ -183,9 +269,10 @@ public:
 
 	std::unordered_map<std::string, std::shared_ptr<LoadedGLTF>> _loadedScenes;
 	std::unordered_map<std::string, std::shared_ptr<LoadedHDRI>> _loadedHDRIs;
+	std::shared_ptr<LoadedHDRI>                                  _selectedHDRI;
 
-	MaterialInstance                                             _defaultData {};
 	GLTFMetallic_Roughness                                       _metalRoughMaterial;
+	MaterialInstance                                             _defaultMaterialInstance {};
 
 	AllocatedImage                                               _whiteImage {};
 	AllocatedImage                                               _blackImage {};
@@ -223,29 +310,27 @@ private:
 	PantomirEngine();
 	~PantomirEngine();
 
-	void                         InitSDLWindow();
-	void                         InitVulkan();
-	void                         InitSwapchain();
-	void                         InitCommands();
-	void                         InitSyncStructures();
-	void                         InitDescriptors();
-	void                         InitPipelines();
-	void                         InitImgui();
-	void                         InitHDRIPipeline();
-	void                         InitDefaultData();
+	void InitSDLWindow();
+	void InitVulkan();
+	void InitSwapchain();
+	void InitCommands();
+	void InitSyncStructures();
+	void InitDescriptors();
+	void InitPipelines();
+	void InitImgui();
+	void InitHDRIPipeline();
+	void InitDefaultData();
 
-	void                         CreateSwapchain(uint32_t width, uint32_t height);
-	void                         DestroySwapchain() const;
-	void                         ResizeSwapchain();
+	void CreateSwapchain(uint32_t width, uint32_t height);
+	void DestroySwapchain() const;
+	void ResizeSwapchain();
 
-	[[nodiscard]] AllocatedImage CreateImage(const VkExtent3D size, const VkFormat format, const VkImageUsageFlags usage, const bool mipmapped) const;
+	void Draw();
+	void DrawHDRI(VkCommandBuffer commandBuffer);
+	void DrawGeometry(VkCommandBuffer commandBuffer);
+	void DrawImgui(VkCommandBuffer commandBuffer, VkImageView targetImageView) const;
 
-	void                         Draw();
-	void                         DrawHDRI(VkCommandBuffer commandBuffer);
-	void                         DrawGeometry(VkCommandBuffer commandBuffer);
-	void                         DrawImgui(VkCommandBuffer commandBuffer, VkImageView targetImageView) const;
-
-	void                         UpdateScene();
+	void UpdateScene();
 };
 
 #endif /*! PANTOMIR_ENGINE_H_ */
