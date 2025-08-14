@@ -73,7 +73,6 @@ private:
 
 struct LoadedHDRI {
 	AllocatedImage        _allocatedImage;
-
 	VkSampler             _sampler;
 	DescriptorPoolManager _descriptorPool;
 	PantomirEngine*       _enginePtr;

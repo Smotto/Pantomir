@@ -494,6 +494,8 @@ PantomirEngine::~PantomirEngine() {
 
 	_loadedScenes.clear();
 	_loadedHDRIs.clear();
+	// TODO: I really don't like handling a shared ptr like this.
+	_currentHDRI.reset();
 
 	for (auto& frame : _frames) {
 		frame.deletionQueue.Flush();
@@ -742,7 +744,7 @@ void PantomirEngine::InitPipelines() {
 }
 
 void PantomirEngine::InitImgui() {
-	// 1: Create descriptor pool for IMGUI the size of the pool is very oversized, but it's copied from imgui demo itself.
+	// 1: Create descriptor pool for IMGUI, it will have descriptor types with how many it can have.
 	const VkDescriptorPoolSize poolSizes[] = {
 		{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 256 },
 		{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 3 }
@@ -1100,7 +1102,6 @@ void PantomirEngine::DrawHDRI(const VkCommandBuffer commandBuffer) {
 
 	VkDescriptorSet     hdriDescriptorSet = GetCurrentFrame().descriptorPoolManager.Allocate(_logicalGPU, _hdriDescriptorSetLayout); // Allocate a set from a descriptor pool, using this layout.
 	DescriptorSetWriter singleImageDescriptorWriter;
-	// TODO: Maybe we can do some HDRI switched with loaded hdris, and then call this function to update with the new selected HDRI.
 	singleImageDescriptorWriter.WriteImage(0, _currentHDRI->_allocatedImage.imageView, _currentHDRI->_sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 	singleImageDescriptorWriter.UpdateSet(_logicalGPU, hdriDescriptorSet);
 
