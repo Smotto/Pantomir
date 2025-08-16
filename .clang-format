@@ -1,49 +1,47 @@
 ---
-Language:        Cpp
-BasedOnStyle:    LLVM
+Language: Cpp
+BasedOnStyle: LLVM
 
 
-IndentWidth:     4
-TabWidth:        4
-UseTab:          ForIndentation
+IndentWidth: 4
+TabWidth: 4
+UseTab: ForIndentation
 
 
 AccessModifierOffset: -4
-ColumnLimit:           0
-BreakBeforeBraces:     Attach
+ColumnLimit: 0
+BreakBeforeBraces: Allman
 
 
-AllowShortLoopsOnASingleLine:         false
-AllowShortFunctionsOnASingleLine:     None
-AllowShortIfStatementsOnASingleLine:  Never
-AllowShortBlocksOnASingleLine:        Never
+AllowShortLoopsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortBlocksOnASingleLine: Never
 
 
 BinPackParameters: false
-BinPackArguments:  false
+BinPackArguments: false
 
 
-#ReflowComments:    IndentOnly
-KeepEmptyLinesAtTheStartOfBlocks: true
-
+#ReflowComments: IndentOnly
 
 DerivePointerAlignment: false
-PointerAlignment:       Left
+PointerAlignment: Left
 
 
-SpaceBeforeParens:             ControlStatements
-SpacesInContainerLiterals:     true
-SpacesInParentheses:           false
+SpaceBeforeParens: ControlStatements
+SpacesInContainerLiterals: true
+SpacesInParentheses: false
 SpacesInCStyleCastParentheses: false
 
 
-SortIncludes:     CaseSensitive
+SortIncludes: CaseSensitive
 IndentCaseBlocks: false
 IndentCaseLabels: true
 
 
 # Enable alignment of consecutive declarations and assignments:
-AlignConsecutiveDeclarations: AcrossEmptyLinesAndComments
+#AlignConsecutiveDeclarations: AcrossEmptyLinesAndComments
 #AlignConsecutiveDeclarations:
 #   Enabled: true
 #   AcrossComments: true
@@ -51,7 +49,7 @@ AlignConsecutiveDeclarations: AcrossEmptyLinesAndComments
 #   AlignFunctionDeclarations: true
 #   AlignFunctionPointers: true
 
-AlignConsecutiveAssignments: AcrossEmptyLinesAndComments
+#AlignConsecutiveAssignments: AcrossEmptyLinesAndComments
 #AlignConsecutiveAssignments:
 #   Enabled: true
 #   AcrossComments: true
@@ -59,7 +57,7 @@ AlignConsecutiveAssignments: AcrossEmptyLinesAndComments
 #   AlignCompound: true
 #   PadOperators: true
 
-AlignConsecutiveBitFields: AcrossEmptyLinesAndComments
+#AlignConsecutiveBitFields: AcrossEmptyLinesAndComments
 
 NamespaceIndentation: All
 

@@ -5,9 +5,9 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 file(GLOB_RECURSE UTIL_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/source/*.cpp")
-if(NOT UTIL_SOURCES)
+if (NOT UTIL_SOURCES)
     message(FATAL_ERROR "No util source files found in ${CMAKE_CURRENT_SOURCE_DIR}/src")
-endif()
+endif ()
 
 add_library(engine-utils STATIC ${UTIL_SOURCES})
 

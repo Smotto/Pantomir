@@ -7,13 +7,14 @@
 /*
 ================================================================================================
 
-	Macros for PantomirLogger
+    Macros for PantomirLogger
 
 ================================================================================================
 */
 
 // Define log categories as global constants
-namespace LogCategory {
+namespace LogCategory
+{
 	inline const std::string Engine = "Engine";
 	inline const std::string Engine_Platform = "Engine::Platform";
 	inline const std::string Engine_Renderer = "Engine::Renderer";
@@ -23,18 +24,22 @@ namespace LogCategory {
 	inline const std::string Tools = "Tools";
 
 	inline const std::string Temp = "Temp";
-}
+} // namespace LogCategory
 
-namespace Pantomir {
+namespace Pantomir
+{
 	// Helper to create custom category strings
-	inline std::string MakeLogCategory(const std::initializer_list<std::string>& categories) {
-		if (categories.begin() == categories.end()) return "Unknown";
+	inline std::string MakeLogCategory(const std::initializer_list<std::string>& categories)
+	{
+		if (categories.begin() == categories.end())
+			return "Unknown";
 
 		auto it = categories.begin();
 		std::string result = *it;
 		++it;
 
-		for (; it != categories.end(); ++it) {
+		for (; it != categories.end(); ++it)
+		{
 			result += "::" + *it;
 		}
 
@@ -44,16 +49,18 @@ namespace Pantomir {
 
 // Single LOG macro with category and level parameters
 #define LOG(category, level, formatStr, ...) \
-Pantomir::Logger::GetInstance().Log( \
-LogCategory::category, \
-Pantomir::LogLevel::level, \
-formatStr, ##__VA_ARGS__)
+	Pantomir::Logger::GetInstance().Log(     \
+	    LogCategory::category,               \
+	    Pantomir::LogLevel::level,           \
+	    formatStr,                           \
+	    ##__VA_ARGS__)
 
 // Custom category helper macro
 #define LOG_CUSTOM(categories, level, formatStr, ...) \
-Pantomir::Logger::GetInstance().Log( \
-Pantomir::MakeLogCategory(categories), \
-Pantomir::LogLevel::level, \
-formatStr, ##__VA_ARGS__)
+	Pantomir::Logger::GetInstance().Log(              \
+	    Pantomir::MakeLogCategory(categories),        \
+	    Pantomir::LogLevel::level,                    \
+	    formatStr,                                    \
+	    ##__VA_ARGS__)
 
 #endif /* LOGGERMACROS_H_ */
