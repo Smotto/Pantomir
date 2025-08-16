@@ -23,7 +23,7 @@ namespace Pantomir
 	public:
 		static Logger& GetInstance();
 
-		void SetMinLogLevel(LogLevel level);
+		void           SetMinLogLevel(LogLevel level);
 
 		template <typename... Args> // variadic template
 		void Log(const std::string& category, LogLevel level, const char* format, Args&&... args)
@@ -39,10 +39,10 @@ namespace Pantomir
 		Logger();
 		~Logger();
 
-		void WriteLog(LogLevel level, const std::string& category, const std::string& message);
+		void          WriteLog(LogLevel level, const std::string& category, const std::string& message);
 
-		LogLevel m_minLevel = LogLevel::Debug;
-		std::mutex m_logMutex;
+		LogLevel      m_minLevel = LogLevel::Debug;
+		std::mutex    m_logMutex;
 		std::ofstream m_logFile;
 	};
 

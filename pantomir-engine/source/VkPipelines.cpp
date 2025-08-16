@@ -30,7 +30,7 @@ VkPipeline PipelineBuilder::BuildPipeline(VkDevice device)
 
 	// Build the actual pipeline
 	// We know use all of the info structs we have been writing into, into this one to create the pipeline
-	VkGraphicsPipelineCreateInfo pipelineInfo = { .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
+	VkGraphicsPipelineCreateInfo         pipelineInfo = { .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO };
 	// Connect the renderInfo to the pNext extension mechanism
 	pipelineInfo.pNext = &_renderInfo;
 
@@ -45,7 +45,7 @@ VkPipeline PipelineBuilder::BuildPipeline(VkDevice device)
 	pipelineInfo.pDepthStencilState = &_depthStencil;
 	pipelineInfo.layout = _pipelineLayout;
 
-	VkDynamicState state[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+	VkDynamicState                   state[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
 
 	VkPipelineDynamicStateCreateInfo dynamicInfo = { .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO };
 	dynamicInfo.pDynamicStates = &state[0];
@@ -198,7 +198,7 @@ bool vkutil::LoadShaderModule(const char* filePath, const VkDevice device, VkSha
 
 	// Find what the size of the wfile is by looking up the location of the cursor
 	// (it will be that size in bytes)
-	size_t fileSize = (size_t)file.tellg();
+	size_t                fileSize = (size_t)file.tellg();
 
 	// SPIR-V expects the buffer to be on uint32, so make sure to reserve an int.
 	// Vector big enough for the entire file.

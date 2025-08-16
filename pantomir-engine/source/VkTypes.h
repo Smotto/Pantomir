@@ -28,32 +28,32 @@ enum class MaterialPass : uint8_t
 
 struct MaterialPipeline
 {
-	VkPipeline pipeline;
+	VkPipeline       pipeline;
 	VkPipelineLayout layout;
 };
 
 struct MaterialInstance
 {
-	MaterialPipeline* pipeline;
-	VkDescriptorSet descriptorSet;
-	MaterialPass passType;
+	MaterialPipeline*  pipeline;
+	VkDescriptorSet    descriptorSet;
+	MaterialPass       passType;
 	VkCullModeFlagBits cullMode;
 };
 
 struct Vertex
 {
 	glm::vec3 position;
-	float uv_x;
+	float     uv_x;
 	glm::vec3 normal;
-	float uv_y;
+	float     uv_y;
 	glm::vec4 tangent;
 	glm::vec4 color;
 };
 
 struct AllocatedBuffer
 {
-	VkBuffer buffer;
-	VmaAllocation allocation;
+	VkBuffer          buffer;
+	VmaAllocation     allocation;
 	VmaAllocationInfo info;
 };
 
@@ -67,11 +67,11 @@ struct GPUMeshBuffers
 
 struct AllocatedImage
 {
-	VkImage image;
-	VkImageView imageView;
+	VkImage       image;
+	VkImageView   imageView;
 	VmaAllocation allocation;
-	VkExtent3D imageExtent;
-	VkFormat imageFormat;
+	VkExtent3D    imageExtent;
+	VkFormat      imageFormat;
 };
 
 struct DrawContext;
@@ -87,13 +87,13 @@ private:
 struct Node : IRenderable
 {
 	// If the _parent is nullptr, then this is the root.
-	std::weak_ptr<Node> _parent;
+	std::weak_ptr<Node>                _parent;
 	std::vector<std::shared_ptr<Node>> _children;
 
-	glm::mat4 _localTransform;
-	glm::mat4 _worldTransform;
+	glm::mat4                          _localTransform;
+	glm::mat4                          _worldTransform;
 
-	void PropagateTransform(const glm::mat4& parentMatrix)
+	void                               PropagateTransform(const glm::mat4& parentMatrix)
 	{
 		_worldTransform = parentMatrix * _localTransform;
 		for (const std::shared_ptr<Node>& child : _children)
@@ -116,7 +116,7 @@ struct MeshNode final : Node
 {
 	std::shared_ptr<MeshAsset> _mesh;
 
-	void FillDrawContext(const glm::mat4& topMatrix, DrawContext& drawContext) override;
+	void                       FillDrawContext(const glm::mat4& topMatrix, DrawContext& drawContext) override;
 };
 
 // do-while(0) is for macro safety.

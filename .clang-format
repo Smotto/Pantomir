@@ -1,4 +1,3 @@
----
 Language: Cpp
 BasedOnStyle: LLVM
 
@@ -23,7 +22,8 @@ BinPackParameters: false
 BinPackArguments: false
 
 
-#ReflowComments: IndentOnly
+ReflowComments: IndentOnly
+
 
 DerivePointerAlignment: false
 PointerAlignment: Left
@@ -42,12 +42,12 @@ IndentCaseLabels: true
 
 # Enable alignment of consecutive declarations and assignments:
 #AlignConsecutiveDeclarations: AcrossEmptyLinesAndComments
-#AlignConsecutiveDeclarations:
-#   Enabled: true
-#   AcrossComments: true
-#   AcrossEmptyLines: true
-#   AlignFunctionDeclarations: true
-#   AlignFunctionPointers: true
+AlignConsecutiveDeclarations:
+  Enabled: true
+  AcrossComments: true
+  AcrossEmptyLines: true
+  AlignFunctionDeclarations: true
+  AlignFunctionPointers: true
 
 #AlignConsecutiveAssignments: AcrossEmptyLinesAndComments
 #AlignConsecutiveAssignments:
@@ -63,4 +63,3 @@ NamespaceIndentation: All
 
 SpaceBeforeCpp11BracedList: true
 Cpp11BracedListStyle: false
-...

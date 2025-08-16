@@ -39,8 +39,8 @@ void Camera::ProcessSDLEvent(SDL_Event& event, SDL_Window* window)
 			if (event.button.button == SDL_BUTTON_RIGHT && event.button.down)
 			{
 				rightMouseHeld = true;
-				int lockX = static_cast<int>(event.button.x);
-				int lockY = static_cast<int>(event.button.y);
+				int      lockX = static_cast<int>(event.button.x);
+				int      lockY = static_cast<int>(event.button.y);
 				SDL_Rect lockRect = { lockX, lockY, 1, 1 };
 				SDL_SetWindowMouseRect(window, &lockRect);
 				SDL_SetWindowRelativeMouseMode(window, true);
@@ -74,8 +74,8 @@ void Camera::UpdateMovement()
 	const bool* keyState = SDL_GetKeyboardState(nullptr);
 
 	// Check if shift is held for speed multiplier
-	bool shiftHeld = keyState[SDL_SCANCODE_LSHIFT] || keyState[SDL_SCANCODE_RSHIFT];
-	float currentSpeed = shiftHeld ? _speedMultiplier * _shiftSpeedMultiplier : _speedMultiplier;
+	bool        shiftHeld = keyState[SDL_SCANCODE_LSHIFT] || keyState[SDL_SCANCODE_RSHIFT];
+	float       currentSpeed = shiftHeld ? _speedMultiplier * _shiftSpeedMultiplier : _speedMultiplier;
 
 	// Reset velocity
 	_velocity = glm::vec3(0.0f);

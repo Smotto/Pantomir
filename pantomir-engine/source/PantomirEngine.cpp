@@ -256,7 +256,7 @@ void PantomirEngine::MainLoop()
 	{
 		const auto start = std::chrono::steady_clock::now();
 
-		SDL_Event event;
+		SDL_Event  event;
 
 		// Handle events on queue
 		while (SDL_PollEvent(&event) != 0)
@@ -366,7 +366,7 @@ void PantomirEngine::MainLoop()
 
 		PantomirEngine::Draw();
 
-		const std::chrono::time_point end = std::chrono::steady_clock::now();
+		const std::chrono::time_point      end = std::chrono::steady_clock::now();
 		const std::chrono::duration<float> elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 		_stats.frameTime = elapsed.count() / 1000.f;
 		_deltaTime = std::clamp(elapsed.count(), 0.0001f, 0.016f);
@@ -387,7 +387,7 @@ void PantomirEngine::ImmediateSubmit(std::function<void(VkCommandBuffer commandB
 	VK_CHECK(vkEndCommandBuffer(_immediateCommandBuffer));
 
 	VkCommandBufferSubmitInfo commandInfo = vkinit::CommandBufferSubmitInfo(_immediateCommandBuffer);
-	const VkSubmitInfo2 submit = vkinit::SubmitInfo(&commandInfo, nullptr, nullptr);
+	const VkSubmitInfo2       submit = vkinit::SubmitInfo(&commandInfo, nullptr, nullptr);
 
 	// Submit command buffer to the queue and execute it. _immediateFence will now block until the graphic commands finish execution
 	VK_CHECK(vkQueueSubmit2(_graphicsQueue, 1, &submit, _immediateFence));
@@ -396,8 +396,8 @@ void PantomirEngine::ImmediateSubmit(std::function<void(VkCommandBuffer commandB
 
 GPUMeshBuffers PantomirEngine::UploadMesh(const std::span<uint32_t> indices, const std::span<Vertex> vertices) const
 {
-	const size_t vertexBufferSize = vertices.size() * sizeof(Vertex);
-	const size_t indexBufferSize = indices.size() * sizeof(uint32_t);
+	const size_t   vertexBufferSize = vertices.size() * sizeof(Vertex);
+	const size_t   indexBufferSize = indices.size() * sizeof(uint32_t);
 
 	GPUMeshBuffers newSurface {};
 
@@ -412,7 +412,7 @@ GPUMeshBuffers PantomirEngine::UploadMesh(const std::span<uint32_t> indices, con
 	newSurface.indexBuffer = CreateBuffer(indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VMA_MEMORY_USAGE_GPU_ONLY);
 
 	const AllocatedBuffer stagingBuffer = CreateBuffer(vertexBufferSize + indexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_ONLY);
-	void* data = stagingBuffer.allocation->GetMappedData();
+	void*                 data = stagingBuffer.allocation->GetMappedData();
 
 	// Copy vertex buffer
 	memcpy(data, vertices.data(), vertexBufferSize);
@@ -445,14 +445,14 @@ glm::mat4 PantomirEngine::GetProjectionMatrix() const
 	constexpr float fov = 70.F;
 	constexpr float tailRange = 10000.F; // These are flipped because our whole renderer wants better depth accuracy towards the closer plane.
 	constexpr float headRange = 0.1F;
-	glm::mat4 projection = glm::perspective(glm::radians(fov), static_cast<float>(_windowExtent.width) / static_cast<float>(_windowExtent.height), tailRange, headRange);
+	glm::mat4       projection = glm::perspective(glm::radians(fov), static_cast<float>(_windowExtent.width) / static_cast<float>(_windowExtent.height), tailRange, headRange);
 	projection[1][1] *= -1; // Invert the Y direction on projection matrix so that we are more similar to opengl and gltf axis
 	return projection;
 }
 
 AllocatedImage PantomirEngine::CreateImage(void* dataSource, const VkExtent3D size, const VkFormat format, const VkImageUsageFlags usage, const bool mipmapped) const
 {
-	const size_t dataSize = static_cast<size_t>(size.width * size.height * size.depth) * PantomirFunctionLibrary::BytesPerPixelFromFormat(format);
+	const size_t          dataSize = static_cast<size_t>(size.width * size.height * size.depth) * PantomirFunctionLibrary::BytesPerPixelFromFormat(format);
 	const AllocatedBuffer stagingBuffer = CreateBuffer(dataSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU); // Transfer src bit means it's usable by GPU for copying.
 	memcpy(stagingBuffer.info.pMappedData, dataSource, dataSize);
 
@@ -576,13 +576,13 @@ PantomirEngine::~PantomirEngine()
 
 void PantomirEngine::InitSDLWindow()
 {
-	constexpr SDL_InitFlags initFlags = SDL_INIT_VIDEO;
+	constexpr SDL_InitFlags   initFlags = SDL_INIT_VIDEO;
 	constexpr SDL_WindowFlags windowFlags = SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE;
 
 	SDL_Init(initFlags);
 
 	const SDL_DisplayID displayID = SDL_GetPrimaryDisplay();
-	SDL_Rect displayBounds {};
+	SDL_Rect            displayBounds {};
 	if (!SDL_GetDisplayBounds(displayID, &displayBounds))
 	{
 		LOG(Engine, Error, "Failed to get display bounds: {}", SDL_GetError());
@@ -602,15 +602,15 @@ void PantomirEngine::InitSDLWindow()
 void PantomirEngine::InitVulkan()
 {
 	// VK_KHR_surface, VK_KHR_win32_surface are extensions that we'll get from SDL for Windows. The minimum required.
-	uint32_t extensionCount = 0;
+	uint32_t           extensionCount = 0;
 	const char* const* extensionNames = SDL_Vulkan_GetInstanceExtensions(&extensionCount);
 	if (!extensionNames)
 	{
 		throw std::runtime_error("Failed to get Vulkan extensions from SDL: " + std::string(SDL_GetError()));
 	}
-	std::vector<const char*> extensions(extensionNames, extensionNames + extensionCount);
+	std::vector<const char*>   extensions(extensionNames, extensionNames + extensionCount);
 
-	vkb::InstanceBuilder instanceBuilder;
+	vkb::InstanceBuilder       instanceBuilder;
 	vkb::Result<vkb::Instance> instanceBuilderResult = instanceBuilder.set_app_name("Vulkan Initializer")
 	                                                       .request_validation_layers(_bUseValidationLayers) // For debugging
 	                                                       .use_default_debug_messenger()                    // For debugging
@@ -636,7 +636,7 @@ void PantomirEngine::InitVulkan()
 	features_12.descriptorIndexing = true;
 
 	vkb::PhysicalDeviceSelector physicalDeviceSelector { builtInstance };
-	vkb::PhysicalDevice selectedPhysicalDevice = physicalDeviceSelector.set_minimum_version(1, 3)
+	vkb::PhysicalDevice         selectedPhysicalDevice = physicalDeviceSelector.set_minimum_version(1, 3)
 	                                                 .set_required_features_13(features_13)
 	                                                 .set_required_features_12(features_12)
 	                                                 .add_required_extension(VK_KHR_SHADER_RELAXED_EXTENDED_INSTRUCTION_EXTENSION_NAME)
@@ -645,7 +645,7 @@ void PantomirEngine::InitVulkan()
 	                                                 .value();
 
 	vkb::DeviceBuilder logicalDeviceBuilder { selectedPhysicalDevice };
-	vkb::Device builtLogicalDevice = logicalDeviceBuilder.build().value();
+	vkb::Device        builtLogicalDevice = logicalDeviceBuilder.build().value();
 
 	_logicalGPU = builtLogicalDevice.device;
 	_physicalGPU = selectedPhysicalDevice.physical_device;
@@ -680,7 +680,7 @@ void PantomirEngine::InitSwapchain()
 	drawImageUsages |= VK_IMAGE_USAGE_STORAGE_BIT;
 	drawImageUsages |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
-	VkImageCreateInfo drawImageInfo = vkinit::ImageCreateInfo(_colorImage.imageFormat, drawImageUsages, drawImageExtent);
+	VkImageCreateInfo       drawImageInfo = vkinit::ImageCreateInfo(_colorImage.imageFormat, drawImageUsages, drawImageExtent);
 
 	// For the draw image, we want to allocate it from gpu local memory
 	VmaAllocationCreateInfo drawImageAllocInfo {};
@@ -700,7 +700,7 @@ void PantomirEngine::InitSwapchain()
 	VkImageUsageFlags depthImageUsages {};
 	depthImageUsages |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 
-	VkImageCreateInfo depthImageInfo = vkinit::ImageCreateInfo(_depthImage.imageFormat, depthImageUsages, drawImageExtent);
+	VkImageCreateInfo       depthImageInfo = vkinit::ImageCreateInfo(_depthImage.imageFormat, depthImageUsages, drawImageExtent);
 
 	VmaAllocationCreateInfo depthImageAllocInfo {};
 	depthImageAllocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
@@ -744,7 +744,7 @@ void PantomirEngine::InitSyncStructures()
 {
 	// Create synchronization structures one fence to control when the gpu has finished rendering the frame, and 2 semaphores to synchronize rendering with swapchain.
 	// We want the fence to start signaled so we can wait on it on the first frame
-	constexpr VkFenceCreateInfo fenceCreateInfo = vkinit::FenceCreateInfo(VK_FENCE_CREATE_SIGNALED_BIT);
+	constexpr VkFenceCreateInfo     fenceCreateInfo = vkinit::FenceCreateInfo(VK_FENCE_CREATE_SIGNALED_BIT);
 	constexpr VkSemaphoreCreateInfo semaphoreCreateInfo = vkinit::SemaphoreCreateInfo();
 
 	for (FrameData& frame : _frames)
@@ -940,7 +940,7 @@ void PantomirEngine::InitDefaultData()
 	_blackImage = CreateImage((void*)&black, VkExtent3D { 1, 1, 1 }, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT);
 
 	// Checkerboard image
-	uint32_t magenta = glm::packUnorm4x8(glm::vec4(1, 0, 1, 1));
+	uint32_t                      magenta = glm::packUnorm4x8(glm::vec4(1, 0, 1, 1));
 	std::array<uint32_t, 16 * 16> pixels {}; // for 16x16 checkerboard texture
 	for (int x = 0; x < 16; x++)
 	{
@@ -984,7 +984,7 @@ void PantomirEngine::InitDefaultData()
 	defaultMaterialResources.specularSampler = _defaultSamplerLinear;
 
 	// Set the uniform buffer for the material data
-	AllocatedBuffer materialConstants = CreateBuffer(sizeof(GLTFMetallic_Roughness::MaterialConstants), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	AllocatedBuffer                            materialConstants = CreateBuffer(sizeof(GLTFMetallic_Roughness::MaterialConstants), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 
 	// Write the buffer
 	GLTFMetallic_Roughness::MaterialConstants* sceneUniformData = static_cast<GLTFMetallic_Roughness::MaterialConstants*>(materialConstants.allocation->GetMappedData());
@@ -998,10 +998,10 @@ void PantomirEngine::InitDefaultData()
 
 	_defaultMaterialInstance = _metalRoughMaterial.WriteMaterial(_logicalGPU, MaterialPass::Opaque, VK_CULL_MODE_NONE, defaultMaterialResources, GetCurrentFrame().descriptorPoolManager);
 
-	std::string modelPath = { "Assets/Models/Echidna1.glb" };
+	std::string                                modelPath = { "Assets/Models/Echidna1.glb" };
 	std::optional<std::shared_ptr<LoadedGLTF>> modelFile = LoadGltf(this, modelPath);
-	std::string hdriPath = { "Assets/Textures/citrus_orchard_road_puresky_4k.hdr" };
-	std::string hdriPath2 = { "Assets/Textures/brown_photostudio_02_4k.hdr" };
+	std::string                                hdriPath = { "Assets/Textures/citrus_orchard_road_puresky_4k.hdr" };
+	std::string                                hdriPath2 = { "Assets/Textures/brown_photostudio_02_4k.hdr" };
 	std::optional<std::shared_ptr<LoadedHDRI>> hdriFile = LoadHDRI(this, hdriPath);
 	std::optional<std::shared_ptr<LoadedHDRI>> hdriFile2 = LoadHDRI(this, hdriPath2);
 
@@ -1073,7 +1073,7 @@ void PantomirEngine::Draw()
 	GetCurrentFrame().deletionQueue.Flush();
 	GetCurrentFrame().descriptorPoolManager.ClearPools(_logicalGPU);
 
-	uint32_t swapchainImageIndex;
+	uint32_t       swapchainImageIndex;
 	const VkResult acquireNextImageKhr = vkAcquireNextImageKHR(_logicalGPU, _swapchain, 1000000000, GetCurrentFrame().swapchainSemaphore, nullptr, &swapchainImageIndex);
 	if (acquireNextImageKhr == VK_ERROR_OUT_OF_DATE_KHR)
 	{
@@ -1137,9 +1137,9 @@ void PantomirEngine::Draw()
 	// We will signal the _renderSemaphore, to signal that rendering has finished
 
 	VkCommandBufferSubmitInfo commandBufferSubmitInfo = vkinit::CommandBufferSubmitInfo(commandBuffer);
-	VkSemaphoreSubmitInfo signalInfo = vkinit::SemaphoreSubmitInfo(VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, GetCurrentFrame().renderSemaphore);
-	VkSemaphoreSubmitInfo waitInfo = vkinit::SemaphoreSubmitInfo(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR, GetCurrentFrame().swapchainSemaphore);
-	VkSubmitInfo2 submitInfo = vkinit::SubmitInfo(&commandBufferSubmitInfo, &signalInfo, &waitInfo);
+	VkSemaphoreSubmitInfo     signalInfo = vkinit::SemaphoreSubmitInfo(VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, GetCurrentFrame().renderSemaphore);
+	VkSemaphoreSubmitInfo     waitInfo = vkinit::SemaphoreSubmitInfo(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR, GetCurrentFrame().swapchainSemaphore);
+	VkSubmitInfo2             submitInfo = vkinit::SubmitInfo(&commandBufferSubmitInfo, &signalInfo, &waitInfo);
 
 	// Submit command buffer to the queue and execute it.
 	//  _renderFence will now block until the graphic commands finish execution.
@@ -1174,8 +1174,8 @@ void PantomirEngine::Draw()
 void PantomirEngine::DrawHDRI(const VkCommandBuffer commandBuffer)
 {
 	VkRenderingAttachmentInfo colorAttachment = vkinit::AttachmentInfo(_colorImage.imageView, nullptr, VK_IMAGE_LAYOUT_GENERAL); // Clear value can be set if you have 0 background to draw behind geometry.
-	const VkRenderingInfo renderInfo = vkinit::RenderingInfo(_drawExtent, &colorAttachment, nullptr);
-	glm::mat4 viewMatrix = _mainCamera.GetViewMatrix();
+	const VkRenderingInfo     renderInfo = vkinit::RenderingInfo(_drawExtent, &colorAttachment, nullptr);
+	glm::mat4                 viewMatrix = _mainCamera.GetViewMatrix();
 	viewMatrix[3] = glm::vec4(0.0, 0.0, 0.0, 1.0);
 
 	HDRIPushConstants constants {
@@ -1187,7 +1187,7 @@ void PantomirEngine::DrawHDRI(const VkCommandBuffer commandBuffer)
 
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _hdriPipeline);
 
-	VkDescriptorSet hdriDescriptorSet = GetCurrentFrame().descriptorPoolManager.Allocate(_logicalGPU, _hdriDescriptorSetLayout); // Allocate a set from a descriptor pool, using this layout.
+	VkDescriptorSet     hdriDescriptorSet = GetCurrentFrame().descriptorPoolManager.Allocate(_logicalGPU, _hdriDescriptorSetLayout); // Allocate a set from a descriptor pool, using this layout.
 	DescriptorSetWriter descriptorWriter;
 	descriptorWriter.WriteImage(0, _currentHDRI->_allocatedImage.imageView, _currentHDRI->_sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 	descriptorWriter.UpdateSet(_logicalGPU, hdriDescriptorSet);
@@ -1226,13 +1226,13 @@ void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer)
 	std::chrono::time_point<std::chrono::steady_clock> start = std::chrono::steady_clock::now();
 
 	// 1 Uniform buffer, holds a struct of GPUSceneData
-	AllocatedBuffer uniformBufferGPUSceneData = CreateBuffer(sizeof(GPUSceneData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	AllocatedBuffer                                    uniformBufferGPUSceneData = CreateBuffer(sizeof(GPUSceneData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 	GetCurrentFrame().deletionQueue.PushFunction([=, this]()
 	                                             { DestroyBuffer(uniformBufferGPUSceneData); });
 	GPUSceneData* uniformBufferData = static_cast<GPUSceneData*>(uniformBufferGPUSceneData.allocation->GetMappedData());
 	*uniformBufferData = _sceneData;
 
-	VkDescriptorSet sceneDataDescriptorSet = GetCurrentFrame().descriptorPoolManager.Allocate(_logicalGPU, _gpuSceneDataDescriptorSetLayout);
+	VkDescriptorSet     sceneDataDescriptorSet = GetCurrentFrame().descriptorPoolManager.Allocate(_logicalGPU, _gpuSceneDataDescriptorSetLayout);
 	DescriptorSetWriter uniformWriter;
 	uniformWriter.WriteBuffer(0, uniformBufferGPUSceneData.buffer, sizeof(GPUSceneData), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 	uniformWriter.UpdateSet(_logicalGPU, sceneDataDescriptorSet);
@@ -1240,16 +1240,16 @@ void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer)
 	// Begin a render pass connected to our draw image
 	VkRenderingAttachmentInfo colorAttachment = vkinit::AttachmentInfo(_colorImage.imageView, nullptr, VK_IMAGE_LAYOUT_GENERAL);
 	VkRenderingAttachmentInfo depthAttachment = vkinit::DepthAttachmentInfo(_depthImage.imageView, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
-	VkRenderingInfo renderInfo = vkinit::RenderingInfo(_drawExtent, &colorAttachment, &depthAttachment);
+	VkRenderingInfo           renderInfo = vkinit::RenderingInfo(_drawExtent, &colorAttachment, &depthAttachment);
 	vkCmdBeginRendering(commandBuffer, &renderInfo); // At the start, a clear operation happens for each attachment
 
 	// Defined outside the draw function, this is the state we will try to skip
 	MaterialPipeline* lastPipeline = nullptr;
 	MaterialInstance* lastMaterial = nullptr;
-	VkBuffer lastIndexBuffer = VK_NULL_HANDLE;
+	VkBuffer          lastIndexBuffer = VK_NULL_HANDLE;
 
 	// TODO: Need to make this easier to understand, because the Draw() function is gathering draw context, and not recording draws for Vulkan yet.
-	auto actualDrawFunction = [&](const RenderObject& renderObject)
+	auto              actualDrawFunction = [&](const RenderObject& renderObject)
 	{
 		// Step 1: Bind Pipeline
 		if (renderObject.material != lastMaterial)
@@ -1303,7 +1303,7 @@ void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer)
 
 	// Timer Stops
 	std::chrono::time_point<std::chrono::steady_clock> end = std::chrono::steady_clock::now();
-	std::chrono::microseconds elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+	std::chrono::microseconds                          elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 	_stats.meshDrawTime = elapsed.count() / 1000.f;
 
 	vkCmdEndRendering(commandBuffer);
@@ -1312,7 +1312,7 @@ void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer)
 void PantomirEngine::DrawImgui(const VkCommandBuffer commandBuffer, const VkImageView targetImageView) const
 {
 	VkRenderingAttachmentInfo colorAttachment = vkinit::AttachmentInfo(targetImageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-	const VkRenderingInfo renderInfo = vkinit::RenderingInfo(_swapchainExtent, &colorAttachment, nullptr);
+	const VkRenderingInfo     renderInfo = vkinit::RenderingInfo(_swapchainExtent, &colorAttachment, nullptr);
 
 	vkCmdBeginRendering(commandBuffer, &renderInfo);
 
@@ -1340,8 +1340,8 @@ void PantomirEngine::UpdateScene()
 	_loadedScenes["Echidna1"]->FillDrawContext(glm::mat4 { 1.f }, _mainDrawContext);
 
 	const std::chrono::time_point<std::chrono::steady_clock> end = std::chrono::steady_clock::now();
-	const std::chrono::duration<float> elapsed = std::chrono::duration<float>(end - start);
-	const float deltaTimeSeconds = elapsed.count();
+	const std::chrono::duration<float>                       elapsed = std::chrono::duration<float>(end - start);
+	const float                                              deltaTimeSeconds = elapsed.count();
 
 	_stats.sceneUpdateTime = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
 	_deltaTime = std::clamp(deltaTimeSeconds, 0.0001f, 0.016f);

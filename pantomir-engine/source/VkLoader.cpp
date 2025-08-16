@@ -54,13 +54,12 @@ VkSamplerMipmapMode ExtractMipmapMode(fastgltf::Filter filter)
 std::optional<AllocatedImage> LoadImage(PantomirEngine* engine, fastgltf::Asset& asset, fastgltf::Image& image)
 {
 	AllocatedImage newImage {};
-	int width = 0;
-	int height = 0;
-	int channelCount = 0;
+	int            width = 0;
+	int            height = 0;
+	int            channelCount = 0;
+	constexpr int  desiredChannelCount = 4;
 
-	constexpr int desiredChannelCount = 4;
-
-	const auto CreateImageFromMemory = [&](const stbi_uc* sourceData, int dataSize, bool forceStaging = false) -> bool
+	const auto     CreateImageFromMemory = [&](const stbi_uc* sourceData, int dataSize, bool forceStaging = false) -> bool
 	{
 		unsigned char* imageData = stbi_load_from_memory(sourceData, dataSize, &width, &height, &channelCount, desiredChannelCount);
 		if (imageData == nullptr)
@@ -121,7 +120,7 @@ std::optional<AllocatedImage> LoadImage(PantomirEngine* engine, fastgltf::Asset&
 	               [&](fastgltf::sources::Vector& vectorSource)
 	               {
 		               const stbi_uc* imageBytes = reinterpret_cast<const stbi_uc*>(vectorSource.bytes.data());
-		               int byteSize = static_cast<int>(vectorSource.bytes.size());
+		               int            byteSize = static_cast<int>(vectorSource.bytes.size());
 		               CreateImageFromMemory(imageBytes, byteSize);
 	               },
 
@@ -129,23 +128,23 @@ std::optional<AllocatedImage> LoadImage(PantomirEngine* engine, fastgltf::Asset&
 	               [&](fastgltf::sources::BufferView& bufferViewSource)
 	               {
 		               fastgltf::BufferView& bufferView = asset.bufferViews[bufferViewSource.bufferViewIndex];
-		               fastgltf::Buffer& buffer = asset.buffers[bufferView.bufferIndex];
+		               fastgltf::Buffer&     buffer = asset.buffers[bufferView.bufferIndex];
 		               std::visit(fastgltf::visitor { [&](fastgltf::sources::Array& arraySource)
 		                                              {
 			                                              const stbi_uc* dataPointer = reinterpret_cast<const stbi_uc*>(arraySource.bytes.data() + bufferView.byteOffset);
-			                                              int dataSize = static_cast<int>(bufferView.byteLength);
+			                                              int            dataSize = static_cast<int>(bufferView.byteLength);
 			                                              CreateImageFromMemory(dataPointer, dataSize);
 		                                              },
 		                                              [&](fastgltf::sources::Vector& vectorSource)
 		                                              {
 			                                              const stbi_uc* dataPointer = reinterpret_cast<const stbi_uc*>(vectorSource.bytes.data() + bufferView.byteOffset);
-			                                              int dataSize = static_cast<int>(bufferView.byteLength);
+			                                              int            dataSize = static_cast<int>(bufferView.byteLength);
 			                                              CreateImageFromMemory(dataPointer, dataSize);
 		                                              },
 		                                              [&](fastgltf::sources::ByteView& byteViewSource)
 		                                              {
 			                                              const stbi_uc* dataPointer = reinterpret_cast<const stbi_uc*>(byteViewSource.bytes.data() + bufferView.byteOffset);
-			                                              int dataSize = static_cast<int>(bufferView.byteLength);
+			                                              int            dataSize = static_cast<int>(bufferView.byteLength);
 			                                              // For ByteView, we force staging to true
 			                                              CreateImageFromMemory(dataPointer, dataSize, true);
 		                                              },
@@ -178,36 +177,36 @@ std::optional<AllocatedImage> LoadImage(PantomirEngine* engine, fastgltf::Asset&
 std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, const std::string_view& filePath)
 {
 	LOG(Engine, Info, "Loading GLTF: {}", filePath);
-	fastgltf::Parser parser { fastgltf::Extensions::KHR_materials_emissive_strength | fastgltf::Extensions::KHR_materials_specular };
-	constexpr fastgltf::Options gltfParserOptions { fastgltf::Options::DontRequireValidAssetMember | fastgltf::Options::AllowDouble | fastgltf::Options::LoadExternalBuffers };
-	std::filesystem::path path(filePath);
+	fastgltf::Parser                             parser { fastgltf::Extensions::KHR_materials_emissive_strength | fastgltf::Extensions::KHR_materials_specular };
+	constexpr fastgltf::Options                  gltfParserOptions { fastgltf::Options::DontRequireValidAssetMember | fastgltf::Options::AllowDouble | fastgltf::Options::LoadExternalBuffers };
+	std::filesystem::path                        path(filePath);
 	fastgltf::Expected<fastgltf::GltfDataBuffer> dataBufferResult = fastgltf::GltfDataBuffer::FromPath(path);
 	if (!dataBufferResult)
 	{
 		LOG(Engine, Error, "Failed to read GLTF file: {}", getErrorMessage(dataBufferResult.error()));
 		return std::nullopt;
 	}
-	fastgltf::GltfDataBuffer oneGiantDataBuffer = std::move(dataBufferResult.get());
+	fastgltf::GltfDataBuffer            oneGiantDataBuffer = std::move(dataBufferResult.get());
 	fastgltf::Expected<fastgltf::Asset> assetResult = parser.loadGltf(oneGiantDataBuffer, path.parent_path(), gltfParserOptions);
 	if (!assetResult)
 	{
 		LOG(Engine, Error, "Failed to load GLTF: {}", getErrorMessage(assetResult.error()));
 		return std::nullopt;
 	}
-	fastgltf::Asset gltfAsset = std::move(assetResult.get());
+	fastgltf::Asset                                                    gltfAsset = std::move(assetResult.get());
 
 	std::vector<DescriptorPoolManager::DescriptorTypeCountMultipliers> poolSizeRatios { { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4 },
 		                                                                                { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 2 },
 		                                                                                { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1 } };
 
-	std::shared_ptr<LoadedGLTF> currentGLTFPointer = std::make_shared<LoadedGLTF>();
+	std::shared_ptr<LoadedGLTF>                                        currentGLTFPointer = std::make_shared<LoadedGLTF>();
 	currentGLTFPointer->_enginePtr = engine;
 	LoadedGLTF& currentGLTF = *currentGLTFPointer;
 	currentGLTF._descriptorPool.Init(engine->_logicalGPU, gltfAsset.materials.size(), poolSizeRatios);
 
-	std::vector<std::shared_ptr<MeshAsset>> meshes;
-	std::vector<std::shared_ptr<Node>> nodes;
-	std::vector<AllocatedImage> images;
+	std::vector<std::shared_ptr<MeshAsset>>    meshes;
+	std::vector<std::shared_ptr<Node>>         nodes;
+	std::vector<AllocatedImage>                images;
 	std::vector<std::shared_ptr<GLTFMaterial>> materials;
 
 	// Load samplers
@@ -246,7 +245,7 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, cons
 
 	// Create buffer to hold the material data
 	currentGLTF._materialDataBuffer = engine->CreateBuffer(sizeof(GLTFMetallic_Roughness::MaterialConstants) * gltfAsset.materials.size(), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-	int dataIndex = 0;
+	int                                        dataIndex = 0;
 	GLTFMetallic_Roughness::MaterialConstants* sceneMaterialConstants = static_cast<GLTFMetallic_Roughness::MaterialConstants*>(currentGLTF._materialDataBuffer.info.pMappedData);
 
 	for (fastgltf::Material& material : gltfAsset.materials)
@@ -383,7 +382,7 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, cons
 
 	// Use the same vectors for all meshes so that the memory doesn't reallocate as often
 	std::vector<uint32_t> indices;
-	std::vector<Vertex> vertices;
+	std::vector<Vertex>   vertices;
 
 	for (fastgltf::Mesh& mesh : gltfAsset.meshes)
 	{
@@ -536,7 +535,7 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, cons
 	// Build entity hierarchy
 	for (int index = 0; index < gltfAsset.nodes.size(); index++)
 	{
-		fastgltf::Node& node = gltfAsset.nodes[index];
+		fastgltf::Node&        node = gltfAsset.nodes[index];
 		std::shared_ptr<Node>& sceneNode = nodes[index];
 
 		for (size_t& child : node.children)
@@ -607,10 +606,10 @@ std::optional<std::shared_ptr<LoadedHDRI>> LoadHDRI(PantomirEngine* engine, cons
 
 	std::shared_ptr<LoadedHDRI> loadedHDRI = std::make_shared<LoadedHDRI>();
 
-	int width = 0;
-	int height = 0;
-	int channelCount = 0;
-	constexpr int desiredChannelCount = 4;
+	int                         width = 0;
+	int                         height = 0;
+	int                         channelCount = 0;
+	constexpr int               desiredChannelCount = 4;
 	stbi_set_flip_vertically_on_load(true);
 	float* imageData = stbi_loadf(filePath.data(), &width, &height, &channelCount, desiredChannelCount); // HDR's have float format
 	stbi_set_flip_vertically_on_load(false);

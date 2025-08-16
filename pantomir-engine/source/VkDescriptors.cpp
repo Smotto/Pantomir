@@ -49,7 +49,7 @@ void DescriptorPoolManager::DestroyPools(VkDevice device)
 VkDescriptorSet DescriptorPoolManager::Allocate(const VkDevice device, const VkDescriptorSetLayout layout, const void* pNext)
 {
 	// Get or create a pool to allocate from
-	VkDescriptorPool poolToUse = GetOrCreatePool(device);
+	VkDescriptorPool            poolToUse = GetOrCreatePool(device);
 
 	VkDescriptorSetAllocateInfo allocateInfoWithPool = {};
 	allocateInfoWithPool.pNext = pNext;
@@ -59,7 +59,7 @@ VkDescriptorSet DescriptorPoolManager::Allocate(const VkDevice device, const VkD
 	allocateInfoWithPool.pSetLayouts = &layout;
 
 	VkDescriptorSet descriptorSet;
-	const VkResult allocationResult = vkAllocateDescriptorSets(device, &allocateInfoWithPool, &descriptorSet);
+	const VkResult  allocationResult = vkAllocateDescriptorSets(device, &allocateInfoWithPool, &descriptorSet);
 
 	// Allocation failed. Try again
 	if (allocationResult == VK_ERROR_OUT_OF_POOL_MEMORY || allocationResult == VK_ERROR_FRAGMENTED_POOL)
@@ -189,7 +189,7 @@ void DescriptorSetWriter::WriteBuffer(const int binding, const VkBuffer buffer, 
 	    .offset = offset,
 	    .range = size });
 
-	VkWriteDescriptorSet write = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+	VkWriteDescriptorSet          write = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
 
 	write.dstBinding = binding;
 	write.dstSet = VK_NULL_HANDLE; // left empty for now until we need to write it
@@ -207,7 +207,7 @@ void DescriptorSetWriter::WriteImage(int binding, VkImageView image, VkSampler s
 	    .imageView = image,
 	    .imageLayout = layout });
 
-	VkWriteDescriptorSet write = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
+	VkWriteDescriptorSet   write = { .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET };
 
 	write.dstBinding = binding;
 	write.dstSet = VK_NULL_HANDLE; // left empty for now until we need to write it

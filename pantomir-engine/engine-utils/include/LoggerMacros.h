@@ -34,8 +34,8 @@ namespace Pantomir
 		if (categories.begin() == categories.end())
 			return "Unknown";
 
-		auto it = categories.begin();
-		std::string result = *it;
+		const std::string* it = categories.begin();
+		std::string        result = *it;
 		++it;
 
 		for (; it != categories.end(); ++it)
