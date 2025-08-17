@@ -6,10 +6,8 @@
 #include <mutex>
 #include <string>
 
-namespace Pantomir
-{
-	enum class LogLevel
-	{
+namespace Pantomir {
+	enum class LogLevel {
 		Debug,
 		Info,
 		Warning,
@@ -18,16 +16,14 @@ namespace Pantomir
 	};
 
 	// TODO: Verbosity and Toggle-able channels
-	class Logger
-	{
+	class Logger {
 	public:
 		static Logger& GetInstance();
 
 		void           SetMinLogLevel(LogLevel level);
 
 		template <typename... Args> // variadic template
-		void Log(const std::string& category, LogLevel level, const char* format, Args&&... args)
-		{
+		void Log(const std::string& category, LogLevel level, const char* format, Args&&... args) {
 			if (level < m_minLevel)
 				return;
 

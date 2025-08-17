@@ -3,8 +3,7 @@
 
 #include "VkTypes.h"
 
-class PipelineBuilder
-{
+class PipelineBuilder {
 public:
 	std::vector<VkPipelineShaderStageCreateInfo> _shaderStages;
 
@@ -17,8 +16,7 @@ public:
 	VkPipelineRenderingCreateInfo                _renderInfo;
 	VkFormat                                     _colorAttachmentFormat;
 
-	PipelineBuilder()
-	{
+	PipelineBuilder() {
 		Clear();
 	}
 	void       Clear();
@@ -37,8 +35,7 @@ public:
 	void       DisableDepthtest();
 };
 
-namespace vkutil
-{
+namespace vkutil {
 	bool LoadShaderModule(const char*     filePath,
 	                      VkDevice        device,
 	                      VkShaderModule* outShaderModule);

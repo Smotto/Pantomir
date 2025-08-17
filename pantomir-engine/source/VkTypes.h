@@ -18,30 +18,26 @@
 #include <glm/mat4x4.hpp>
 #include <glm/vec4.hpp>
 
-enum class MaterialPass : uint8_t
-{
+enum class MaterialPass : uint8_t {
 	Opaque,
 	AlphaMask,
 	AlphaBlend,
 	Other
 };
 
-struct MaterialPipeline
-{
+struct MaterialPipeline {
 	VkPipeline       pipeline;
 	VkPipelineLayout layout;
 };
 
-struct MaterialInstance
-{
+struct MaterialInstance {
 	MaterialPipeline*  pipeline;
 	VkDescriptorSet    descriptorSet;
 	MaterialPass       passType;
 	VkCullModeFlagBits cullMode;
 };
 
-struct Vertex
-{
+struct Vertex {
 	glm::vec3 position;
 	float     uv_x;
 	glm::vec3 normal;
@@ -50,23 +46,20 @@ struct Vertex
 	glm::vec4 color;
 };
 
-struct AllocatedBuffer
-{
+struct AllocatedBuffer {
 	VkBuffer          buffer;
 	VmaAllocation     allocation;
 	VmaAllocationInfo info;
 };
 
 // Holds the resources needed for a mesh
-struct GPUMeshBuffers
-{
+struct GPUMeshBuffers {
 	AllocatedBuffer indexBuffer;
 	AllocatedBuffer vertexBuffer;
 	VkDeviceAddress vertexBufferAddress;
 };
 
-struct AllocatedImage
-{
+struct AllocatedImage {
 	VkImage       image;
 	VkImageView   imageView;
 	VmaAllocation allocation;
@@ -75,8 +68,7 @@ struct AllocatedImage
 };
 
 struct DrawContext;
-class IRenderable
-{
+class IRenderable {
 public:
 	virtual ~IRenderable() = default;
 
@@ -84,8 +76,7 @@ private:
 	virtual void FillDrawContext(const glm::mat4& topMatrix, DrawContext& drawContext) = 0;
 };
 
-struct Node : IRenderable
-{
+struct Node : IRenderable {
 	// If the _parent is nullptr, then this is the root.
 	std::weak_ptr<Node>                _parent;
 	std::vector<std::shared_ptr<Node>> _children;
@@ -93,27 +84,22 @@ struct Node : IRenderable
 	glm::mat4                          _localTransform;
 	glm::mat4                          _worldTransform;
 
-	void                               PropagateTransform(const glm::mat4& parentMatrix)
-	{
-		_worldTransform = parentMatrix * _localTransform;
-		for (const std::shared_ptr<Node>& child : _children)
-		{
-			child->PropagateTransform(_worldTransform);
-		}
+	void                               PropagateTransform(const glm::mat4& parentMatrix) {
+        _worldTransform = parentMatrix * _localTransform;
+        for (const std::shared_ptr<Node>& child : _children) {
+            child->PropagateTransform(_worldTransform);
+        }
 	}
 
-	void FillDrawContext(const glm::mat4& topMatrix, DrawContext& drawContext) override
-	{
-		for (const std::shared_ptr<Node>& child : _children)
-		{
+	void FillDrawContext(const glm::mat4& topMatrix, DrawContext& drawContext) override {
+		for (const std::shared_ptr<Node>& child : _children) {
 			child->FillDrawContext(topMatrix, drawContext);
 		}
 	}
 };
 
 struct MeshAsset;
-struct MeshNode final : Node
-{
+struct MeshNode final : Node {
 	std::shared_ptr<MeshAsset> _mesh;
 
 	void                       FillDrawContext(const glm::mat4& topMatrix, DrawContext& drawContext) override;
@@ -121,11 +107,9 @@ struct MeshNode final : Node
 
 // do-while(0) is for macro safety.
 #define VK_CHECK(x)                                                          \
-	do                                                                       \
-	{                                                                        \
+	do {                                                                     \
 		VkResult err = x;                                                    \
-		if (err)                                                             \
-		{                                                                    \
+		if (err) {                                                           \
 			std::println("Detected Vulkan error: {}", string_VkResult(err)); \
 			abort();                                                         \
 		}                                                                    \

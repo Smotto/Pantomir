@@ -6,34 +6,29 @@
 #include <filesystem>
 #include <unordered_map>
 
-namespace fastgltf
-{
+namespace fastgltf {
 	struct Image;
 	class Asset;
 } // namespace fastgltf
 
-struct GLTFMaterial
-{
+struct GLTFMaterial {
 	MaterialInstance data;
 };
 
-struct Bounds
-{
+struct Bounds {
 	glm::vec3 originPoint;
 	float     sphereRadius;
 	glm::vec3 extents;
 };
 
-struct GeoSurface
-{
+struct GeoSurface {
 	uint32_t                      startIndex;
 	uint32_t                      count;
 	Bounds                        bounds;
 	std::shared_ptr<GLTFMaterial> material;
 };
 
-struct RenderObject
-{
+struct RenderObject {
 	uint32_t          indexCount;
 	uint32_t          firstIndex;
 	VkBuffer          indexBuffer;
@@ -44,8 +39,7 @@ struct RenderObject
 	VkDeviceAddress   vertexBufferAddress;
 };
 
-struct MeshAsset
-{
+struct MeshAsset {
 	std::string             name;
 	std::vector<GeoSurface> surfaces;
 	GPUMeshBuffers          meshBuffers;
@@ -53,8 +47,7 @@ struct MeshAsset
 
 class PantomirEngine;
 
-struct LoadedGLTF final : IRenderable
-{
+struct LoadedGLTF final : IRenderable {
 	// Storage for all the data on a given glTF file
 	std::unordered_map<std::string, std::shared_ptr<MeshAsset>>    _meshes;
 	std::unordered_map<std::string, std::shared_ptr<Node>>         _nodes;
@@ -68,8 +61,7 @@ struct LoadedGLTF final : IRenderable
 	AllocatedBuffer                                                _materialDataBuffer;
 	PantomirEngine*                                                _enginePtr;
 
-	~LoadedGLTF() override
-	{
+	~LoadedGLTF() override {
 		ClearAll();
 	};
 
@@ -79,14 +71,12 @@ private:
 	void ClearAll();
 };
 
-struct LoadedHDRI
-{
+struct LoadedHDRI {
 	AllocatedImage  _allocatedImage;
 	VkSampler       _sampler;
 	PantomirEngine* _enginePtr;
 
-	~LoadedHDRI()
-	{
+	~LoadedHDRI() {
 		ClearAll();
 	}
 

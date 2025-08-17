@@ -1,8 +1,7 @@
 #include "VkImages.h"
 #include "VkInitializers.h"
 
-void vkutil::TransitionImage(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout currentLayout, VkImageLayout newLayout)
-{
+void vkutil::TransitionImage(VkCommandBuffer commandBuffer, VkImage image, VkImageLayout currentLayout, VkImageLayout newLayout) {
 	VkImageMemoryBarrier2 imageBarrier { .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2 };
 	imageBarrier.pNext = nullptr;
 
@@ -30,8 +29,7 @@ void vkutil::TransitionImage(VkCommandBuffer commandBuffer, VkImage image, VkIma
 	vkCmdPipelineBarrier2(commandBuffer, &depInfo);
 }
 
-void vkutil::CopyImageToImage(const VkCommandBuffer commandBuffer, const VkImage source, const VkImage destination, const VkExtent2D sourceSize, const VkExtent2D destinationSize)
-{
+void vkutil::CopyImageToImage(const VkCommandBuffer commandBuffer, const VkImage source, const VkImage destination, const VkExtent2D sourceSize, const VkExtent2D destinationSize) {
 	VkImageBlit2 blitRegion { .sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2, .pNext = nullptr };
 
 	blitRegion.srcOffsets[1].x = sourceSize.width;
@@ -65,11 +63,9 @@ void vkutil::CopyImageToImage(const VkCommandBuffer commandBuffer, const VkImage
 	vkCmdBlitImage2(commandBuffer, &blitInfo);
 }
 
-void vkutil::GenerateMipmaps(const VkCommandBuffer commandBuffer, const VkImage image, VkExtent2D imageSize)
-{
+void vkutil::GenerateMipmaps(const VkCommandBuffer commandBuffer, const VkImage image, VkExtent2D imageSize) {
 	const int mipLevels = static_cast<int>(std::floor(std::log2(std::max(imageSize.width, imageSize.height)))) + 1;
-	for (int mip = 0; mip < mipLevels; mip++)
-	{
+	for (int mip = 0; mip < mipLevels; mip++) {
 		VkExtent2D halfSize = imageSize;
 		halfSize.width /= 2;
 		halfSize.height /= 2;
@@ -96,8 +92,7 @@ void vkutil::GenerateMipmaps(const VkCommandBuffer commandBuffer, const VkImage 
 
 		vkCmdPipelineBarrier2(commandBuffer, &depInfo);
 
-		if (mip < mipLevels - 1)
-		{
+		if (mip < mipLevels - 1) {
 			VkImageBlit2 blitRegion { .sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2, .pNext = nullptr };
 
 			blitRegion.srcOffsets[1].x = imageSize.width;

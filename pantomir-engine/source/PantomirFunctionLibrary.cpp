@@ -2,10 +2,8 @@
 
 #include <stdexcept>
 
-size_t PantomirFunctionLibrary::BytesPerPixelFromFormat(const VkFormat format)
-{
-	switch (format)
-	{
+size_t PantomirFunctionLibrary::BytesPerPixelFromFormat(const VkFormat format) {
+	switch (format) {
 		case VK_FORMAT_R8G8B8A8_UNORM:
 			return 4; // 4 channels, 1 byte each
 		case VK_FORMAT_R32G32B32_SFLOAT:

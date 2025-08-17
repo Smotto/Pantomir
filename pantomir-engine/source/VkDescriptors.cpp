@@ -6,11 +6,9 @@
 // ============================================================
 // DescriptorPoolManager
 // ============================================================
-void DescriptorPoolManager::Init(VkDevice device, uint32_t setCount, std::span<DescriptorTypeCountMultipliers> descriptorTypeCountMultipliers)
-{
+void DescriptorPoolManager::Init(VkDevice device, uint32_t setCount, std::span<DescriptorTypeCountMultipliers> descriptorTypeCountMultipliers) {
 	_multipliers.clear();
-	for (const DescriptorTypeCountMultipliers multiplier : descriptorTypeCountMultipliers)
-	{
+	for (const DescriptorTypeCountMultipliers multiplier : descriptorTypeCountMultipliers) {
 		_multipliers.push_back(multiplier);
 	}
 	const VkDescriptorPool newPool = CreatePool(device, setCount, descriptorTypeCountMultipliers);
@@ -18,36 +16,29 @@ void DescriptorPoolManager::Init(VkDevice device, uint32_t setCount, std::span<D
 	_readyPools.push_back(newPool);
 }
 
-void DescriptorPoolManager::ClearPools(const VkDevice device)
-{
-	for (const VkDescriptorPool readyPool : _readyPools)
-	{
+void DescriptorPoolManager::ClearPools(const VkDevice device) {
+	for (const VkDescriptorPool readyPool : _readyPools) {
 		vkResetDescriptorPool(device, readyPool, 0);
 	}
-	for (VkDescriptorPool fullPool : _fullPools)
-	{
+	for (VkDescriptorPool fullPool : _fullPools) {
 		vkResetDescriptorPool(device, fullPool, 0);
 		_readyPools.push_back(fullPool);
 	}
 	_fullPools.clear();
 }
 
-void DescriptorPoolManager::DestroyPools(VkDevice device)
-{
-	for (VkDescriptorPool readyPool : _readyPools)
-	{
+void DescriptorPoolManager::DestroyPools(VkDevice device) {
+	for (VkDescriptorPool readyPool : _readyPools) {
 		vkDestroyDescriptorPool(device, readyPool, nullptr);
 	}
 	_readyPools.clear();
-	for (VkDescriptorPool fullPool : _fullPools)
-	{
+	for (VkDescriptorPool fullPool : _fullPools) {
 		vkDestroyDescriptorPool(device, fullPool, nullptr);
 	}
 	_fullPools.clear();
 }
 
-VkDescriptorSet DescriptorPoolManager::Allocate(const VkDevice device, const VkDescriptorSetLayout layout, const void* pNext)
-{
+VkDescriptorSet DescriptorPoolManager::Allocate(const VkDevice device, const VkDescriptorSetLayout layout, const void* pNext) {
 	// Get or create a pool to allocate from
 	VkDescriptorPool            poolToUse = GetOrCreatePool(device);
 
@@ -62,8 +53,7 @@ VkDescriptorSet DescriptorPoolManager::Allocate(const VkDevice device, const VkD
 	const VkResult  allocationResult = vkAllocateDescriptorSets(device, &allocateInfoWithPool, &descriptorSet);
 
 	// Allocation failed. Try again
-	if (allocationResult == VK_ERROR_OUT_OF_POOL_MEMORY || allocationResult == VK_ERROR_FRAGMENTED_POOL)
-	{
+	if (allocationResult == VK_ERROR_OUT_OF_POOL_MEMORY || allocationResult == VK_ERROR_FRAGMENTED_POOL) {
 		_fullPools.push_back(poolToUse);
 		poolToUse = GetOrCreatePool(device);
 		allocateInfoWithPool.descriptorPool = poolToUse;
@@ -74,22 +64,17 @@ VkDescriptorSet DescriptorPoolManager::Allocate(const VkDevice device, const VkD
 	return descriptorSet;
 }
 
-VkDescriptorPool DescriptorPoolManager::GetOrCreatePool(VkDevice device)
-{
+VkDescriptorPool DescriptorPoolManager::GetOrCreatePool(VkDevice device) {
 	VkDescriptorPool newPool;
-	if (!_readyPools.empty())
-	{
+	if (!_readyPools.empty()) {
 		newPool = _readyPools.back();
 		_readyPools.pop_back();
-	}
-	else
-	{
+	} else {
 		// No pools available from ready - Need to create a new pool
 		newPool = CreatePool(device, _setsPerPool, _multipliers);
 
 		_setsPerPool = _setsPerPool * PantomirFunctionLibrary::GOLDEN_RATIO;
-		if (_setsPerPool > 4092)
-		{
+		if (_setsPerPool > 4092) {
 			_setsPerPool = 4092;
 		}
 	}
@@ -97,11 +82,9 @@ VkDescriptorPool DescriptorPoolManager::GetOrCreatePool(VkDevice device)
 	return newPool;
 }
 
-VkDescriptorPool DescriptorPoolManager::CreatePool(const VkDevice device, const uint32_t setCount, const std::span<DescriptorTypeCountMultipliers> poolMultipliers)
-{
+VkDescriptorPool DescriptorPoolManager::CreatePool(const VkDevice device, const uint32_t setCount, const std::span<DescriptorTypeCountMultipliers> poolMultipliers) {
 	std::vector<VkDescriptorPoolSize> poolSizes;
-	for (const auto [type, multiplier] : poolMultipliers)
-	{
+	for (const auto [type, multiplier] : poolMultipliers) {
 		poolSizes.push_back(VkDescriptorPoolSize {
 		    .type = type,
 		    .descriptorCount = static_cast<uint32_t>(multiplier * setCount) });
@@ -123,10 +106,8 @@ VkDescriptorPool DescriptorPoolManager::CreatePool(const VkDevice device, const 
 // ============================================================
 // DescriptorLayoutBuilder
 // ============================================================
-VkDescriptorSetLayout DescriptorLayoutBuilder::Build(VkDevice device, VkShaderStageFlags shaderStages, void* pNext, VkDescriptorSetLayoutCreateFlags flags)
-{
-	for (VkDescriptorSetLayoutBinding& binding : _bindings)
-	{
+VkDescriptorSetLayout DescriptorLayoutBuilder::Build(VkDevice device, VkShaderStageFlags shaderStages, void* pNext, VkDescriptorSetLayoutCreateFlags flags) {
+	for (VkDescriptorSetLayoutBinding& binding : _bindings) {
 		binding.stageFlags |= shaderStages;
 	}
 
@@ -143,8 +124,7 @@ VkDescriptorSetLayout DescriptorLayoutBuilder::Build(VkDevice device, VkShaderSt
 	return descriptor_set_layout;
 }
 
-void DescriptorLayoutBuilder::AddBinding(const uint32_t binding, const VkDescriptorType type)
-{
+void DescriptorLayoutBuilder::AddBinding(const uint32_t binding, const VkDescriptorType type) {
 	VkDescriptorSetLayoutBinding newDescriptorSetLayoutBinding {};
 	newDescriptorSetLayoutBinding.binding = binding;
 	newDescriptorSetLayoutBinding.descriptorCount = 1;
@@ -153,25 +133,21 @@ void DescriptorLayoutBuilder::AddBinding(const uint32_t binding, const VkDescrip
 	_bindings.push_back(newDescriptorSetLayoutBinding);
 }
 
-void DescriptorLayoutBuilder::Clear()
-{
+void DescriptorLayoutBuilder::Clear() {
 	_bindings.clear();
 }
 
 // ============================================================
 // DescriptorWriter
 // ============================================================
-void DescriptorSetWriter::Clear()
-{
+void DescriptorSetWriter::Clear() {
 	_imageInfos.clear();
 	_writes.clear();
 	_bufferInfos.clear();
 }
 
-void DescriptorSetWriter::UpdateSet(VkDevice device, VkDescriptorSet set)
-{
-	for (VkWriteDescriptorSet& write : _writes)
-	{
+void DescriptorSetWriter::UpdateSet(VkDevice device, VkDescriptorSet set) {
+	for (VkWriteDescriptorSet& write : _writes) {
 		write.dstSet = set;
 	}
 
@@ -182,8 +158,7 @@ void DescriptorSetWriter::UpdateSet(VkDevice device, VkDescriptorSet set)
 	                       nullptr);
 }
 
-void DescriptorSetWriter::WriteBuffer(const int binding, const VkBuffer buffer, const size_t size, const size_t offset, const VkDescriptorType type)
-{
+void DescriptorSetWriter::WriteBuffer(const int binding, const VkBuffer buffer, const size_t size, const size_t offset, const VkDescriptorType type) {
 	const VkDescriptorBufferInfo& descriptorBufferInfo = _bufferInfos.emplace_back(VkDescriptorBufferInfo {
 	    .buffer = buffer,
 	    .offset = offset,
@@ -200,8 +175,7 @@ void DescriptorSetWriter::WriteBuffer(const int binding, const VkBuffer buffer, 
 	_writes.push_back(write);
 }
 
-void DescriptorSetWriter::WriteImage(int binding, VkImageView image, VkSampler sampler, VkImageLayout layout, VkDescriptorType type)
-{
+void DescriptorSetWriter::WriteImage(int binding, VkImageView image, VkSampler sampler, VkImageLayout layout, VkDescriptorType type) {
 	VkDescriptorImageInfo& info = _imageInfos.emplace_back(VkDescriptorImageInfo {
 	    .sampler = sampler,
 	    .imageView = image,

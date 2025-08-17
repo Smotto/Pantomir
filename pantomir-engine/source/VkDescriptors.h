@@ -6,10 +6,8 @@
 // ============================================================
 // DescriptorPoolManager
 // ============================================================
-struct DescriptorPoolManager
-{
-	struct DescriptorTypeCountMultipliers
-	{
+struct DescriptorPoolManager {
+	struct DescriptorTypeCountMultipliers {
 		VkDescriptorType type;
 		float            setCountMultiplier;
 	};
@@ -33,8 +31,7 @@ private:
 // ------------------------------------------------------------
 // DescriptorLayoutBuilder
 // ------------------------------------------------------------
-struct DescriptorLayoutBuilder
-{
+struct DescriptorLayoutBuilder {
 	void                  AddBinding(uint32_t binding, VkDescriptorType type);
 	VkDescriptorSetLayout Build(VkDevice device, VkShaderStageFlags shaderStages, void* pNext = nullptr, VkDescriptorSetLayoutCreateFlags flags = 0);
 
@@ -47,8 +44,7 @@ private:
 // ------------------------------------------------------------
 // DescriptorWriter
 // ------------------------------------------------------------
-struct DescriptorSetWriter
-{
+struct DescriptorSetWriter {
 	void WriteImage(int binding, VkImageView image, VkSampler sampler, VkImageLayout layout, VkDescriptorType type);
 	void WriteBuffer(int binding, VkBuffer buffer, size_t size, size_t offset, VkDescriptorType type);
 

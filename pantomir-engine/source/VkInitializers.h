@@ -4,10 +4,8 @@
 #include "VkTypes.h"
 #include <vulkan/vulkan_core.h>
 
-namespace vkinit
-{
-	constexpr VkCommandPoolCreateInfo CommandPoolCreateInfo(const uint32_t queueFamilyIndex, const VkCommandPoolCreateFlags flags = 0)
-	{
+namespace vkinit {
+	constexpr VkCommandPoolCreateInfo CommandPoolCreateInfo(const uint32_t queueFamilyIndex, const VkCommandPoolCreateFlags flags = 0) {
 		return {
 			.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
 			.pNext = nullptr,
@@ -16,8 +14,7 @@ namespace vkinit
 		};
 	}
 
-	constexpr VkCommandBufferAllocateInfo CommandBufferAllocateInfo(const VkCommandPool pool, const uint32_t count = 1)
-	{
+	constexpr VkCommandBufferAllocateInfo CommandBufferAllocateInfo(const VkCommandPool pool, const uint32_t count = 1) {
 		return {
 			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
 			.pNext = nullptr,
@@ -27,8 +24,7 @@ namespace vkinit
 		};
 	}
 
-	constexpr VkCommandBufferBeginInfo CommandBufferBeginInfo(const VkCommandBufferUsageFlags flags = 0)
-	{
+	constexpr VkCommandBufferBeginInfo CommandBufferBeginInfo(const VkCommandBufferUsageFlags flags = 0) {
 		return {
 			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
 			.pNext = nullptr,
@@ -37,8 +33,7 @@ namespace vkinit
 		};
 	}
 
-	constexpr VkFenceCreateInfo FenceCreateInfo(const VkFenceCreateFlags flags = 0)
-	{
+	constexpr VkFenceCreateInfo FenceCreateInfo(const VkFenceCreateFlags flags = 0) {
 		return {
 			.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
 			.pNext = nullptr,
@@ -46,8 +41,7 @@ namespace vkinit
 		};
 	}
 
-	constexpr VkSemaphoreCreateInfo SemaphoreCreateInfo(const VkSemaphoreCreateFlags flags = 0)
-	{
+	constexpr VkSemaphoreCreateInfo SemaphoreCreateInfo(const VkSemaphoreCreateFlags flags = 0) {
 		return {
 			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
 			.pNext = nullptr,
@@ -55,8 +49,7 @@ namespace vkinit
 		};
 	}
 
-	constexpr VkSemaphoreSubmitInfo SemaphoreSubmitInfo(const VkPipelineStageFlags2 stageMask, const VkSemaphore semaphore)
-	{
+	constexpr VkSemaphoreSubmitInfo SemaphoreSubmitInfo(const VkPipelineStageFlags2 stageMask, const VkSemaphore semaphore) {
 		return {
 			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
 			.pNext = nullptr,
@@ -67,8 +60,7 @@ namespace vkinit
 		};
 	}
 
-	constexpr VkCommandBufferSubmitInfo CommandBufferSubmitInfo(const VkCommandBuffer commandBuffer)
-	{
+	constexpr VkCommandBufferSubmitInfo CommandBufferSubmitInfo(const VkCommandBuffer commandBuffer) {
 		return {
 			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
 			.pNext = nullptr,
@@ -77,8 +69,7 @@ namespace vkinit
 		};
 	}
 
-	constexpr VkSubmitInfo2 SubmitInfo(VkCommandBufferSubmitInfo* commandBufferSubmitInfo, VkSemaphoreSubmitInfo* signalSemaphoreInfo, VkSemaphoreSubmitInfo* waitSemaphoreInfo)
-	{
+	constexpr VkSubmitInfo2 SubmitInfo(VkCommandBufferSubmitInfo* commandBufferSubmitInfo, VkSemaphoreSubmitInfo* signalSemaphoreInfo, VkSemaphoreSubmitInfo* waitSemaphoreInfo) {
 		return {
 			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
 			.pNext = nullptr,
@@ -91,8 +82,7 @@ namespace vkinit
 		};
 	}
 
-	constexpr VkPresentInfoKHR PresentInfo()
-	{
+	constexpr VkPresentInfoKHR PresentInfo() {
 		return {
 			.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
 			.pNext = nullptr,
@@ -104,8 +94,7 @@ namespace vkinit
 		};
 	}
 
-	constexpr VkRenderingAttachmentInfo AttachmentInfo(const VkImageView view, const VkClearValue* clear, const VkImageLayout layout /*= VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL*/)
-	{
+	constexpr VkRenderingAttachmentInfo AttachmentInfo(const VkImageView view, const VkClearValue* clear, const VkImageLayout layout /*= VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL*/) {
 		return {
 			.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
 			.pNext = nullptr,
@@ -117,8 +106,7 @@ namespace vkinit
 		};
 	}
 
-	constexpr VkRenderingAttachmentInfo DepthAttachmentInfo(const VkImageView view, const VkImageLayout layout /*= VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL*/)
-	{
+	constexpr VkRenderingAttachmentInfo DepthAttachmentInfo(const VkImageView view, const VkImageLayout layout /*= VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL*/) {
 		return {
 			.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
 			.pNext = nullptr,
@@ -130,8 +118,7 @@ namespace vkinit
 		};
 	}
 
-	constexpr VkRenderingInfo RenderingInfo(const VkExtent2D renderExtent, VkRenderingAttachmentInfo* colorAttachment, VkRenderingAttachmentInfo* depthAttachment)
-	{
+	constexpr VkRenderingInfo RenderingInfo(const VkExtent2D renderExtent, VkRenderingAttachmentInfo* colorAttachment, VkRenderingAttachmentInfo* depthAttachment) {
 		return {
 			.sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
 			.pNext = nullptr,
@@ -144,8 +131,7 @@ namespace vkinit
 		};
 	}
 
-	constexpr VkImageSubresourceRange ImageSubresourceRange(const VkImageAspectFlags aspectMask)
-	{
+	constexpr VkImageSubresourceRange ImageSubresourceRange(const VkImageAspectFlags aspectMask) {
 		return {
 			.aspectMask = aspectMask,
 			.baseMipLevel = 0,
@@ -155,8 +141,7 @@ namespace vkinit
 		};
 	}
 
-	constexpr VkDescriptorSetLayoutBinding DescriptorSetLayoutBinding(const VkDescriptorType type, const VkShaderStageFlags stageFlags, const uint32_t binding)
-	{
+	constexpr VkDescriptorSetLayoutBinding DescriptorSetLayoutBinding(const VkDescriptorType type, const VkShaderStageFlags stageFlags, const uint32_t binding) {
 		return {
 			.binding = binding,
 			.descriptorType = type,
@@ -166,8 +151,7 @@ namespace vkinit
 		};
 	}
 
-	constexpr VkDescriptorSetLayoutCreateInfo DescriptorSetLayoutCreateInfo(VkDescriptorSetLayoutBinding* bindings, const uint32_t bindingCount)
-	{
+	constexpr VkDescriptorSetLayoutCreateInfo DescriptorSetLayoutCreateInfo(VkDescriptorSetLayoutBinding* bindings, const uint32_t bindingCount) {
 		return {
 			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
 			.pNext = nullptr,
@@ -177,8 +161,7 @@ namespace vkinit
 		};
 	}
 
-	constexpr VkWriteDescriptorSet WriteDescriptorImage(const VkDescriptorType type, const VkDescriptorSet descriptorSet, VkDescriptorImageInfo* imageInfo, const uint32_t binding)
-	{
+	constexpr VkWriteDescriptorSet WriteDescriptorImage(const VkDescriptorType type, const VkDescriptorSet descriptorSet, VkDescriptorImageInfo* imageInfo, const uint32_t binding) {
 		return {
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 			.pNext = nullptr,
@@ -190,8 +173,7 @@ namespace vkinit
 		};
 	}
 
-	constexpr VkWriteDescriptorSet WriteDescriptorBuffer(const VkDescriptorType type, const VkDescriptorSet dstSet, VkDescriptorBufferInfo* bufferInfo, const uint32_t binding)
-	{
+	constexpr VkWriteDescriptorSet WriteDescriptorBuffer(const VkDescriptorType type, const VkDescriptorSet dstSet, VkDescriptorBufferInfo* bufferInfo, const uint32_t binding) {
 		return {
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 			.pNext = nullptr,
@@ -203,8 +185,7 @@ namespace vkinit
 		};
 	}
 
-	constexpr VkDescriptorBufferInfo BufferInfo(const VkBuffer buffer, const VkDeviceSize offset, const VkDeviceSize range)
-	{
+	constexpr VkDescriptorBufferInfo BufferInfo(const VkBuffer buffer, const VkDeviceSize offset, const VkDeviceSize range) {
 		return {
 			.buffer = buffer,
 			.offset = offset,
@@ -212,8 +193,7 @@ namespace vkinit
 		};
 	}
 
-	constexpr VkImageCreateInfo ImageCreateInfo(const VkFormat format, const VkImageUsageFlags usageFlags, const VkExtent3D extent)
-	{
+	constexpr VkImageCreateInfo ImageCreateInfo(const VkFormat format, const VkImageUsageFlags usageFlags, const VkExtent3D extent) {
 		return {
 			.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
 			.pNext = nullptr,
@@ -228,8 +208,7 @@ namespace vkinit
 		};
 	}
 
-	constexpr VkImageViewCreateInfo ImageViewCreateInfo(const VkFormat format, const VkImage image, const VkImageAspectFlags aspectFlags)
-	{
+	constexpr VkImageViewCreateInfo ImageViewCreateInfo(const VkFormat format, const VkImage image, const VkImageAspectFlags aspectFlags) {
 		return {
 			.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
 			.pNext = nullptr,
@@ -245,8 +224,7 @@ namespace vkinit
 		};
 	}
 
-	constexpr VkPipelineLayoutCreateInfo PipelineLayoutCreateInfo()
-	{
+	constexpr VkPipelineLayoutCreateInfo PipelineLayoutCreateInfo() {
 		return {
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
 			.pNext = nullptr,
@@ -258,8 +236,7 @@ namespace vkinit
 		};
 	}
 
-	constexpr VkPipelineShaderStageCreateInfo PipelineShaderStageCreateInfo(const VkShaderStageFlagBits stage, const VkShaderModule shaderModule, const char* entry = "main")
-	{
+	constexpr VkPipelineShaderStageCreateInfo PipelineShaderStageCreateInfo(const VkShaderStageFlagBits stage, const VkShaderModule shaderModule, const char* entry = "main") {
 		return {
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
 			.pNext = nullptr,

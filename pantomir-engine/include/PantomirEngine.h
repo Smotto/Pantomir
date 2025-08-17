@@ -11,8 +11,7 @@ struct ComputeEffect;
 struct LoadedHDRI;
 struct LoadedGLTF;
 
-struct EngineStats
-{
+struct EngineStats {
 	float frameTime;
 	int   triangleCount;
 	int   drawcallCount;
@@ -20,15 +19,13 @@ struct EngineStats
 	float meshDrawTime;
 };
 
-struct DrawContext
-{
+struct DrawContext {
 	std::vector<RenderObject> opaqueSurfaces;
 	std::vector<RenderObject> transparentSurfaces;
 	std::vector<RenderObject> maskedSurfaces;
 };
 
-struct GPUSceneData
-{
+struct GPUSceneData {
 	glm::mat4 view;
 	glm::mat4 proj;
 	glm::mat4 viewProjection;
@@ -37,21 +34,17 @@ struct GPUSceneData
 	glm::vec4 sunlightColor;
 };
 
-struct DeletionQueue
-{
+struct DeletionQueue {
 	// Stores a lambda shared-pointer
 	std::deque<std::shared_ptr<std::function<void()>>> _deletionQueue;
 
-	void                                               PushFunction(std::function<void()>&& function)
-	{
-		_deletionQueue.push_back(MakeDeletionTask(std::forward<decltype(function)>(function)));
+	void                                               PushFunction(std::function<void()>&& function) {
+        _deletionQueue.push_back(MakeDeletionTask(std::forward<decltype(function)>(function)));
 	}
 
-	void Flush()
-	{
+	void Flush() {
 		// Reverse iterate the deletion queue to execute all the functions
-		for (auto it = _deletionQueue.rbegin(); it != _deletionQueue.rend(); ++it)
-		{
+		for (auto it = _deletionQueue.rbegin(); it != _deletionQueue.rend(); ++it) {
 			(**it)(); // Call functors
 		}
 
@@ -59,14 +52,12 @@ struct DeletionQueue
 	}
 
 private:
-	std::shared_ptr<std::function<void()>> MakeDeletionTask(auto&& lambda)
-	{
+	std::shared_ptr<std::function<void()>> MakeDeletionTask(auto&& lambda) {
 		return std::make_shared<std::function<void()>>(std::forward<decltype(lambda)>(lambda));
 	}
 };
 
-struct FrameData
-{
+struct FrameData {
 	VkSemaphore           swapchainSemaphore {}, renderSemaphore {};
 	VkFence               renderFence {};
 
@@ -80,8 +71,7 @@ struct FrameData
 class PantomirEngine;
 constexpr unsigned int FRAME_OVERLAP = 2;
 
-struct GLTFMetallic_Roughness
-{
+struct GLTFMetallic_Roughness {
 	MaterialPipeline      _opaquePipeline;
 	MaterialPipeline      _transparentPipeline;
 	MaterialPipeline      _maskedPipeline;
@@ -94,8 +84,7 @@ struct GLTFMetallic_Roughness
 	VkPipelineLayout      _pipelineLayout;
 
 	// Make sure this is aligned properly.
-	struct MaterialConstants
-	{
+	struct MaterialConstants {
 		glm::vec4 colorFactors;
 		glm::vec4 metalRoughFactors;
 		glm::vec3 emissiveFactors;
@@ -106,8 +95,7 @@ struct GLTFMetallic_Roughness
 	};
 	static_assert(sizeof(MaterialConstants) % 16 == 0, "UBO struct must be aligned to 16 bytes.");
 
-	struct MaterialResources
-	{
+	struct MaterialResources {
 		AllocatedImage colorImage;
 		VkSampler      colorSampler;
 		AllocatedImage metalRoughImage;
@@ -131,8 +119,7 @@ struct GLTFMetallic_Roughness
 	MaterialInstance    WriteMaterial(VkDevice device, MaterialPass passType, VkCullModeFlagBits cullMode, const MaterialResources& resources, DescriptorPoolManager& descriptorPoolManager);
 };
 
-inline bool IsVisible(const RenderObject& renderObject, const glm::mat4& viewProjection)
-{
+inline bool IsVisible(const RenderObject& renderObject, const glm::mat4& viewProjection) {
 	constexpr std::array<glm::vec3, 8> unitCubeCorners {
 		glm::vec3 { 1, 1, 1 },
 		glm::vec3 { 1, 1, -1 },
@@ -150,8 +137,7 @@ inline bool IsVisible(const RenderObject& renderObject, const glm::mat4& viewPro
 	glm::vec3       clipSpaceMax = glm::vec3 { -1.5F };
 
 	// Project each corner of the bounding box into clip space.
-	for (const glm::vec3& localCorner : unitCubeCorners)
-	{
+	for (const glm::vec3& localCorner : unitCubeCorners) {
 		glm::vec3 worldCorner = renderObject.bounds.originPoint + (localCorner * renderObject.bounds.extents);
 		glm::vec4 clipSpaceCorner = objectToClipSpaceMatrix * glm::vec4(worldCorner, 1.0F);
 
@@ -177,23 +163,19 @@ inline bool IsVisible(const RenderObject& renderObject, const glm::mat4& viewPro
 
 inline void BuildDrawListByMaterialMesh(const std::vector<RenderObject>& surfaces,
                                         const glm::mat4&                 viewProjection,
-                                        std::vector<uint32_t>&           out_indices)
-{
+                                        std::vector<uint32_t>&           out_indices) {
 	out_indices.clear();
 	out_indices.reserve(surfaces.size());
 
 	// Visibility culling
-	for (uint32_t index = 0; index < static_cast<uint32_t>(surfaces.size()); ++index)
-	{
-		if (IsVisible(surfaces[index], viewProjection))
-		{
+	for (uint32_t index = 0; index < static_cast<uint32_t>(surfaces.size()); ++index) {
+		if (IsVisible(surfaces[index], viewProjection)) {
 			out_indices.push_back(index);
 		}
 	}
 
 	// Sort by material, then by mesh index
-	std::ranges::sort(out_indices, [&](const uint32_t& a, const uint32_t& b)
-	                  {
+	std::ranges::sort(out_indices, [&](const uint32_t& a, const uint32_t& b) {
 		const RenderObject& A = surfaces[a];
 		const RenderObject& B = surfaces[b];
 		if (A.material == B.material) {
@@ -205,33 +187,28 @@ inline void BuildDrawListByMaterialMesh(const std::vector<RenderObject>& surface
 inline void BuildDrawListTransparent(const std::vector<RenderObject>& surfaces,
                                      const glm::mat4&                 viewProjection,
                                      const glm::vec3&                 cameraPos,
-                                     std::vector<uint32_t>&           out_indices)
-{
+                                     std::vector<uint32_t>&           out_indices) {
 	out_indices.clear();
 	out_indices.reserve(surfaces.size());
 
 	// Visibility culling
-	for (uint32_t index = 0; index < static_cast<uint32_t>(surfaces.size()); ++index)
-	{
-		if (IsVisible(surfaces[index], viewProjection))
-		{
+	for (uint32_t index = 0; index < static_cast<uint32_t>(surfaces.size()); ++index) {
+		if (IsVisible(surfaces[index], viewProjection)) {
 			out_indices.push_back(index);
 		}
 	}
 
 	// Sort farthest to nearest (squared distance for speed)
-	std::ranges::sort(out_indices, [&](const uint32_t& a, const uint32_t& b)
-	                  {
-		                  const glm::vec3 posA = glm::vec3(surfaces[a].transform[3]);
-		                  const glm::vec3 posB = glm::vec3(surfaces[b].transform[3]);
-		                  const float     distA2 = glm::dot(cameraPos - posA, cameraPos - posA);
-		                  const float     distB2 = glm::dot(cameraPos - posB, cameraPos - posB);
-		                  return distA2 > distB2; // farthest first
-	                  });
+	std::ranges::sort(out_indices, [&](const uint32_t& a, const uint32_t& b) {
+		const glm::vec3 posA = glm::vec3(surfaces[a].transform[3]);
+		const glm::vec3 posB = glm::vec3(surfaces[b].transform[3]);
+		const float     distA2 = glm::dot(cameraPos - posA, cameraPos - posA);
+		const float     distB2 = glm::dot(cameraPos - posB, cameraPos - posB);
+		return distA2 > distB2; // farthest first
+	});
 }
 
-class PantomirEngine
-{
+class PantomirEngine {
 public:
 	bool                     _bUseValidationLayers = true;
 
@@ -242,7 +219,6 @@ public:
 	VkPipelineLayout         _hdriPipelineLayout {};
 	VkPipeline               _hdriPipeline {};
 
-	// Immediate submit structures
 	VkFence                  _immediateFence {};
 	VkCommandBuffer          _immediateCommandBuffer {};
 	VkCommandPool            _immediateCommandPool {};
@@ -282,9 +258,8 @@ public:
 	VkExtent2D               _swapchainExtent {};
 
 	FrameData                _frames[FRAME_OVERLAP];
-	FrameData&               GetCurrentFrame()
-	{
-		return _frames[_frameNumber % FRAME_OVERLAP];
+	FrameData&               GetCurrentFrame() {
+        return _frames[_frameNumber % FRAME_OVERLAP];
 	};
 
 	VkQueue                                                      _graphicsQueue {};
@@ -308,8 +283,7 @@ public:
 	PantomirEngine(const PantomirEngine&) = delete;
 	PantomirEngine&        operator=(const PantomirEngine&) = delete;
 
-	static PantomirEngine& GetInstance()
-	{
+	static PantomirEngine& GetInstance() {
 		static PantomirEngine instance;
 		return instance;
 	}
@@ -329,7 +303,9 @@ public:
 	void                          DestroyBuffer(const AllocatedBuffer& buffer) const;
 
 private:
-	float _deltaTime = 0.0f;
+	float _deltaTime = 0.0F;
+	float _minDeltaTimeClamp = 0.0001F;
+	float _maxDeltaTimeClamp = 0.016F;
 
 	PantomirEngine();
 	~PantomirEngine();
@@ -349,10 +325,17 @@ private:
 	void DestroySwapchain() const;
 	void ResizeSwapchain();
 
+	void SetViewport(const VkCommandBuffer& commandBuffer);
+	void SetScissor(const VkCommandBuffer& commandBuffer);
+
+	bool AcquireSwapchainImage(uint32_t& swapchainImageIndex);
+
 	void Draw();
 	void DrawHDRI(VkCommandBuffer commandBuffer);
 	void DrawGeometry(VkCommandBuffer commandBuffer);
 	void DrawImgui(VkCommandBuffer commandBuffer, VkImageView targetImageView) const;
+
+	void PresentSwapchainImage(const uint32_t swapchainImageIndex);
 
 	void UpdateScene();
 };

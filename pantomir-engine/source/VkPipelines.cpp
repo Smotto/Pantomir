@@ -5,8 +5,7 @@
 
 #include <fstream>
 
-VkPipeline PipelineBuilder::BuildPipeline(VkDevice device)
-{
+VkPipeline PipelineBuilder::BuildPipeline(VkDevice device) {
 	// Make viewport state from our stored viewport and scissor.
 	// at the moment we won't support multiple viewports or scissors
 	VkPipelineViewportStateCreateInfo viewportState = {};
@@ -55,45 +54,37 @@ VkPipeline PipelineBuilder::BuildPipeline(VkDevice device)
 	// It's easy to error out on create graphics pipeline, so we handle it a bit
 	// Better than the common VK_CHECK case
 	VkPipeline newPipeline;
-	if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &newPipeline) != VK_SUCCESS)
-	{
+	if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &newPipeline) != VK_SUCCESS) {
 		LOG(Engine_Renderer, Error, "Failed to create pipeline.");
 		return VK_NULL_HANDLE;
-	}
-	else
-	{
+	} else {
 		return newPipeline;
 	}
 }
 
-void PipelineBuilder::SetShaders(const VkShaderModule vertexShader, const VkShaderModule fragmentShader)
-{
+void PipelineBuilder::SetShaders(const VkShaderModule vertexShader, const VkShaderModule fragmentShader) {
 	_shaderStages.clear();
 	_shaderStages.push_back(vkinit::PipelineShaderStageCreateInfo(VK_SHADER_STAGE_VERTEX_BIT, vertexShader));
 	_shaderStages.push_back(vkinit::PipelineShaderStageCreateInfo(VK_SHADER_STAGE_FRAGMENT_BIT, fragmentShader));
 }
 
-void PipelineBuilder::SetInputTopology(const VkPrimitiveTopology topology)
-{
+void PipelineBuilder::SetInputTopology(const VkPrimitiveTopology topology) {
 	_inputAssembly.topology = topology;
 	// We are not going to use primitive restart
 	_inputAssembly.primitiveRestartEnable = VK_FALSE;
 }
 
-void PipelineBuilder::SetPolygonMode(const VkPolygonMode mode)
-{
+void PipelineBuilder::SetPolygonMode(const VkPolygonMode mode) {
 	_rasterizer.polygonMode = mode;
 	_rasterizer.lineWidth = 1.f;
 }
 
-void PipelineBuilder::SetCullMode(const VkCullModeFlags cullMode, const VkFrontFace frontFace)
-{
+void PipelineBuilder::SetCullMode(const VkCullModeFlags cullMode, const VkFrontFace frontFace) {
 	_rasterizer.cullMode = cullMode;
 	_rasterizer.frontFace = frontFace;
 }
 
-void PipelineBuilder::SetMultisamplingNone()
-{
+void PipelineBuilder::SetMultisamplingNone() {
 	_multisampling.sampleShadingEnable = VK_FALSE;
 	// Multisampling defaulted to no multisampling (1 sample per pixel)
 	_multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
@@ -104,29 +95,25 @@ void PipelineBuilder::SetMultisamplingNone()
 	_multisampling.alphaToOneEnable = VK_FALSE;
 }
 
-void PipelineBuilder::DisableBlending()
-{
+void PipelineBuilder::DisableBlending() {
 	// Default write mask
 	_colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
 	// No blending
 	_colorBlendAttachment.blendEnable = VK_FALSE;
 }
 
-void PipelineBuilder::SetColorAttachmentFormat(const VkFormat format)
-{
+void PipelineBuilder::SetColorAttachmentFormat(const VkFormat format) {
 	_colorAttachmentFormat = format;
 	// Connect the format to the renderInfo structure
 	_renderInfo.colorAttachmentCount = 1;
 	_renderInfo.pColorAttachmentFormats = &_colorAttachmentFormat;
 }
 
-void PipelineBuilder::SetDepthFormat(const VkFormat format)
-{
+void PipelineBuilder::SetDepthFormat(const VkFormat format) {
 	_renderInfo.depthAttachmentFormat = format;
 }
 
-void PipelineBuilder::EnableDepthtest(const bool depthWriteEnable, const VkCompareOp op)
-{
+void PipelineBuilder::EnableDepthtest(const bool depthWriteEnable, const VkCompareOp op) {
 	_depthStencil.depthTestEnable = VK_TRUE;
 	_depthStencil.depthWriteEnable = depthWriteEnable;
 	_depthStencil.depthCompareOp = op;
@@ -138,8 +125,7 @@ void PipelineBuilder::EnableDepthtest(const bool depthWriteEnable, const VkCompa
 	_depthStencil.maxDepthBounds = 1.f;
 }
 
-void PipelineBuilder::DisableDepthtest()
-{
+void PipelineBuilder::DisableDepthtest() {
 	_depthStencil.depthTestEnable = VK_FALSE;
 	_depthStencil.depthWriteEnable = VK_FALSE;
 	_depthStencil.depthCompareOp = VK_COMPARE_OP_NEVER;
@@ -151,8 +137,7 @@ void PipelineBuilder::DisableDepthtest()
 	_depthStencil.maxDepthBounds = 1.f;
 }
 
-void PipelineBuilder::Clear()
-{
+void PipelineBuilder::Clear() {
 	_inputAssembly = { .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO };
 	_rasterizer = { .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO };
 	_colorBlendAttachment = {};
@@ -163,8 +148,7 @@ void PipelineBuilder::Clear()
 	_shaderStages.clear();
 }
 
-void PipelineBuilder::EnableBlendingAdditive()
-{
+void PipelineBuilder::EnableBlendingAdditive() {
 	_colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
 	_colorBlendAttachment.blendEnable = VK_TRUE;
 	_colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
@@ -175,8 +159,7 @@ void PipelineBuilder::EnableBlendingAdditive()
 	_colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
 }
 
-void PipelineBuilder::EnableBlendingAlphablend()
-{
+void PipelineBuilder::EnableBlendingAlphablend() {
 	_colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
 	_colorBlendAttachment.blendEnable = VK_TRUE;
 	_colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
@@ -187,12 +170,10 @@ void PipelineBuilder::EnableBlendingAlphablend()
 	_colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
 }
 
-bool vkutil::LoadShaderModule(const char* filePath, const VkDevice device, VkShaderModule* outShaderModule)
-{
+bool vkutil::LoadShaderModule(const char* filePath, const VkDevice device, VkShaderModule* outShaderModule) {
 	std::ifstream file(filePath, std::ios::ate | std::ios::binary); // Open file with cursor at the end.
 
-	if (!file.is_open())
-	{
+	if (!file.is_open()) {
 		return false;
 	}
 
@@ -225,8 +206,7 @@ bool vkutil::LoadShaderModule(const char* filePath, const VkDevice device, VkSha
 
 	// Check that the creation succeeds
 	VkShaderModule shaderModule;
-	if (vkCreateShaderModule(device, &create_info, nullptr, &shaderModule) != VK_SUCCESS)
-	{
+	if (vkCreateShaderModule(device, &create_info, nullptr, &shaderModule) != VK_SUCCESS) {
 		return false;
 	}
 

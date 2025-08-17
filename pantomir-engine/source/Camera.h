@@ -7,16 +7,15 @@
 
 union SDL_Event;
 
-class Camera
-{
+class Camera {
 public:
 	glm::vec3               _velocity;
 	glm::vec3               _position;
-	float                   _speedMultiplier = 3.0f;
-	float                   _shiftSpeedMultiplier = 2.0f;
+	float                   _speedMultiplier = 3.0F;
+	float                   _shiftSpeedMultiplier = 2.0F;
 
-	float                   _pitch { 0.f }; // Vertical rotation
-	float                   _yaw { 0.f };   // Horizontal rotation
+	float                   _pitch { 0.F }; // Vertical rotation
+	float                   _yaw { 0.F };   // Horizontal rotation
 
 	[[nodiscard]] glm::mat4 GetViewMatrix() const;
 	[[nodiscard]] glm::mat4 GetRotationMatrix() const;

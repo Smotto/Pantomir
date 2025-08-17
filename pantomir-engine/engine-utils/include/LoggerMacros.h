@@ -13,8 +13,7 @@
 */
 
 // Define log categories as global constants
-namespace LogCategory
-{
+namespace LogCategory {
 	inline const std::string Engine = "Engine";
 	inline const std::string Engine_Platform = "Engine::Platform";
 	inline const std::string Engine_Renderer = "Engine::Renderer";
@@ -26,11 +25,9 @@ namespace LogCategory
 	inline const std::string Temp = "Temp";
 } // namespace LogCategory
 
-namespace Pantomir
-{
+namespace Pantomir {
 	// Helper to create custom category strings
-	inline std::string MakeLogCategory(const std::initializer_list<std::string>& categories)
-	{
+	inline std::string MakeLogCategory(const std::initializer_list<std::string>& categories) {
 		if (categories.begin() == categories.end())
 			return "Unknown";
 
@@ -38,8 +35,7 @@ namespace Pantomir
 		std::string        result = *it;
 		++it;
 
-		for (; it != categories.end(); ++it)
-		{
+		for (; it != categories.end(); ++it) {
 			result += "::" + *it;
 		}
 

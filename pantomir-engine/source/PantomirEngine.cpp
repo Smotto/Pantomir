@@ -219,9 +219,9 @@ void PantomirEngine::MainLoop() {
 	bool bQuit = false;
 
 	while (!bQuit) {
-		const auto start = std::chrono::steady_clock::now();
+		const std::chrono::time_point<std::chrono::steady_clock> start = std::chrono::steady_clock::now();
 
-		SDL_Event  event;
+		SDL_Event                                                event;
 
 		// Handle events on queue
 		while (SDL_PollEvent(&event) != 0) {
@@ -320,7 +320,7 @@ void PantomirEngine::MainLoop() {
 		const std::chrono::time_point      end = std::chrono::steady_clock::now();
 		const std::chrono::duration<float> elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 		_stats.frameTime = elapsed.count() / 1000.f;
-		_deltaTime = std::clamp(elapsed.count(), 0.0001f, 0.016f);
+		_deltaTime = std::clamp(elapsed.count(), _minDeltaTimeClamp, _maxDeltaTimeClamp);
 	}
 }
 
@@ -495,7 +495,7 @@ PantomirEngine::~PantomirEngine() {
 	// TODO: I really don't like handling a shared ptr like this.
 	_currentHDRI.reset();
 
-	for (auto& frame : _frames) {
+	for (FrameData& frame : _frames) {
 		frame.deletionQueue.Flush();
 	}
 
@@ -868,7 +868,8 @@ void PantomirEngine::InitDefaultData() {
 		DestroyImage(whiteImage);
 		DestroyImage(greyImage);
 		DestroyImage(blackImage);
-		DestroyImage(errorCheckerboardImage); });
+		DestroyImage(errorCheckerboardImage);
+	});
 
 	GLTFMetallic_Roughness::MaterialResources defaultMaterialResources {};
 	// Default the material textures
@@ -957,6 +958,37 @@ void PantomirEngine::ResizeSwapchain() {
 	_resizeRequested = false;
 }
 
+void PantomirEngine::SetViewport(const VkCommandBuffer& commandBuffer) {
+	VkViewport viewport {};
+	viewport.x = 0;
+	viewport.y = _windowExtent.height;
+	viewport.width = static_cast<float>(_windowExtent.width);
+	// Vulkan 1.3 spec, §13.5 If the height of the viewport is negative, the result of the viewport transform is as if height were positive, and y and the front face orientation are flipped.
+	viewport.height = -(static_cast<float>(_windowExtent.height));
+	viewport.minDepth = 0.f;
+	viewport.maxDepth = 1.f;
+	vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+}
+
+void PantomirEngine::SetScissor(const VkCommandBuffer& commandBuffer) {
+	VkRect2D scissor = {};
+	scissor.offset.x = 0;
+	scissor.offset.y = 0;
+	scissor.extent.width = _windowExtent.width;
+	scissor.extent.height = _windowExtent.height;
+	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+}
+
+bool PantomirEngine::AcquireSwapchainImage(uint32_t& swapchainImageIndex) {
+	const VkResult acquireNextImageKhr = vkAcquireNextImageKHR(_logicalGPU, _swapchain, 1000000000, GetCurrentFrame().swapchainSemaphore, nullptr, &swapchainImageIndex);
+	if (acquireNextImageKhr == VK_ERROR_OUT_OF_DATE_KHR) {
+		_resizeRequested = true;
+		return false;
+	}
+
+	return true;
+}
+
 void PantomirEngine::Draw() {
 	UpdateScene();
 
@@ -967,10 +999,8 @@ void PantomirEngine::Draw() {
 	GetCurrentFrame().deletionQueue.Flush();
 	GetCurrentFrame().descriptorPoolManager.ClearPools(_logicalGPU);
 
-	uint32_t       swapchainImageIndex;
-	const VkResult acquireNextImageKhr = vkAcquireNextImageKHR(_logicalGPU, _swapchain, 1000000000, GetCurrentFrame().swapchainSemaphore, nullptr, &swapchainImageIndex);
-	if (acquireNextImageKhr == VK_ERROR_OUT_OF_DATE_KHR) {
-		_resizeRequested = true;
+	uint32_t swapchainImageIndex;
+	if (!AcquireSwapchainImage(swapchainImageIndex)) {
 		return;
 	}
 
@@ -988,21 +1018,8 @@ void PantomirEngine::Draw() {
 	/* Recording State */
 	VK_CHECK(vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo));
 
-	VkViewport viewport {};
-	viewport.x = 0;
-	viewport.y = _windowExtent.height;
-	viewport.width = static_cast<float>(_windowExtent.width);
-	// Vulkan 1.3 spec, §13.5 If the height of the viewport is negative, the result of the viewport transform is as if height were positive, and y and the front face orientation are flipped.
-	viewport.height = -(static_cast<float>(_windowExtent.height));
-	viewport.minDepth = 0.f;
-	viewport.maxDepth = 1.f;
-	vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
-	VkRect2D scissor = {};
-	scissor.offset.x = 0;
-	scissor.offset.y = 0;
-	scissor.extent.width = _windowExtent.width;
-	scissor.extent.height = _windowExtent.height;
-	vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+	SetViewport(commandBuffer);
+	SetScissor(commandBuffer);
 
 	vkutil::TransitionImage(commandBuffer, _colorImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 	vkutil::TransitionImage(commandBuffer, _depthImage.image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
@@ -1029,36 +1046,18 @@ void PantomirEngine::Draw() {
 	// Prepare the submission to the queue.
 	// We want to wait on the _presentSemaphore, as that semaphore is signaled when the swapchain is ready
 	// We will signal the _renderSemaphore, to signal that rendering has finished
-
 	VkCommandBufferSubmitInfo commandBufferSubmitInfo = vkinit::CommandBufferSubmitInfo(commandBuffer);
 	VkSemaphoreSubmitInfo     signalInfo = vkinit::SemaphoreSubmitInfo(VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, GetCurrentFrame().renderSemaphore);
 	VkSemaphoreSubmitInfo     waitInfo = vkinit::SemaphoreSubmitInfo(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR, GetCurrentFrame().swapchainSemaphore);
 	VkSubmitInfo2             submitInfo = vkinit::SubmitInfo(&commandBufferSubmitInfo, &signalInfo, &waitInfo);
 
 	// Submit command buffer to the queue and execute it.
-	//  _renderFence will now block until the graphic commands finish execution.
+	// renderFence will now block until the graphic commands finish execution.
+
 	/* Pending State */
 	VK_CHECK(vkQueueSubmit2(_graphicsQueue, 1, &submitInfo, GetCurrentFrame().renderFence));
 
-	// Prepare present
-	//  this will put the image we just rendered to into the visible window.
-	//  We want to wait on the _renderSemaphore for that,
-	//  as its necessary that drawing commands have finished before the image is displayed to the user
-	VkPresentInfoKHR presentInfo = {};
-	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-	presentInfo.pNext = nullptr;
-	presentInfo.pSwapchains = &_swapchain;
-	presentInfo.swapchainCount = 1;
-
-	presentInfo.pWaitSemaphores = &GetCurrentFrame().renderSemaphore;
-	presentInfo.waitSemaphoreCount = 1;
-
-	presentInfo.pImageIndices = &swapchainImageIndex;
-
-	VkResult presentResult = vkQueuePresentKHR(_graphicsQueue, &presentInfo);
-	if (presentResult == VK_ERROR_OUT_OF_DATE_KHR) {
-		_resizeRequested = true;
-	}
+	PresentSwapchainImage(swapchainImageIndex);
 
 	// Increase the number of frames drawn
 	++_frameNumber;
@@ -1203,8 +1202,23 @@ void PantomirEngine::DrawImgui(const VkCommandBuffer commandBuffer, const VkImag
 	vkCmdEndRendering(commandBuffer);
 }
 
+void PantomirEngine::PresentSwapchainImage(const uint32_t swapchainImageIndex) {
+	VkPresentInfoKHR presentInfo = {};
+	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+	presentInfo.pNext = nullptr;
+	presentInfo.pSwapchains = &_swapchain;
+	presentInfo.swapchainCount = 1;
+	presentInfo.pWaitSemaphores = &GetCurrentFrame().renderSemaphore; // We wait on this in order to present the image to the surface.
+	presentInfo.waitSemaphoreCount = 1;
+	presentInfo.pImageIndices = &swapchainImageIndex;
+	VkResult presentResult = vkQueuePresentKHR(_graphicsQueue, &presentInfo);
+	if (presentResult == VK_ERROR_OUT_OF_DATE_KHR) {
+		_resizeRequested = true;
+	}
+}
+
 void PantomirEngine::UpdateScene() {
-	const auto start = std::chrono::steady_clock::now();
+	const std::chrono::time_point<std::chrono::steady_clock> start = std::chrono::steady_clock::now();
 
 	_mainCamera.Update(_deltaTime);
 
@@ -1218,14 +1232,13 @@ void PantomirEngine::UpdateScene() {
 	_mainDrawContext.opaqueSurfaces.clear();
 	_mainDrawContext.maskedSurfaces.clear();
 	_mainDrawContext.transparentSurfaces.clear();
+
 	_loadedScenes["Echidna1"]->FillDrawContext(glm::mat4 { 1.f }, _mainDrawContext);
 
 	const std::chrono::time_point<std::chrono::steady_clock> end = std::chrono::steady_clock::now();
 	const std::chrono::duration<float>                       elapsed = std::chrono::duration<float>(end - start);
-	const float                                              deltaTimeSeconds = elapsed.count();
 
 	_stats.sceneUpdateTime = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
-	_deltaTime = std::clamp(deltaTimeSeconds, 0.0001f, 0.016f);
 }
 
 int main(int argc, char* argv[]) {
