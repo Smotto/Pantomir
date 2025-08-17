@@ -8,7 +8,6 @@ layout(set = 0, binding = 0) uniform sampler2D hdrImage;
 void main() {
     vec3 dir = normalize(vDirection);
 
-    // No Y flip needed here
     vec2 uv;
     uv.x = atan(dir.z, dir.x) / (2.0 * 3.1415926) + 0.5;
     uv.y = asin(dir.y) / 3.1415926 + 0.5;

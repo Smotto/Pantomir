@@ -8,9 +8,9 @@ layout(push_constant) uniform PushConstants {
 layout(location = 0) out vec3 vDirection;
 
 vec3 positions[3] = vec3[](
-    vec3(-1.0, -1.0, 1.0),
-    vec3(3.0, -1.0, 1.0),
-    vec3(-1.0, 3.0, 1.0)
+    vec3(-1.0, -1.0, 0.0), // Bottom left corner
+    vec3(3.0, -1.0, 0.0), // Past bottom-right edge
+    vec3(-1.0, 3.0, 0.0) // Past top-left edge
 );
 
 void main() {

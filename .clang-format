@@ -9,7 +9,7 @@ UseTab: ForIndentation
 
 AccessModifierOffset: -4
 ColumnLimit: 0
-BreakBeforeBraces: Allman
+BreakBeforeBraces: Attach
 
 
 AllowShortLoopsOnASingleLine: false
