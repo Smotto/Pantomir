@@ -51,8 +51,9 @@ struct LoadedGLTF final : IRenderable {
 	// Storage for all the data on a given glTF file
 	std::unordered_map<std::string, std::shared_ptr<MeshAsset>>    _meshes;
 	std::unordered_map<std::string, std::shared_ptr<Node>>         _nodes;
-	std::unordered_map<std::string, AllocatedImage>                _images;
 	std::unordered_map<std::string, std::shared_ptr<GLTFMaterial>> _materials;
+
+	std::vector<AllocatedImage>                                    _imagesByIndex;
 
 	// Nodes that don't have a parent, for iterating through the file in tree order
 	std::vector<std::shared_ptr<Node>>                             _topNodes;

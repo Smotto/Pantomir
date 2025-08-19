@@ -35,9 +35,6 @@ struct GPUSceneData {
 };
 
 struct DeletionQueue {
-	// Stores a lambda shared-pointer
-	std::deque<std::shared_ptr<std::function<void()>>> _deletionQueue;
-
 	void                                               PushFunction(std::function<void()>&& function) {
         _deletionQueue.push_back(MakeDeletionTask(std::forward<decltype(function)>(function)));
 	}
@@ -52,6 +49,9 @@ struct DeletionQueue {
 	}
 
 private:
+	// Stores a lambda shared-pointer
+	std::deque<std::shared_ptr<std::function<void()>>> _deletionQueue;
+
 	std::shared_ptr<std::function<void()>> MakeDeletionTask(auto&& lambda) {
 		return std::make_shared<std::function<void()>>(std::forward<decltype(lambda)>(lambda));
 	}

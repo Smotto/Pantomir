@@ -871,34 +871,6 @@ void PantomirEngine::InitDefaultData() {
 		DestroyImage(errorCheckerboardImage);
 	});
 
-	GLTFMetallic_Roughness::MaterialResources defaultMaterialResources {};
-	// Default the material textures
-	defaultMaterialResources.colorImage = _whiteImage;
-	defaultMaterialResources.colorSampler = _defaultSamplerLinear;
-	defaultMaterialResources.metalRoughImage = _greyImage;
-	defaultMaterialResources.metalRoughSampler = _defaultSamplerLinear;
-	defaultMaterialResources.emissiveImage = _whiteImage;
-	defaultMaterialResources.emissiveSampler = _defaultSamplerLinear;
-	defaultMaterialResources.normalImage = _whiteImage;
-	defaultMaterialResources.normalSampler = _defaultSamplerLinear;
-	defaultMaterialResources.specularImage = _whiteImage;
-	defaultMaterialResources.specularSampler = _defaultSamplerLinear;
-
-	// Set the uniform buffer for the material data
-	AllocatedBuffer                            materialConstants = CreateBuffer(sizeof(GLTFMetallic_Roughness::MaterialConstants), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-
-	// Write the buffer
-	GLTFMetallic_Roughness::MaterialConstants* sceneUniformData = static_cast<GLTFMetallic_Roughness::MaterialConstants*>(materialConstants.allocation->GetMappedData());
-	sceneUniformData->colorFactors = glm::vec4 { 1, 1, 1, 1 };
-	sceneUniformData->metalRoughFactors = glm::vec4 { 1, 1, 1, 0 };
-	sceneUniformData->emissiveFactors = glm::vec3 { 0, 0, 0 };
-	sceneUniformData->specularFactor = 0.F;
-
-	defaultMaterialResources.dataBuffer = materialConstants.buffer;
-	defaultMaterialResources.dataBufferOffset = 0;
-
-	_defaultMaterialInstance = _metalRoughMaterial.WriteMaterial(_logicalGPU, MaterialPass::Opaque, VK_CULL_MODE_NONE, defaultMaterialResources, GetCurrentFrame().descriptorPoolManager);
-
 	std::string                                modelPath = { "Assets/Models/Echidna1.glb" };
 	std::optional<std::shared_ptr<LoadedGLTF>> modelFile = LoadGltf(this, modelPath);
 	std::string                                hdriPath = { "Assets/Textures/citrus_orchard_road_puresky_4k.hdr" };
@@ -913,8 +885,6 @@ void PantomirEngine::InitDefaultData() {
 	_loadedHDRIs["citrus_orchard_road_puresky_4k"] = *hdriFile;
 	_loadedHDRIs["brown_photostudio_02_4k"] = *hdriFile2;
 	_currentHDRI = _loadedHDRIs["citrus_orchard_road_puresky_4k"];
-
-	_shutdownDeletionQueue.PushFunction([this, materialConstants]() { DestroyBuffer(materialConstants); });
 }
 
 void PantomirEngine::CreateSwapchain(const uint32_t width, const uint32_t height) {
