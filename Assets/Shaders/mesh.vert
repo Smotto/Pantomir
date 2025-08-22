@@ -11,6 +11,7 @@ layout (location = 2) out vec2 outUV;
 layout (location = 3) out vec3 outTangent;
 layout (location = 4) out vec3 outBitangent;
 layout (location = 5) out vec3 outNormalWS;
+layout (location = 6) out vec3 outWorldPos;
 
 struct Vertex {
     vec3 position;
@@ -54,4 +55,5 @@ void main()
     outBitangent  = normalize(normalMatrix * bitangent);
     outUV         = uv;
     outColor      = color;
+    outWorldPos   = worldPos.xyz;
 }

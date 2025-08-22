@@ -2,6 +2,7 @@ layout (set = 0, binding = 0) uniform SceneData {
     mat4 view;
     mat4 proj;
     mat4 viewproj;
+    vec3 cameraPosition;
     vec4 ambientColor;
     vec4 sunlightDirection;
     vec4 sunlightColor;

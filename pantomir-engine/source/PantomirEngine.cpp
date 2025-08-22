@@ -10,6 +10,7 @@
 #include <SDL3/SDL_vulkan.h>
 
 #define VMA_IMPLEMENTATION // Implementation flag, compiles VMA functions
+#include "Camera.h"
 #include "vk_mem_alloc.h"
 
 #include "LoggerMacros.h"
@@ -22,8 +23,6 @@
 #include "imgui.h"
 #include "imgui_impl_sdl3.h"
 #include "imgui_impl_vulkan.h"
-
-#include "Camera.h"
 
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtx/norm.hpp>
@@ -280,7 +279,7 @@ void PantomirEngine::MainLoop() {
 			if (ImGui::DragFloat3("Sunlight Direction", glm::value_ptr(sunDirection), 0.01f, -1.0f, 1.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp)) {
 				if (glm::length2(sunDirection) > 0.0f) { // Avoid NaNs
 					sunDirection = glm::normalize(sunDirection);
-					_sceneData.sunlightDirection = glm::vec4(sunDirection, 1.0f);
+					_sceneData.sunlightDirection = glm::vec4(sunDirection, 0.0f);
 				}
 			}
 		}
@@ -480,7 +479,8 @@ PantomirEngine::PantomirEngine() {
 	InitSwapchain();
 	InitCommands();
 	InitSyncStructures();
-	InitDescriptors();
+	InitDescriptorLayouts();
+	InitDescriptorPools();
 	InitPipelines();
 	InitImgui();
 	InitDefaultData();
@@ -655,7 +655,7 @@ void PantomirEngine::InitCommands() {
 	VK_CHECK(vkAllocateCommandBuffers(_logicalGPU, &commandBufferAllocInfoImmediate, &_immediateCommandBuffer)); /* Initial State */
 	_shutdownDeletionQueue.PushFunction([this]() { vkDestroyCommandPool(_logicalGPU, _immediateCommandPool, nullptr); });
 
-	/* Render Frames */
+	/* COMMAND POOLS AND BUFFERS PER BACK BUFFER FRAME */
 	for (FrameData& frame : _frames) {
 		VK_CHECK(vkCreateCommandPool(_logicalGPU, &commandPoolInfo, nullptr, &frame.commandPool));
 		VkCommandBufferAllocateInfo commandBufferAllocInfo = vkinit::CommandBufferAllocateInfo(frame.commandPool, 1);
@@ -684,28 +684,37 @@ void PantomirEngine::InitSyncStructures() {
 	_shutdownDeletionQueue.PushFunction([this]() { vkDestroyFence(_logicalGPU, _immediateFence, nullptr); });
 }
 
-void PantomirEngine::InitDescriptors() {
-	// Make the descriptor set layout for our scene draw
+void PantomirEngine::InitDescriptorLayouts() {
+	/* GPU SCENE BUFFER */
 	{
 		DescriptorLayoutBuilder builder;
 		builder.AddBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 		_gpuSceneDataDescriptorSetLayout = builder.Build(_logicalGPU, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 	}
 
-	// Make the descriptor set layout for HDRI
+	/* HDRI IMAGE + SAMPLER */
 	{
 		DescriptorLayoutBuilder builder;
 		builder.AddBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 		_hdriDescriptorSetLayout = builder.Build(_logicalGPU, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 	}
 
-	// Make the descriptor set layout for textures
+	/* DEBUG LINE */
 	{
-		_shutdownDeletionQueue.PushFunction([this]() {
-			vkDestroyDescriptorSetLayout(_logicalGPU, _gpuSceneDataDescriptorSetLayout, nullptr);
-			vkDestroyDescriptorSetLayout(_logicalGPU, _hdriDescriptorSetLayout, nullptr); });
+		DescriptorLayoutBuilder builder;
+		builder.AddBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+		_debugLineDescriptorSetLayout = builder.Build(_logicalGPU, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 	}
 
+	/* SHUTDOWN DELETION */
+	_shutdownDeletionQueue.PushFunction([this]() {
+		vkDestroyDescriptorSetLayout(_logicalGPU, _gpuSceneDataDescriptorSetLayout, nullptr);
+		vkDestroyDescriptorSetLayout(_logicalGPU, _hdriDescriptorSetLayout, nullptr);
+		vkDestroyDescriptorSetLayout(_logicalGPU, _debugLineDescriptorSetLayout, nullptr);
+	});
+}
+
+void PantomirEngine::InitDescriptorPools() {
 	for (int i = 0; i < FRAME_OVERLAP; ++i) {
 		std::vector<DescriptorPoolManager::DescriptorTypeCountMultipliers> frameSizes = {
 			{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 3 },
@@ -717,14 +726,19 @@ void PantomirEngine::InitDescriptors() {
 		_frames[i].descriptorPoolManager = DescriptorPoolManager {};
 		_frames[i].descriptorPoolManager.Init(_logicalGPU, 1000, frameSizes);
 
-		_shutdownDeletionQueue.PushFunction([this, i]() { _frames[i].descriptorPoolManager.DestroyPools(_logicalGPU); });
+		_shutdownDeletionQueue.PushFunction([this, i]() {
+			_frames[i].descriptorPoolManager.DestroyPools(_logicalGPU);
+		});
 	}
 }
 
 void PantomirEngine::InitPipelines() {
 	_metalRoughMaterial.BuildPipelines(this);
-	_shutdownDeletionQueue.PushFunction([this]() { _metalRoughMaterial.ClearResources(_logicalGPU); });
+	_shutdownDeletionQueue.PushFunction([this]() {
+		_metalRoughMaterial.ClearResources(_logicalGPU);
+	});
 	InitHDRIPipeline();
+	InitDebugLinePipeline();
 }
 
 void PantomirEngine::InitImgui() {
@@ -779,16 +793,16 @@ void PantomirEngine::InitImgui() {
 void PantomirEngine::InitHDRIPipeline() {
 	VkShaderModule HDRIVertexShader;
 	if (!vkutil::LoadShaderModule("Assets/Shaders/HDRI.vert.spv", _logicalGPU, &HDRIVertexShader)) {
-		LOG(Engine, Error, "Error when building the triangle vertex shader module");
+		LOG(Engine, Error, "Error when building the {} vertex shader module", __func__);
 	} else {
-		LOG(Engine, Info, "HDRI vertex shader successfully loaded");
+		LOG(Engine, Info, "{} vertex shader successfully loaded", __func__);
 	}
 
 	VkShaderModule HDRIFragShader;
 	if (!vkutil::LoadShaderModule("Assets/Shaders/HDRI.frag.spv", _logicalGPU, &HDRIFragShader)) {
-		LOG(Engine, Error, "Error when building the triangle fragment shader module");
+		LOG(Engine, Error, "Error when building the {} fragment shader module", __func__);
 	} else {
-		LOG(Engine, Info, "HDRI fragment shader successfully loaded");
+		LOG(Engine, Info, "{} fragment shader successfully loaded", __func__);
 	}
 
 	VkPushConstantRange bufferRange {};
@@ -821,10 +835,78 @@ void PantomirEngine::InitHDRIPipeline() {
 
 	_shutdownDeletionQueue.PushFunction([this]() {
 		vkDestroyPipelineLayout(_logicalGPU, _hdriPipelineLayout, nullptr);
-		vkDestroyPipeline(_logicalGPU, _hdriPipeline, nullptr); });
+		vkDestroyPipeline(_logicalGPU, _hdriPipeline, nullptr);
+	});
+}
+
+void PantomirEngine::InitDebugLinePipeline() {
+	VkShaderModule debugLineVertexShader;
+	if (!vkutil::LoadShaderModule("Assets/Shaders/DebugLine.vert.spv", _logicalGPU, &debugLineVertexShader)) {
+		LOG(Engine, Error, "Error when building the {} vertex shader module", __func__);
+	} else {
+		LOG(Engine, Info, "{} vertex shader successfully loaded", __func__);
+	}
+
+	VkShaderModule debugLineFragShader;
+	if (!vkutil::LoadShaderModule("Assets/Shaders/DebugLine.frag.spv", _logicalGPU, &debugLineFragShader)) {
+		LOG(Engine, Error, "Error when building the fragment shader module", __func__);
+	} else {
+		LOG(Engine, Info, "{} fragment shader successfully loaded", __func__);
+	}
+
+	VkPushConstantRange bufferRange {};
+	bufferRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+	bufferRange.offset = 0;
+	bufferRange.size = sizeof(LinePushConstants);
+
+	VkPipelineLayoutCreateInfo pipelineLayoutInfo = vkinit::PipelineLayoutCreateInfo();
+	pipelineLayoutInfo.pSetLayouts = &_debugLineDescriptorSetLayout; // set=0 has CameraUBO
+	pipelineLayoutInfo.setLayoutCount = 1;
+	pipelineLayoutInfo.pPushConstantRanges = &bufferRange;
+	pipelineLayoutInfo.pushConstantRangeCount = 1;
+	VK_CHECK(vkCreatePipelineLayout(_logicalGPU, &pipelineLayoutInfo, nullptr, &_debugLinePipelineLayout));
+
+	PipelineBuilder pipelineBuilder;
+	pipelineBuilder._pipelineLayout = _debugLinePipelineLayout;
+	pipelineBuilder.SetShaders(debugLineVertexShader, debugLineFragShader);
+	pipelineBuilder.SetInputTopology(VK_PRIMITIVE_TOPOLOGY_LINE_LIST);
+	pipelineBuilder.SetPolygonMode(VK_POLYGON_MODE_FILL);
+	pipelineBuilder.SetCullMode(VK_CULL_MODE_NONE, VK_FRONT_FACE_COUNTER_CLOCKWISE);
+	pipelineBuilder.SetMultisamplingNone();
+	pipelineBuilder.DisableBlending();
+	pipelineBuilder.SetColorAttachmentFormat(_colorImage.imageFormat);
+	pipelineBuilder.DisableDepthtest();
+
+	_debugLinePipeline = pipelineBuilder.BuildPipeline(_logicalGPU);
+
+	vkDestroyShaderModule(_logicalGPU, debugLineVertexShader, nullptr);
+	vkDestroyShaderModule(_logicalGPU, debugLineFragShader, nullptr);
+
+	_shutdownDeletionQueue.PushFunction([this]() {
+		vkDestroyPipelineLayout(_logicalGPU, _debugLinePipelineLayout, nullptr);
+		vkDestroyPipeline(_logicalGPU, _debugLinePipeline, nullptr);
+	});
 }
 
 void PantomirEngine::InitDefaultData() {
+	DebugLine WorldUp;
+	WorldUp.a = { 0.f, 0.f, 0.f };
+	WorldUp.b = { 0.f, 1.8f, 0.f };
+	WorldUp.color = { 0.f, 1.f, 0.f, 1.f };
+	DebugLine WorldRight;
+	WorldRight.a = { 0.f, 0.f, 0.f };
+	WorldRight.b = { 1.8f, 0.f, 0.f };
+	WorldRight.color = { 1.f, 0.f, 0.f, 1.f };
+	DebugLine WorldForward;
+	WorldForward.a = { 0.f, 0.f, 0.f };
+	WorldForward.b = { 0.f, 0.f, 1.8f };
+	WorldForward.color = { 0.f, 0.f, 1.f, 1.f };
+
+	_debugLines.reserve(3);
+	_debugLines.push_back(WorldUp);
+	_debugLines.push_back(WorldRight);
+	_debugLines.push_back(WorldForward);
+
 	_mainCamera._velocity = glm::vec3(0.f);
 	_mainCamera._position = glm::vec3(0.f, 1.5f, 1.5f);
 	_mainCamera._pitch = 0;
@@ -832,7 +914,7 @@ void PantomirEngine::InitDefaultData() {
 
 	_sceneData.ambientColor = glm::vec4(.1f);
 	_sceneData.sunlightColor = glm::vec4(1.f);
-	_sceneData.sunlightDirection = glm::vec4(0, 0, -1.0, 1.f);
+	_sceneData.sunlightDirection = glm::vec4(0, 0, -1.0, 0.f); // If actor is facing (along +Z axis), then sun must face (along -Z axis)
 
 	// 3 default textures, white, grey, black. 1 pixel each
 	uint32_t white = glm::packUnorm4x8(glm::vec4(1, 1, 1, 1));
@@ -928,7 +1010,13 @@ void PantomirEngine::ResizeSwapchain() {
 	_resizeRequested = false;
 }
 
-void PantomirEngine::SetViewport(const VkCommandBuffer& commandBuffer) {
+void PantomirEngine::ClearSurfaces() {
+	_mainDrawContext.opaqueSurfaces.clear();
+	_mainDrawContext.maskedSurfaces.clear();
+	_mainDrawContext.transparentSurfaces.clear();
+}
+
+void PantomirEngine::SetViewport(const VkCommandBuffer& commandBuffer) const {
 	VkViewport viewport {};
 	viewport.x = 0;
 	viewport.y = _windowExtent.height;
@@ -940,7 +1028,7 @@ void PantomirEngine::SetViewport(const VkCommandBuffer& commandBuffer) {
 	vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
 }
 
-void PantomirEngine::SetScissor(const VkCommandBuffer& commandBuffer) {
+void PantomirEngine::SetScissor(const VkCommandBuffer& commandBuffer) const {
 	VkRect2D scissor = {};
 	scissor.offset.x = 0;
 	scissor.offset.y = 0;
@@ -996,6 +1084,7 @@ void PantomirEngine::Draw() {
 
 	DrawHDRI(commandBuffer);
 	DrawGeometry(commandBuffer);
+	DrawDebugLines(commandBuffer, _debugLines);
 
 	// Transition the draw image and the swapchain image into their correct transfer layouts
 	vkutil::TransitionImage(commandBuffer, _colorImage.image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
@@ -1087,7 +1176,9 @@ void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
 
 	// 1 Uniform buffer, holds a struct of GPUSceneData
 	AllocatedBuffer                                    uniformBufferGPUSceneData = CreateBuffer(sizeof(GPUSceneData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
-	GetCurrentFrame().deletionQueue.PushFunction([=, this]() { DestroyBuffer(uniformBufferGPUSceneData); });
+	GetCurrentFrame().deletionQueue.PushFunction([=, this]() {
+		DestroyBuffer(uniformBufferGPUSceneData);
+	});
 	GPUSceneData* uniformBufferData = static_cast<GPUSceneData*>(uniformBufferGPUSceneData.allocation->GetMappedData());
 	*uniformBufferData = _sceneData;
 
@@ -1125,12 +1216,13 @@ void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
             lastIndexBuffer = renderObject.indexBuffer;
             vkCmdBindIndexBuffer(commandBuffer, renderObject.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
         }
+
         // Step 3: Transform and the location of the model's vertices in the huge vertex buffer is sent through a push constant.
-        const GPUDrawPushConstants gPUDrawPushConstants {
+        const GPUDrawPushConstants drawPushConstants {
 			             .worldSpaceTransform = renderObject.transform,
 			             .vertexBufferAddress = renderObject.vertexBufferAddress
         };
-        vkCmdPushConstants(commandBuffer, renderObject.material->pipeline->layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &gPUDrawPushConstants);
+        vkCmdPushConstants(commandBuffer, renderObject.material->pipeline->layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(GPUDrawPushConstants), &drawPushConstants);
 
         // THE ACTUAL DRAW CALL
         vkCmdDrawIndexed(commandBuffer, renderObject.indexCount, 1, renderObject.firstIndex, 0, 0);
@@ -1149,9 +1241,7 @@ void PantomirEngine::DrawGeometry(VkCommandBuffer commandBuffer) {
 		actualDrawFunction(_mainDrawContext.transparentSurfaces[renderIndex]);
 	}
 
-	_mainDrawContext.opaqueSurfaces.clear();
-	_mainDrawContext.maskedSurfaces.clear();
-	_mainDrawContext.transparentSurfaces.clear();
+	ClearSurfaces();
 
 	// Timer Stops
 	std::chrono::time_point<std::chrono::steady_clock> end = std::chrono::steady_clock::now();
@@ -1168,6 +1258,47 @@ void PantomirEngine::DrawImgui(const VkCommandBuffer commandBuffer, const VkImag
 	vkCmdBeginRendering(commandBuffer, &renderInfo);
 
 	ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
+
+	vkCmdEndRendering(commandBuffer);
+}
+
+void PantomirEngine::DrawDebugLines(const VkCommandBuffer commandBuffer, const std::vector<DebugLine>& debugLines) {
+	VkRenderingAttachmentInfo colorAttachment = vkinit::AttachmentInfo(_colorImage.imageView, nullptr, VK_IMAGE_LAYOUT_GENERAL);
+	const VkRenderingInfo     renderInfo = vkinit::RenderingInfo(_drawExtent, &colorAttachment, nullptr);
+
+	// 1 Uniform buffer, CameraUBO
+	AllocatedBuffer                                    uniformBufferGPUSceneData = CreateBuffer(sizeof(CameraUBO), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	GetCurrentFrame().deletionQueue.PushFunction([=, this]() {
+		DestroyBuffer(uniformBufferGPUSceneData);
+	});
+	CameraUBO* uniformBufferData = static_cast<CameraUBO*>(uniformBufferGPUSceneData.allocation->GetMappedData());
+	CameraUBO cameraUBO;
+	cameraUBO.viewProj = _sceneData.viewProjection;
+	*uniformBufferData = cameraUBO;
+
+	VkDescriptorSet     debugLineDescriptorSet = GetCurrentFrame().descriptorPoolManager.Allocate(_logicalGPU, _debugLineDescriptorSetLayout);
+	DescriptorSetWriter descriptorWriter;
+	descriptorWriter.WriteBuffer(0, uniformBufferGPUSceneData.buffer, sizeof(CameraUBO), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+	descriptorWriter.UpdateSet(_logicalGPU, debugLineDescriptorSet);
+
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _debugLinePipeline);
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+							_debugLinePipelineLayout, 0, 1, &debugLineDescriptorSet, 0, nullptr);
+
+	vkCmdBeginRendering(commandBuffer, &renderInfo);
+
+	for (const DebugLine& line : debugLines) {
+		LinePushConstants pushConstants;
+		pushConstants.A     = glm::vec4(line.a, 1.0f);
+		pushConstants.B     = glm::vec4(line.b, 1.0f);
+		pushConstants.Color = glm::clamp(line.color, 0.0f, 1.0f);
+
+		vkCmdPushConstants(commandBuffer, _debugLinePipelineLayout,
+						   VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+						   0, sizeof(LinePushConstants), &pushConstants);
+
+		vkCmdDraw(commandBuffer, 2, 1, 0, 0);
+	}
 
 	vkCmdEndRendering(commandBuffer);
 }
@@ -1198,10 +1329,7 @@ void PantomirEngine::UpdateScene() {
 	_sceneData.view = view;
 	_sceneData.proj = projection;
 	_sceneData.viewProjection = projection * view;
-
-	_mainDrawContext.opaqueSurfaces.clear();
-	_mainDrawContext.maskedSurfaces.clear();
-	_mainDrawContext.transparentSurfaces.clear();
+	_sceneData.cameraPosition = _mainCamera._position;
 
 	_loadedScenes["Echidna1"]->FillDrawContext(glm::mat4 { 1.f }, _mainDrawContext);
 

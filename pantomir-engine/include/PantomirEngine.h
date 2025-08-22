@@ -11,6 +11,24 @@ struct ComputeEffect;
 struct LoadedHDRI;
 struct LoadedGLTF;
 
+struct LinePushConstants {
+	glm::vec4 A;
+	glm::vec4 B;
+	glm::vec4 Color;
+};
+
+struct DebugLine {
+	glm::vec3 a;
+	glm::vec3 b;
+	glm::vec4 color;
+	float     thickness = 1.f;
+	bool      depthTest = true;
+};
+
+struct CameraUBO {
+	glm::mat4 viewProj;
+};
+
 struct EngineStats {
 	float frameTime;
 	int   triangleCount;
@@ -29,14 +47,17 @@ struct GPUSceneData {
 	glm::mat4 view;
 	glm::mat4 proj;
 	glm::mat4 viewProjection;
+	glm::vec3 cameraPosition;
+	float     PADDING_0;
 	glm::vec4 ambientColor;
 	glm::vec4 sunlightDirection; // w for sun power
 	glm::vec4 sunlightColor;
 };
+static_assert(sizeof(GPUSceneData) % 16 == 0, "GPUSceneData struct must be aligned to 16 bytes.");
 
 struct DeletionQueue {
-	void                                               PushFunction(std::function<void()>&& function) {
-        _deletionQueue.push_back(MakeDeletionTask(std::forward<decltype(function)>(function)));
+	void PushFunction(std::function<void()>&& function) {
+		_deletionQueue.push_back(MakeDeletionTask(std::forward<decltype(function)>(function)));
 	}
 
 	void Flush() {
@@ -52,8 +73,8 @@ private:
 	// Stores a lambda shared-pointer
 	std::deque<std::shared_ptr<std::function<void()>>> _deletionQueue;
 
-	std::shared_ptr<std::function<void()>> MakeDeletionTask(auto&& lambda) {
-		return std::make_shared<std::function<void()>>(std::forward<decltype(lambda)>(lambda));
+	std::shared_ptr<std::function<void()>>             MakeDeletionTask(auto&& lambda) {
+        return std::make_shared<std::function<void()>>(std::forward<decltype(lambda)>(lambda));
 	}
 };
 
@@ -91,7 +112,8 @@ struct GLTFMetallic_Roughness {
 		float     emissiveStrength;
 		float     specularFactor;
 		float     alphaCutoff;
-		alignas(8) int alphaMode;
+		int       alphaMode;
+		float     PADDING_0;
 	};
 	static_assert(sizeof(MaterialConstants) % 16 == 0, "UBO struct must be aligned to 16 bytes.");
 
@@ -219,6 +241,10 @@ public:
 	VkPipelineLayout         _hdriPipelineLayout {};
 	VkPipeline               _hdriPipeline {};
 
+	VkPipelineLayout         _debugLinePipelineLayout {};
+	VkPipeline               _debugLinePipeline {};
+	std::vector<DebugLine>   _debugLines;
+
 	VkFence                  _immediateFence {};
 	VkCommandBuffer          _immediateCommandBuffer {};
 	VkCommandPool            _immediateCommandPool {};
@@ -226,6 +252,7 @@ public:
 	GPUSceneData             _sceneData {};
 	VkDescriptorSetLayout    _gpuSceneDataDescriptorSetLayout {};
 	VkDescriptorSetLayout    _hdriDescriptorSetLayout {};
+	VkDescriptorSetLayout    _debugLineDescriptorSetLayout {};
 
 	DrawContext              _mainDrawContext {};
 
@@ -235,7 +262,7 @@ public:
 	VmaAllocator             _vmaAllocator {};
 	DeletionQueue            _shutdownDeletionQueue {};
 
-	int                      _frameNumber { 0 };
+	int                      _frameNumber = 0;
 	bool                     _stopRendering { false };
 	bool                     _resizeRequested { false };
 	VkExtent2D               _windowExtent { 1280, 720 };
@@ -315,18 +342,22 @@ private:
 	void InitSwapchain();
 	void InitCommands();
 	void InitSyncStructures();
-	void InitDescriptors();
+	void InitDescriptorLayouts();
+	void InitDescriptorPools();
 	void InitPipelines();
 	void InitImgui();
 	void InitHDRIPipeline();
+	void InitDebugLinePipeline();
 	void InitDefaultData();
 
 	void CreateSwapchain(uint32_t width, uint32_t height);
 	void DestroySwapchain() const;
 	void ResizeSwapchain();
 
-	void SetViewport(const VkCommandBuffer& commandBuffer);
-	void SetScissor(const VkCommandBuffer& commandBuffer);
+	void ClearSurfaces();
+
+	void SetViewport(const VkCommandBuffer& commandBuffer) const;
+	void SetScissor(const VkCommandBuffer& commandBuffer) const;
 
 	bool AcquireSwapchainImage(uint32_t& swapchainImageIndex);
 
@@ -334,6 +365,7 @@ private:
 	void DrawHDRI(VkCommandBuffer commandBuffer);
 	void DrawGeometry(VkCommandBuffer commandBuffer);
 	void DrawImgui(VkCommandBuffer commandBuffer, VkImageView targetImageView) const;
+	void DrawDebugLines(VkCommandBuffer commandBuffer, const std::vector<DebugLine>& DebugLines);
 
 	void PresentSwapchainImage(const uint32_t swapchainImageIndex);
 
