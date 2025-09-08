@@ -214,35 +214,98 @@ int PantomirEngine::Start() {
 	return EXIT_SUCCESS;
 }
 
+void PantomirEngine::Draw_HUD_Lights(float& renderScale, GPUSceneData& sceneData) {
+	if (ImGui::Begin("Lights")) {
+		// Render scale control
+		ImGui::SliderFloat("Render Scale", &renderScale, 0.3f, 1.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
+		// Ambient color (allow HDR range)
+		ImGui::ColorEdit3("Ambient Color", glm::value_ptr(sceneData.ambientColor), ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR);
+		// Sunlight color (allow HDR range)
+		ImGui::ColorEdit3("Sunlight Color", glm::value_ptr(sceneData.sunlightColor), ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR);
+		// Sunlight direction (as a normalized vector)
+		glm::vec3 sunDirection = glm::vec3(sceneData.sunlightDirection);
+		if (ImGui::DragFloat3("Sunlight Direction", glm::value_ptr(sunDirection), 0.01f, -1.0f, 1.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp)) {
+			if (glm::length2(sunDirection) > 0.0f) { // Avoid NaNs
+				sunDirection = glm::normalize(sunDirection);
+				sceneData.sunlightDirection = glm::vec4(sunDirection, 1.0f);
+			}
+		}
+	}
+	ImGui::End();
+}
+
+void PantomirEngine::Draw_HUD_HDRI(std::unordered_map<std::string, std::shared_ptr<LoadedHDRI>>& loadedHDRIs, std::shared_ptr<LoadedHDRI>& currentHDRI) {
+	if (ImGui::Begin("HDRI Selector")) {
+		static std::string currentName;
+		if (ImGui::BeginCombo("HDRI", currentName.c_str())) {
+			for (auto& [name, hdri] : loadedHDRIs) {
+				bool isSelected = (currentName == name);
+				if (ImGui::Selectable(name.c_str(), isSelected)) {
+					currentName = name;
+					currentHDRI = hdri;
+				}
+				if (isSelected)
+					ImGui::SetItemDefaultFocus();
+			}
+			ImGui::EndCombo();
+		}
+	}
+	ImGui::End();
+}
+
+void PantomirEngine::Draw_HUD_Stats(EngineStats& stats) {
+	ImGui::Begin("Stats");
+	ImGui::Text("frametime %f ms", stats.frameTime);
+	ImGui::Text("draw time %f ms", stats.meshDrawTime);
+	ImGui::Text("update time %f ms", stats.sceneUpdateTime);
+	ImGui::Text("triangles %i", stats.triangleCount);
+	ImGui::Text("draws %i", stats.drawcallCount);
+	ImGui::End();
+}
+
+void PantomirEngine::ImguiRenderPass(GPUSceneData& sceneData, float& renderScale, std::unordered_map<std::string, std::shared_ptr<LoadedHDRI>>& loadedHDRIs, std::shared_ptr<LoadedHDRI>& currentHDRI, EngineStats& stats) {
+	ImGui_ImplVulkan_NewFrame();
+	ImGui_ImplSDL3_NewFrame();
+	ImGui::NewFrame();
+	Draw_HUD_Lights(renderScale, sceneData);
+	Draw_HUD_HDRI(loadedHDRIs, currentHDRI);
+	Draw_HUD_Stats(stats);
+	ImGui::Render();
+}
+
+void PantomirEngine::PollEvents(SDL_Window* window, Camera& camera, bool& bQuit, bool& resizeRequested, bool& stopRendering) {
+	SDL_Event event;
+
+	// Handle events on queue
+	while (SDL_PollEvent(&event) != 0) {
+		// Close the window when user alt-f4s or clicks the X button
+		if (event.type == SDL_EVENT_QUIT) {
+			bQuit = true;
+		}
+
+		camera.ProcessSDLEvent(event, window);
+
+		if (event.type == SDL_EVENT_WINDOW_RESIZED) {
+			resizeRequested = true;
+		}
+		if (event.type == SDL_EVENT_WINDOW_MINIMIZED) {
+			stopRendering = true;
+		}
+		if (event.type == SDL_EVENT_WINDOW_RESTORED) {
+			stopRendering = false;
+		}
+
+		ImGui_ImplSDL3_ProcessEvent(&event);
+	}
+}
+
 void PantomirEngine::MainLoop() {
 	bool bQuit = false;
 
 	while (!bQuit) {
 		const std::chrono::time_point<std::chrono::steady_clock> start = std::chrono::steady_clock::now();
 
-		SDL_Event                                                event;
-
-		// Handle events on queue
-		while (SDL_PollEvent(&event) != 0) {
-			// Close the window when user alt-f4s or clicks the X button
-			if (event.type == SDL_EVENT_QUIT) {
-				bQuit = true;
-			}
-
-			_mainCamera.ProcessSDLEvent(event, _window);
-
-			if (event.type == SDL_EVENT_WINDOW_RESIZED) {
-				_resizeRequested = true;
-			}
-			if (event.type == SDL_EVENT_WINDOW_MINIMIZED) {
-				_stopRendering = true;
-			}
-			if (event.type == SDL_EVENT_WINDOW_RESTORED) {
-				_stopRendering = false;
-			}
-
-			ImGui_ImplSDL3_ProcessEvent(&event);
-		}
+		PollEvents(_window, _mainCamera, bQuit, _resizeRequested, _stopRendering);
 
 		// Update camera movement based on current keyboard state
 		_mainCamera.UpdateMovement();
@@ -259,61 +322,7 @@ void PantomirEngine::MainLoop() {
 			// TODO: The images and views must also be replaced and updated for bindings.
 		}
 
-		ImGui_ImplVulkan_NewFrame();
-		ImGui_ImplSDL3_NewFrame();
-		ImGui::NewFrame();
-
-		if (ImGui::Begin("Lights")) {
-
-			// Render scale control
-			ImGui::SliderFloat("Render Scale", &_renderScale, 0.3f, 1.f, "%.2f", ImGuiSliderFlags_AlwaysClamp);
-
-			// Ambient color (allow HDR range)
-			ImGui::ColorEdit3("Ambient Color", glm::value_ptr(_sceneData.ambientColor), ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR);
-
-			// Sunlight color (allow HDR range)
-			ImGui::ColorEdit3("Sunlight Color", glm::value_ptr(_sceneData.sunlightColor), ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR);
-
-			// Sunlight direction (as a normalized vector)
-			glm::vec3 sunDirection = glm::vec3(_sceneData.sunlightDirection);
-			if (ImGui::DragFloat3("Sunlight Direction", glm::value_ptr(sunDirection), 0.01f, -1.0f, 1.0f, "%.2f", ImGuiSliderFlags_AlwaysClamp)) {
-				if (glm::length2(sunDirection) > 0.0f) { // Avoid NaNs
-					sunDirection = glm::normalize(sunDirection);
-					_sceneData.sunlightDirection = glm::vec4(sunDirection, 0.0f);
-				}
-			}
-		}
-		ImGui::End();
-
-		if (ImGui::Begin("HDRI Selector")) {
-			static std::string currentName;
-
-			if (ImGui::BeginCombo("HDRI", currentName.c_str())) {
-				for (auto& [name, hdri] : _loadedHDRIs) {
-					bool isSelected = (currentName == name);
-					if (ImGui::Selectable(name.c_str(), isSelected)) {
-						currentName = name;
-						_currentHDRI = hdri;
-					}
-					if (isSelected)
-						ImGui::SetItemDefaultFocus();
-				}
-				ImGui::EndCombo();
-			}
-		}
-
-		ImGui::End();
-
-		ImGui::Begin("Stats");
-		ImGui::Text("frametime %f ms", _stats.frameTime);
-		ImGui::Text("draw time %f ms", _stats.meshDrawTime);
-		ImGui::Text("update time %f ms", _stats.sceneUpdateTime);
-		ImGui::Text("triangles %i", _stats.triangleCount);
-		ImGui::Text("draws %i", _stats.drawcallCount);
-		ImGui::End();
-
-		ImGui::Render();
-
+		ImguiRenderPass(_sceneData, _renderScale, _loadedHDRIs, _currentHDRI, _stats);
 		PantomirEngine::Draw();
 
 		const std::chrono::time_point      end = std::chrono::steady_clock::now();
@@ -914,7 +923,7 @@ void PantomirEngine::InitDefaultData() {
 
 	_sceneData.ambientColor = glm::vec4(.1f);
 	_sceneData.sunlightColor = glm::vec4(1.f);
-	_sceneData.sunlightDirection = glm::vec4(0, 0, -1.0, 0.f); // If actor is facing (along +Z axis), then sun must face (along -Z axis)
+	_sceneData.sunlightDirection = glm::vec4(0, 0, -1.0, 1.f); // If actor is facing along +Z axis, then sun must face along -Z axis
 
 	// 3 default textures, white, grey, black. 1 pixel each
 	uint32_t white = glm::packUnorm4x8(glm::vec4(1, 1, 1, 1));
@@ -1267,12 +1276,12 @@ void PantomirEngine::DrawDebugLines(const VkCommandBuffer commandBuffer, const s
 	const VkRenderingInfo     renderInfo = vkinit::RenderingInfo(_drawExtent, &colorAttachment, nullptr);
 
 	// 1 Uniform buffer, CameraUBO
-	AllocatedBuffer                                    uniformBufferGPUSceneData = CreateBuffer(sizeof(CameraUBO), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
+	AllocatedBuffer           uniformBufferGPUSceneData = CreateBuffer(sizeof(CameraUBO), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 	GetCurrentFrame().deletionQueue.PushFunction([=, this]() {
 		DestroyBuffer(uniformBufferGPUSceneData);
 	});
 	CameraUBO* uniformBufferData = static_cast<CameraUBO*>(uniformBufferGPUSceneData.allocation->GetMappedData());
-	CameraUBO cameraUBO;
+	CameraUBO  cameraUBO{};
 	cameraUBO.viewProj = _sceneData.viewProjection;
 	*uniformBufferData = cameraUBO;
 
@@ -1282,20 +1291,17 @@ void PantomirEngine::DrawDebugLines(const VkCommandBuffer commandBuffer, const s
 	descriptorWriter.UpdateSet(_logicalGPU, debugLineDescriptorSet);
 
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _debugLinePipeline);
-	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-							_debugLinePipelineLayout, 0, 1, &debugLineDescriptorSet, 0, nullptr);
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _debugLinePipelineLayout, 0, 1, &debugLineDescriptorSet, 0, nullptr);
 
 	vkCmdBeginRendering(commandBuffer, &renderInfo);
 
 	for (const DebugLine& line : debugLines) {
-		LinePushConstants pushConstants;
-		pushConstants.A     = glm::vec4(line.a, 1.0f);
-		pushConstants.B     = glm::vec4(line.b, 1.0f);
+		LinePushConstants pushConstants{};
+		pushConstants.A = glm::vec4(line.a, 1.0f);
+		pushConstants.B = glm::vec4(line.b, 1.0f);
 		pushConstants.Color = glm::clamp(line.color, 0.0f, 1.0f);
 
-		vkCmdPushConstants(commandBuffer, _debugLinePipelineLayout,
-						   VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-						   0, sizeof(LinePushConstants), &pushConstants);
+		vkCmdPushConstants(commandBuffer, _debugLinePipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(LinePushConstants), &pushConstants);
 
 		vkCmdDraw(commandBuffer, 2, 1, 0, 0);
 	}

@@ -15,10 +15,10 @@ layout (location = 0) out vec4 outFragColor;
 
 void main()
 {
-    vec4 texColor       = texture(colorTex, inUV);
-    vec4 texMetalRough  = texture(metalRoughTex, inUV);
-    vec3 texEmissive    = texture(emissiveTex, inUV).rgb;
-    vec3 texSpecular    = texture(specularTex, inUV).rgb;
+    vec4 texColor       = texture(colorTexSampler, inUV);
+    vec4 texMetalRough  = texture(metalRoughTexSampler, inUV);
+    vec3 texEmissive    = texture(emissiveTexSampler, inUV).rgb;
+    vec3 texSpecular    = texture(specularTexSampler, inUV).rgb;
 
     if (texColor.a < 0.1)
     discard;

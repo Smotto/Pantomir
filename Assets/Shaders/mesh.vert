@@ -22,18 +22,18 @@ struct Vertex {
     vec4 color;
 };
 
-layout(buffer_reference, std430) readonly buffer VertexBuffer {
+layout(buffer_reference, std430) readonly buffer VertexBufferRef {
     Vertex vertices[];
 };
 
 layout(push_constant) uniform constants {
     mat4 renderMatrix;
-    VertexBuffer vertexBuffer;
+    VertexBufferRef vertexBufferRef;
 } PushConstants;
 
 void main()
 {
-    Vertex vertex = PushConstants.vertexBuffer.vertices[gl_VertexIndex];
+    Vertex vertex = PushConstants.vertexBufferRef.vertices[gl_VertexIndex];
 
     vec3 position = vertex.position;
     vec3 normal = vertex.normal;

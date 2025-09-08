@@ -18,7 +18,7 @@ Makefile
 
 # Compiled object files, libraries, executables, and debug files
 *.o
-# *.obj
+*.obj
 *.lo
 *.a
 *.lib
@@ -37,6 +37,9 @@ Makefile
 
 # CLion project files
 .idea/
+
+# Nvim or any text editor that generates this
+compile_commands.json
 
 # Other IDEs or editor-specific files
 *.suo

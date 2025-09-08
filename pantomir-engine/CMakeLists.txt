@@ -1,52 +1,82 @@
-﻿cmake_minimum_required(VERSION 3.31)
+﻿# --------------------------------------------------------------------
+# Sources
+# --------------------------------------------------------------------
+# Only compile .cpp files; headers are discovered via includes
+file(GLOB_RECURSE ENGINE_SOURCES
+        "${CMAKE_CURRENT_SOURCE_DIR}/source/*.cpp"
+)
 
-# Set C++ standard
-set(CMAKE_CXX_STANDARD 23)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
+# Add headers for IDE visibility only
+file(GLOB_RECURSE ENGINE_HEADERS
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/*.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/*.hpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/source/*.h"
+        "${CMAKE_CURRENT_SOURCE_DIR}/source/*.hpp"
+)
 
-# Collect engine sources and headers
-file(GLOB_RECURSE ENGINE_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/source/*.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/source/*.hpp" "${CMAKE_CURRENT_SOURCE_DIR}/source/*.h")
+# Executable
+add_executable(pantomir-engine
+        ${ENGINE_SOURCES}
+        ${ENGINE_HEADERS}
+)
 
-# Define the executable instead of a library
-add_executable(pantomir-engine ${ENGINE_SOURCES})
+# --------------------------------------------------------------------
+# Include paths: public vs private
+# --------------------------------------------------------------------
+# Public headers exported to consumers (the rest of the project)
+# Private headers are internal to this target
+target_include_directories(pantomir-engine
+        PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/source
+)
 
-# Add headers as private sources (optional, for IDE visibility)
-file(GLOB_RECURSE ENGINE_HEADERS "${CMAKE_CURRENT_SOURCE_DIR}/include/*.hpp" "${CMAKE_CURRENT_SOURCE_DIR}/include/*.h")
-target_sources(pantomir-engine PRIVATE ${ENGINE_HEADERS})
+# If your Dependencies.cmake sets Vulkan_INCLUDE_DIRS (or similar),
+# keep it PRIVATE. It’s an implementation detail, not public API.
+if (DEFINED Vulkan_INCLUDE_DIRS)
+    target_include_directories(pantomir-engine PRIVATE ${Vulkan_INCLUDE_DIRS})
+endif ()
 
-# Vulkan
-target_include_directories(pantomir-engine PRIVATE ${Vulkan_INCLUDE_DIRS})
-
-# Public include directory for engine consumers
-target_include_directories(pantomir-engine PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
-
-# Platform-specific definitions
+# --------------------------------------------------------------------
+# Defines
+# --------------------------------------------------------------------
 target_compile_definitions(pantomir-engine PRIVATE
         GLM_ENABLE_EXPERIMENTAL
         GLM_FORCE_DEPTH_ZERO_TO_ONE
 )
 
-# Utils
+# --------------------------------------------------------------------
+# Subdirs / Libraries
+# --------------------------------------------------------------------
 add_subdirectory(engine-utils)
 
-# Link submodules as private dependencies (internal to the engine)
 target_link_libraries(pantomir-engine PRIVATE
         engine-utils
-)
 
-target_link_libraries(pantomir-engine PRIVATE
-        Vulkan::Vulkan       # Vulkan
-        glm::glm             # Math library
-        Stb::Stb             # Image loading
-        fastgltf::fastgltf   # Model Loading
-        xxHash::xxhash       # Hashing models
-        vk-bootstrap::vk-bootstrap # Custom Vulkan library for initialization
+        Vulkan::Vulkan
+        glm::glm
+        Stb::Stb
+        fastgltf::fastgltf
+        xxHash::xxhash
+        vk-bootstrap::vk-bootstrap
         GPUOpen::VulkanMemoryAllocator
-        SDL3::SDL3           # Window
+        SDL3::SDL3
         imgui::imgui
 )
 
-# Set output directory properties
+# --------------------------------------------------------------------
+# Runtime output dir (matches root settings)
+# --------------------------------------------------------------------
 set_target_properties(pantomir-engine PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+)
+
+# --------------------------------------------------------------------
+# Convenience "run" target via Terminal
+# --------------------------------------------------------------------
+add_custom_target(run-pantomir-engine
+        COMMAND ${CMAKE_COMMAND} -E chdir "${CMAKE_SOURCE_DIR}" "$<TARGET_FILE:pantomir-engine>"
+        DEPENDS pantomir-engine
+        USES_TERMINAL
 )

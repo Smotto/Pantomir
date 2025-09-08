@@ -74,7 +74,8 @@ std::string GetImageSourceKey(fastgltf::Asset& asset, fastgltf::Image& image) {
 	               },
 	               [&](auto&) {
 		               key = "unknown";
-	               } },
+	               },
+	           },
 	           image.data);
 
 	return key;
@@ -415,7 +416,9 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, cons
 				fastgltf::Accessor& indexAccessor = gltfAsset.accessors[primitive.indicesAccessor.value()];
 				indices.reserve(indices.size() + indexAccessor.count);
 
-				fastgltf::iterateAccessor<std::uint32_t>(gltfAsset, indexAccessor, [&](std::uint32_t index) { indices.push_back(index + initialVertex); });
+				fastgltf::iterateAccessor<std::uint32_t>(gltfAsset, indexAccessor, [&](std::uint32_t index) {
+					indices.push_back(index + initialVertex);
+				});
 			}
 
 			// Load vertex positions
@@ -430,29 +433,37 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, cons
 					newVertex.color = glm::vec4 { 1.f };
 					newVertex.uv_x = 0;
 					newVertex.uv_y = 0;
-					vertices[initialVertex + index] = newVertex; });
+					vertices[initialVertex + index] = newVertex;
+				});
 			}
 
 			// Load vertex normals
 			if (fastgltf::Attribute* normals = primitive.findAttribute("NORMAL"); normals != primitive.attributes.end()) {
-				fastgltf::iterateAccessorWithIndex<glm::vec3>(gltfAsset, gltfAsset.accessors[normals->accessorIndex], [&](glm::vec3 vertex, size_t index) { vertices[initialVertex + index].normal = vertex; });
+				fastgltf::iterateAccessorWithIndex<glm::vec3>(gltfAsset, gltfAsset.accessors[normals->accessorIndex], [&](glm::vec3 vertex, size_t index) {
+					vertices[initialVertex + index].normal = vertex;
+				});
 			}
 
 			// Load vertex tangents
 			if (fastgltf::Attribute* tangents = primitive.findAttribute("TANGENT"); tangents != primitive.attributes.end()) {
-				fastgltf::iterateAccessorWithIndex<glm::vec4>(gltfAsset, gltfAsset.accessors[tangents->accessorIndex], [&](glm::vec4 tangent, size_t index) { vertices[initialVertex + index].tangent = tangent; });
+				fastgltf::iterateAccessorWithIndex<glm::vec4>(gltfAsset, gltfAsset.accessors[tangents->accessorIndex], [&](glm::vec4 tangent, size_t index) {
+					vertices[initialVertex + index].tangent = tangent;
+				});
 			}
 
 			// Load UVs
 			if (fastgltf::Attribute* uv = primitive.findAttribute("TEXCOORD_0"); uv != primitive.attributes.end()) {
 				fastgltf::iterateAccessorWithIndex<glm::vec2>(gltfAsset, gltfAsset.accessors[uv->accessorIndex], [&](glm::vec2 vertex, size_t index) {
 					vertices[initialVertex + index].uv_x = vertex.x;
-					vertices[initialVertex + index].uv_y = vertex.y; });
+					vertices[initialVertex + index].uv_y = vertex.y;
+				});
 			}
 
 			// Load vertex colors
 			if (fastgltf::Attribute* colors = primitive.findAttribute("COLOR_0"); colors != primitive.attributes.end()) {
-				fastgltf::iterateAccessorWithIndex<glm::vec4>(gltfAsset, gltfAsset.accessors[colors->accessorIndex], [&](glm::vec4 vertex, size_t index) { vertices[initialVertex + index].color = vertex; });
+				fastgltf::iterateAccessorWithIndex<glm::vec4>(gltfAsset, gltfAsset.accessors[colors->accessorIndex], [&](glm::vec4 vertex, size_t index) {
+					vertices[initialVertex + index].color = vertex;
+				});
 			}
 
 			if (primitive.materialIndex.has_value()) {
@@ -512,7 +523,8 @@ std::optional<std::shared_ptr<LoadedGLTF>> LoadGltf(PantomirEngine* engine, cons
 			               const glm::mat4 Scale = glm::scale(glm::mat4(1.0F), scale);
 
 			               newNode->_localTransform = Translation * Rotation * Scale;
-		               } },
+		               },
+		           },
 		           gltfNode.transform);
 	}
 

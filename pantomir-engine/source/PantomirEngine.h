@@ -316,6 +316,13 @@ public:
 	}
 
 	[[nodiscard]] int             Start();
+
+	void                          Draw_HUD_Lights(float& renderScale, GPUSceneData& sceneData);
+	void                          Draw_HUD_HDRI(std::unordered_map<std::string, std::shared_ptr<LoadedHDRI>>& loadedHDRIs, std::shared_ptr<LoadedHDRI>& currentHDRI);
+	void                          Draw_HUD_Stats(EngineStats& stats);
+	void                          ImguiRenderPass(GPUSceneData& sceneData, float& renderScale, std::unordered_map<std::string, std::shared_ptr<LoadedHDRI>>& loadedHDRIs, std::shared_ptr<LoadedHDRI>& currentHDRI, EngineStats& stats);
+	void                          PollEvents(SDL_Window* window, Camera& camera, bool& bQuit, bool& resizeRequested, bool& stopRendering);
+
 	void                          MainLoop();
 	void                          ImmediateSubmit(std::function<void(VkCommandBuffer cmd)>&& anonymousFunction) const;
 
