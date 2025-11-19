@@ -1,9 +1,6 @@
 #ifndef LOGGERMACROS_H_
 #define LOGGERMACROS_H_
 
-#include "Logger.h"
-#include <string>
-
 /*
 ================================================================================================
 
@@ -12,51 +9,32 @@
 ================================================================================================
 */
 
-// Define log categories as global constants
+#include "Logger.h"
+
 namespace LogCategory {
-	inline const std::string Engine = "Engine";
-	inline const std::string Engine_Platform = "Engine::Platform";
-	inline const std::string Engine_Renderer = "Engine::Renderer";
-	inline const std::string Engine_Utils = "Engine::Utils";
-
-	inline const std::string Editor = "Editor";
-	inline const std::string Tools = "Tools";
-
-	inline const std::string Temp = "Temp";
+	inline constexpr std::string_view Engine = "Engine";
+	inline constexpr std::string_view Engine_Platform = "Engine::Platform";
+	inline constexpr std::string_view Engine_Renderer = "Engine::Renderer";
+	inline constexpr std::string_view Engine_Utils = "Engine::Utils";
+	inline constexpr std::string_view Editor = "Editor";
+	inline constexpr std::string_view Tools = "Tools";
+	inline constexpr std::string_view Temp = "Temp";
 } // namespace LogCategory
 
-namespace Pantomir {
-	// Helper to create custom category strings
-	inline std::string MakeLogCategory(const std::initializer_list<std::string>& categories) {
-		if (categories.begin() == categories.end())
-			return "Unknown";
-
-		const std::string* it = categories.begin();
-		std::string        result = *it;
-		++it;
-
-		for (; it != categories.end(); ++it) {
-			result += "::" + *it;
-		}
-
-		return result;
-	}
-} // namespace Pantomir
-
-// Single LOG macro with category and level parameters
-#define LOG(category, level, formatStr, ...) \
-	Pantomir::Logger::GetInstance().Log(     \
-	    LogCategory::category,               \
-	    Pantomir::LogLevel::level,           \
-	    formatStr,                           \
+// Primary macro – fully type-checked with std::format
+#define LOG(category, level, fmt, ...)      \
+	Pantomir::Logger::GetInstance().Log(    \
+	    std::string(LogCategory::category), \
+	    Pantomir::LogLevel::level,          \
+	    fmt,                                \
 	    ##__VA_ARGS__)
 
-// Custom category helper macro
-#define LOG_CUSTOM(categories, level, formatStr, ...) \
-	Pantomir::Logger::GetInstance().Log(              \
-	    Pantomir::MakeLogCategory(categories),        \
-	    Pantomir::LogLevel::level,                    \
-	    formatStr,                                    \
+// Custom category macro
+#define LOG_CUSTOM(categories, level, fmt, ...) \
+	Pantomir::Logger::GetInstance().Log(        \
+	    Pantomir::MakeLogCategory(categories),  \
+	    Pantomir::LogLevel::level,              \
+	    fmt,                                    \
 	    ##__VA_ARGS__)
 
 #endif /* LOGGERMACROS_H_ */
