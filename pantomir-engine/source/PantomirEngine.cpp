@@ -575,6 +575,12 @@ void PantomirEngine::InitVulkan() {
 	features_12.bufferDeviceAddress = true;
 	features_12.descriptorIndexing = true;
 
+	// Required for glslangValidator -gVS debug info (OpExtInstWithForwardRefsKHR)
+	VkPhysicalDeviceShaderRelaxedExtendedInstructionFeaturesKHR relaxedExtInstFeatures {
+		.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_RELAXED_EXTENDED_INSTRUCTION_FEATURES_KHR,
+		.shaderRelaxedExtendedInstruction = VK_TRUE
+	};
+
 	vkb::PhysicalDeviceSelector physicalDeviceSelector { builtInstance };
 	vkb::PhysicalDevice         selectedPhysicalDevice = physicalDeviceSelector.set_minimum_version(1, 3)
 	                                                 .set_required_features_13(features_13)
@@ -585,7 +591,7 @@ void PantomirEngine::InitVulkan() {
 	                                                 .value();
 
 	vkb::DeviceBuilder logicalDeviceBuilder { selectedPhysicalDevice };
-	vkb::Device        builtLogicalDevice = logicalDeviceBuilder.build().value();
+	vkb::Device        builtLogicalDevice = logicalDeviceBuilder.add_pNext(&relaxedExtInstFeatures).build().value();
 
 	_logicalGPU = builtLogicalDevice.device;
 	_physicalGPU = selectedPhysicalDevice.physical_device;
@@ -682,11 +688,9 @@ void PantomirEngine::InitSyncStructures() {
 	for (FrameData& frame : _frames) {
 		VK_CHECK(vkCreateFence(_logicalGPU, &fenceCreateInfo, nullptr, &frame.renderFence));
 		VK_CHECK(vkCreateSemaphore(_logicalGPU, &semaphoreCreateInfo, nullptr, &frame.swapchainSemaphore));
-		VK_CHECK(vkCreateSemaphore(_logicalGPU, &semaphoreCreateInfo, nullptr, &frame.renderSemaphore));
 		_shutdownDeletionQueue.PushFunction([this, frame]() {
 			vkDestroyFence(_logicalGPU, frame.renderFence, nullptr);
-			vkDestroySemaphore(_logicalGPU, frame.swapchainSemaphore, nullptr);
-			vkDestroySemaphore(_logicalGPU, frame.renderSemaphore, nullptr); });
+			vkDestroySemaphore(_logicalGPU, frame.swapchainSemaphore, nullptr); });
 	}
 
 	VK_CHECK(vkCreateFence(_logicalGPU, &fenceCreateInfo, nullptr, &_immediateFence));
@@ -997,9 +1001,22 @@ void PantomirEngine::CreateSwapchain(const uint32_t width, const uint32_t height
 	_swapchain = builtSwapchain.swapchain;
 	_swapchainImages = builtSwapchain.get_images().value();
 	_swapchainImageViews = builtSwapchain.get_image_views().value();
+
+	// Create one render semaphore per swapchain image to avoid semaphore reuse
+	// while the presentation engine still references the previous present.
+	constexpr VkSemaphoreCreateInfo semaphoreCreateInfo = vkinit::SemaphoreCreateInfo();
+	_renderSemaphores.resize(_swapchainImages.size());
+	for (auto& sem : _renderSemaphores) {
+		VK_CHECK(vkCreateSemaphore(_logicalGPU, &semaphoreCreateInfo, nullptr, &sem));
+	}
 }
 
-void PantomirEngine::DestroySwapchain() const {
+void PantomirEngine::DestroySwapchain() {
+	for (auto& sem : _renderSemaphores) {
+		vkDestroySemaphore(_logicalGPU, sem, nullptr);
+	}
+	_renderSemaphores.clear();
+
 	vkDestroySwapchainKHR(_logicalGPU, _swapchain, nullptr);
 
 	for (const VkImageView& _swapchainImageView : _swapchainImageViews) {
@@ -1112,10 +1129,10 @@ void PantomirEngine::Draw() {
 	VK_CHECK(vkEndCommandBuffer(commandBuffer));
 
 	// Prepare the submission to the queue.
-	// We want to wait on the _presentSemaphore, as that semaphore is signaled when the swapchain is ready
-	// We will signal the _renderSemaphore, to signal that rendering has finished
+	// We want to wait on the swapchainSemaphore, as that semaphore is signaled when the swapchain image is ready.
+	// We signal the renderSemaphore indexed by swapchain image to avoid reuse before the presentation engine releases it.
 	VkCommandBufferSubmitInfo commandBufferSubmitInfo = vkinit::CommandBufferSubmitInfo(commandBuffer);
-	VkSemaphoreSubmitInfo     signalInfo = vkinit::SemaphoreSubmitInfo(VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, GetCurrentFrame().renderSemaphore);
+	VkSemaphoreSubmitInfo     signalInfo = vkinit::SemaphoreSubmitInfo(VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, _renderSemaphores[swapchainImageIndex]);
 	VkSemaphoreSubmitInfo     waitInfo = vkinit::SemaphoreSubmitInfo(VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR, GetCurrentFrame().swapchainSemaphore);
 	VkSubmitInfo2             submitInfo = vkinit::SubmitInfo(&commandBufferSubmitInfo, &signalInfo, &waitInfo);
 
@@ -1315,7 +1332,7 @@ void PantomirEngine::PresentSwapchainImage(const uint32_t swapchainImageIndex) {
 	presentInfo.pNext = nullptr;
 	presentInfo.pSwapchains = &_swapchain;
 	presentInfo.swapchainCount = 1;
-	presentInfo.pWaitSemaphores = &GetCurrentFrame().renderSemaphore; // We wait on this in order to present the image to the surface.
+	presentInfo.pWaitSemaphores = &_renderSemaphores[swapchainImageIndex]; // Indexed by swapchain image to avoid reuse before presentation completes.
 	presentInfo.waitSemaphoreCount = 1;
 	presentInfo.pImageIndices = &swapchainImageIndex;
 	VkResult presentResult = vkQueuePresentKHR(_graphicsQueue, &presentInfo);

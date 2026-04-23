@@ -79,7 +79,7 @@ private:
 };
 
 struct FrameData {
-	VkSemaphore           swapchainSemaphore {}, renderSemaphore {};
+	VkSemaphore           swapchainSemaphore {};
 	VkFence               renderFence {};
 
 	VkCommandPool         commandPool {};
@@ -282,6 +282,7 @@ public:
 
 	std::vector<VkImage>     _swapchainImages;
 	std::vector<VkImageView> _swapchainImageViews;
+	std::vector<VkSemaphore>  _renderSemaphores; // One per swapchain image, to avoid reuse before presentation completes
 	VkExtent2D               _swapchainExtent {};
 
 	FrameData                _frames[FRAME_OVERLAP];
@@ -358,7 +359,7 @@ private:
 	void InitDefaultData();
 
 	void CreateSwapchain(uint32_t width, uint32_t height);
-	void DestroySwapchain() const;
+	void DestroySwapchain();
 	void ResizeSwapchain();
 
 	void ClearSurfaces();
