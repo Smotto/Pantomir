@@ -1,11 +1,29 @@
-if(NOT DEFINED ENV{VCPKG_ROOT})
-    message(FATAL_ERROR "VCPKG_ROOT environment variable is not set.")
-endif()
+# ============================================================================
+# Dependencies.cmake — Resolve all third-party dependencies
+# ============================================================================
+# Strategy:
+#   1. vcpkg packages are resolved via find_package in each module below.
+#   2. If vcpkg doesn't provide a package, the module falls back to FetchContent.
+#   3. Vulkan SDK is a system dependency (must be installed on the OS).
+#
+# NOTE: VCPKG_ROOT auto-detection and CMAKE_TOOLCHAIN_FILE are handled
+#       in the root CMakeLists.txt before project().
+# ============================================================================
 
-# This might not be needed, but it gets rid of a warning.
-set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "vcpkg toolchain file")
+# ----------------------------------------------------------------------------
+# System dependency
+# ----------------------------------------------------------------------------
+find_package(Vulkan REQUIRED)
 
-# All files in the Dependencies folder need to be included.
+# ----------------------------------------------------------------------------
+# vcpkg-only (no FetchContent fallback needed)
+# ----------------------------------------------------------------------------
+find_package(fastgltf CONFIG REQUIRED)
+
+# ----------------------------------------------------------------------------
+# Per-library modules (vcpkg-first, FetchContent fallback)
+# Each module is self-contained: find_package + fallback + IDE folder.
+# ----------------------------------------------------------------------------
 include(${CMAKE_CURRENT_LIST_DIR}/Dependencies/SDL3.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/Dependencies/imgui.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/Dependencies/Stb.cmake)
@@ -14,17 +32,9 @@ include(${CMAKE_CURRENT_LIST_DIR}/Dependencies/xxHash.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/Dependencies/VulkanMemoryAllocator.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/Dependencies/vk-bootstrap.cmake)
 
-find_package(Vulkan REQUIRED) # Vulkan INSTALLED ON YOUR OS
-
-# All vcpkgs need to be found for CMake
-find_package(SDL3 CONFIG REQUIRED)
-find_package(glm CONFIG REQUIRED)
-find_package(Stb REQUIRED) # TODO: Might want to use just the image part for Stb
-find_package(fastgltf REQUIRED)
-find_package(xxHash CONFIG REQUIRED)
-find_package(VulkanMemoryAllocator CONFIG REQUIRED)
-
-# All packages fetched via Github
+# ----------------------------------------------------------------------------
+# Validation — ensure critical FetchContent targets resolved
+# ----------------------------------------------------------------------------
 if(NOT TARGET vk-bootstrap AND NOT TARGET vk-bootstrap::vk-bootstrap)
-    message(FATAL_ERROR "vk-bootstrap target not available. Check your Dependencies/vk-bootstrap.cmake setup.")
+    message(FATAL_ERROR "vk-bootstrap target not available. Check Dependencies/vk-bootstrap.cmake.")
 endif()

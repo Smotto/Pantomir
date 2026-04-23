@@ -5,7 +5,7 @@
 #include <format>
 #include <fstream>
 #include <mutex>
-#include <source_location> // for file/line info (optional later)
+#include <source_location> // for file/line info
 #include <string>
 
 namespace Pantomir {
@@ -24,7 +24,7 @@ namespace Pantomir {
             m_minLevel = level;
 		}
 
-		// Core logging function – now takes std::format_string
+		// Core logging function
 		template <typename... Args>
 		void Log(const std::string&          category,
 		         LogLevel                    level,

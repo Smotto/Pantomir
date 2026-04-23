@@ -13,10 +13,7 @@
       "binaryDir": "${sourceDir}/cmake-build",
       "cacheVariables": {
         "CMAKE_CXX_COMPILER": "cl.exe",
-        "CMAKE_CXX_STANDARD": "23",
-        "CMAKE_CXX_STANDARD_REQUIRED": "ON",
-        "CMAKE_CONFIGURATION_TYPES": "Debug;Release;RelWithDebInfo",
-        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}\\scripts\\buildsystems\\vcpkg.cmake"
+        "CMAKE_CONFIGURATION_TYPES": "Debug;Release;RelWithDebInfo"
       }
     }
   ],
